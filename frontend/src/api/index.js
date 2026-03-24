@@ -19,6 +19,12 @@ export const modelApi = {
   },
 }
 
+export const statsApi = {
+  getTokens(period = 'daily') {
+    return request(`/stats/tokens?period=${period}`)
+  },
+}
+
 export const conversationApi = {
   list(cursor, limit = 20) {
     const params = new URLSearchParams()

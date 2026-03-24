@@ -101,6 +101,10 @@
           <button class="btn-cancel" @click="$emit('close')">取消</button>
           <button class="btn-save" @click="save">保存</button>
         </div>
+
+        <div class="settings-stats">
+          <StatsPanel />
+        </div>
       </div>
     </div>
   </Transition>
@@ -110,6 +114,7 @@
 import { reactive, ref, watch, onMounted } from 'vue'
 import { modelApi } from '../api'
 import { useTheme } from '../composables/useTheme'
+import StatsPanel from './StatsPanel.vue'
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
@@ -390,6 +395,12 @@ function save() {
 
 .btn-save:hover {
   background: var(--accent-primary-hover);
+}
+
+.settings-stats {
+  padding: 16px 24px 24px;
+  border-top: 1px solid var(--border-light);
+  background: var(--bg-secondary);
 }
 
 .slide-enter-active,

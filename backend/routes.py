@@ -5,7 +5,7 @@ import requests
 from datetime import datetime
 from flask import request, jsonify, Response, Blueprint, current_app
 from . import db
-from .models import Conversation, Message, User
+from .models import Conversation, Message, User, TokenUsage
 from . import load_config
 
 bp = Blueprint("api", __name__)
@@ -50,6 +50,30 @@ def to_dict(inst, **extra):
     return d
 
 
+def record_token_usage(user_id, model, prompt_tokens, completion_tokens):
+    """记录 token 使用量"""
+    from datetime import date
+    today = date.today()
+    usage = TokenUsage.query.filter_by(
+        user_id=user_id, date=today, model=model
+    ).first()
+    if usage:
+        usage.prompt_tokens += prompt_tokens
+        usage.completion_tokens += completion_tokens
+        usage.total_tokens += prompt_tokens + completion_tokens
+    else:
+        usage = TokenUsage(
+            user_id=user_id,
+            date=today,
+            model=model,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=prompt_tokens + completion_tokens,
+        )
+        db.session.add(usage)
+    db.session.commit()
+
+
 def build_glm_messages(conv):
     msgs = []
     if conv.system_prompt:
@@ -65,6 +89,102 @@ def build_glm_messages(conv):
 def list_models():
     """获取可用模型列表"""
     return ok(MODELS)
+
+
+# -- Token Usage Statistics --------------------------------
+
+@bp.route("/api/stats/tokens", methods=["GET"])
+def token_stats():
+    """获取 token 使用统计"""
+    from sqlalchemy import func
+    from datetime import date, timedelta
+
+    user = get_or_create_default_user()
+    period = request.args.get("period", "daily")  # daily, weekly, monthly
+
+    today = date.today()
+
+    if period == "daily":
+        # 今日统计
+        stats = TokenUsage.query.filter_by(user_id=user.id, date=today).all()
+        result = {
+            "period": "daily",
+            "date": today.isoformat(),
+            "prompt_tokens": sum(s.prompt_tokens for s in stats),
+            "completion_tokens": sum(s.completion_tokens for s in stats),
+            "total_tokens": sum(s.total_tokens for s in stats),
+            "by_model": {s.model: {"prompt": s.prompt_tokens, "completion": s.completion_tokens, "total": s.total_tokens} for s in stats}
+        }
+    elif period == "weekly":
+        # 本周统计 (最近7天)
+        start_date = today - timedelta(days=6)
+        stats = TokenUsage.query.filter(
+            TokenUsage.user_id == user.id,
+            TokenUsage.date >= start_date,
+            TokenUsage.date <= today
+        ).all()
+
+        daily_data = {}
+        for s in stats:
+            d = s.date.isoformat()
+            if d not in daily_data:
+                daily_data[d] = {"prompt": 0, "completion": 0, "total": 0}
+            daily_data[d]["prompt"] += s.prompt_tokens
+            daily_data[d]["completion"] += s.completion_tokens
+            daily_data[d]["total"] += s.total_tokens
+
+        # 填充没有数据的日期
+        for i in range(7):
+            d = (today - timedelta(days=6-i)).isoformat()
+            if d not in daily_data:
+                daily_data[d] = {"prompt": 0, "completion": 0, "total": 0}
+
+        result = {
+            "period": "weekly",
+            "start_date": start_date.isoformat(),
+            "end_date": today.isoformat(),
+            "prompt_tokens": sum(s.prompt_tokens for s in stats),
+            "completion_tokens": sum(s.completion_tokens for s in stats),
+            "total_tokens": sum(s.total_tokens for s in stats),
+            "daily": daily_data
+        }
+    elif period == "monthly":
+        # 本月统计 (最近30天)
+        start_date = today - timedelta(days=29)
+        stats = TokenUsage.query.filter(
+            TokenUsage.user_id == user.id,
+            TokenUsage.date >= start_date,
+            TokenUsage.date <= today
+        ).all()
+
+        daily_data = {}
+        for s in stats:
+            d = s.date.isoformat()
+            if d not in daily_data:
+                daily_data[d] = {"prompt": 0, "completion": 0, "total": 0}
+            daily_data[d]["prompt"] += s.prompt_tokens
+            daily_data[d]["completion"] += s.completion_tokens
+            daily_data[d]["total"] += s.total_tokens
+
+        # 填充没有数据的日期
+        for i in range(30):
+            d = (today - timedelta(days=29-i)).isoformat()
+            if d not in daily_data:
+                daily_data[d] = {"prompt": 0, "completion": 0, "total": 0}
+
+        result = {
+            "period": "monthly",
+            "start_date": start_date.isoformat(),
+            "end_date": today.isoformat(),
+            "prompt_tokens": sum(s.prompt_tokens for s in stats),
+            "completion_tokens": sum(s.completion_tokens for s in stats),
+            "total_tokens": sum(s.total_tokens for s in stats),
+            "daily": daily_data
+        }
+    else:
+        return err(400, "invalid period")
+
+    return ok(result)
 
 
 # -- Conversation CRUD ------------------------------------
@@ -209,31 +329,40 @@ def _sync_response(conv):
 
     choice = result["choices"][0]
     usage = result.get("usage", {})
+    prompt_tokens = usage.get("prompt_tokens", 0)
+    completion_tokens = usage.get("completion_tokens", 0)
+
     msg = Message(
         id=str(uuid.uuid4()), conversation_id=conv.id, role="assistant",
         content=choice["message"]["content"],
-        token_count=usage.get("completion_tokens", 0),
+        token_count=completion_tokens,
         thinking_content=choice["message"].get("reasoning_content", ""),
     )
     db.session.add(msg)
     db.session.commit()
 
+    # 记录 token 使用
+    user = get_or_create_default_user()
+    record_token_usage(user.id, conv.model, prompt_tokens, completion_tokens)
+
     return ok({
         "message": to_dict(msg, thinking_content=msg.thinking_content or None),
-        "usage": {"prompt_tokens": usage.get("prompt_tokens", 0),
-                  "completion_tokens": usage.get("completion_tokens", 0),
+        "usage": {"prompt_tokens": prompt_tokens,
+                  "completion_tokens": completion_tokens,
                   "total_tokens": usage.get("total_tokens", 0)},
     })
 
 
 def _stream_response(conv):
     conv_id = conv.id
+    conv_model = conv.model
     app = current_app._get_current_object()
 
     def generate():
         full_content = ""
         full_thinking = ""
         token_count = 0
+        prompt_tokens = 0
         msg_id = str(uuid.uuid4())
 
         try:
@@ -267,6 +396,7 @@ def _stream_response(conv):
                 usage = chunk.get("usage", {})
                 if usage:
                     token_count = usage.get("completion_tokens", 0)
+                    prompt_tokens = usage.get("prompt_tokens", 0)
         except Exception as e:
             yield f"event: error\ndata: {json.dumps({'content': str(e)}, ensure_ascii=False)}\n\n"
             return
@@ -279,6 +409,10 @@ def _stream_response(conv):
             )
             db.session.add(msg)
             db.session.commit()
+
+            # 记录 token 使用
+            user = get_or_create_default_user()
+            record_token_usage(user.id, conv_model, prompt_tokens, token_count)
 
         yield f"event: done\ndata: {json.dumps({'message_id': msg_id, 'token_count': token_count})}\n\n"
 

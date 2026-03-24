@@ -44,3 +44,20 @@ class Message(db.Model):
     token_count = db.Column(db.Integer, default=0)
     thinking_content = db.Column(db.Text, default="")
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class TokenUsage(db.Model):
+    __tablename__ = "token_usage"
+
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    user_id = db.Column(db.BigInteger, db.ForeignKey("users.id"), nullable=False)
+    date = db.Column(db.Date, nullable=False)  # 使用日期
+    model = db.Column(db.String(64), nullable=False)  # 模型名称
+    prompt_tokens = db.Column(db.Integer, default=0)
+    completion_tokens = db.Column(db.Integer, default=0)
+    total_tokens = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint("user_id", "date", "model", name="uq_user_date_model"),
+    )

@@ -26,7 +26,7 @@ def create_app():
 
     db.init_app(app)
 
-    from .models import User, Conversation, Message
+    from .models import User, Conversation, Message, TokenUsage
     from .routes import register_routes
     register_routes(app)
 
