@@ -349,7 +349,13 @@ GET /api/models
 ```json
 {
   "code": 0,
-  "data": ["glm-5", "glm-4", "glm-3-turbo"]
+  "data": [
+    {"id": "glm-5", "name": "GLM-5"},
+    {"id": "glm-5-turbo", "name": "GLM-5 Turbo"},
+    {"id": "glm-4.5", "name": "GLM-4.5"},
+    {"id": "glm-4.6", "name": "GLM-4.6"},
+    {"id": "glm-4.7", "name": "GLM-4.7"}
+  ]
 }
 ```
 

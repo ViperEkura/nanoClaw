@@ -70,7 +70,8 @@ function copyContent() {
 .message-bubble {
   display: flex;
   gap: 12px;
-  padding: 16px 0;
+  padding: 0;
+  margin-bottom: 16px;
 }
 
 .message-bubble.user {
@@ -108,6 +109,11 @@ function copyContent() {
 .message-body {
   flex: 1;
   min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  background: var(--bg-primary);
+  transition: background 0.2s, border-color 0.2s;
 }
 
 .message-content {

@@ -361,7 +361,7 @@ classDiagram
 class SearchService:
     """搜索服务"""
     def __init__(self, engine=None):
-        from duckduckgo_search import DDGS
+        from ddgs import DDGS
         self.engine = engine or DDGS()
 
     def search(self, query: str, max_results: int = 5) -> list:
@@ -431,7 +431,7 @@ from .factory import tool
 def init_tools():
     """初始化所有内置工具"""
     # 导入即自动注册
-    from .builtin import crawler, data, file_ops
+    from .builtin import crawler, data, weather
 
 # 使用时
 init_tools()
@@ -446,10 +446,10 @@ init_tools()
 | crawler | `web_search`    | 网页搜索 | SearchService |
 | crawler | `fetch_page`    | 单页抓取 | FetchService  |
 | crawler | `crawl_batch`   | 批量爬取 | FetchService  |
-| data    | `calculator`    | 数学计算 | -             |
-| data    | `data_analysis` | 数据分析 | -             |
-| file    | `file_reader`   | 文件读取 | -             |
-| file    | `file_writer`   | 文件写入 | -             |
+| data    | `calculator`    | 数学计算 | CalculatorService |
+| data    | `text_process`  | 文本处理 | -             |
+| data    | `json_process`  | JSON处理 | -             |
+| weather | `get_weather`   | 天气查询 | - (模拟数据)      |
 
 ---
 

@@ -97,11 +97,6 @@
           </div>
         </div>
 
-        <div class="settings-footer">
-          <button class="btn-cancel" @click="$emit('close')">取消</button>
-          <button class="btn-save" @click="save">保存</button>
-        </div>
-
         <div class="settings-stats">
           <StatsPanel />
         </div>
@@ -112,7 +107,7 @@
 
 <script setup>
 import { reactive, ref, watch, onMounted } from 'vue'
-import { modelApi } from '../api'
+import { modelApi, conversationApi } from '../api'
 import { useTheme } from '../composables/useTheme'
 import StatsPanel from './StatsPanel.vue'
 
@@ -137,15 +132,15 @@ const form = reactive({
 
 async function loadModels() {
   try {
-    const res = await modelApi.list()
+    const res = await modelApi.getCached()
     models.value = res.data || []
   } catch (e) {
     console.error('Failed to load models:', e)
   }
 }
 
-watch(() => props.visible, (val) => {
-  if (val && props.conversation) {
+function syncFormFromConversation() {
+  if (props.conversation) {
     form.title = props.conversation.title || ''
     form.model = props.conversation.model || ''
     form.system_prompt = props.conversation.system_prompt || ''
@@ -153,14 +148,33 @@ watch(() => props.visible, (val) => {
     form.max_tokens = props.conversation.max_tokens ?? 65536
     form.thinking_enabled = props.conversation.thinking_enabled ?? false
   }
+}
+
+// Sync form when panel opens
+watch(() => props.visible, (visible) => {
+  if (visible) {
+    syncFormFromConversation()
+  }
 })
 
-onMounted(loadModels)
+// Auto-save with debounce when form changes
+watch(form, () => {
+  if (props.visible && props.conversation) {
+    saveChanges()
+  }
+}, { deep: true })
 
-function save() {
-  emit('save', { ...form })
-  emit('close')
+async function saveChanges() {
+  if (!props.conversation) return
+  try {
+    const res = await conversationApi.update(props.conversation.id, { ...form })
+    emit('save', res.data)
+  } catch (e) {
+    console.error('Failed to save settings:', e)
+  }
 }
+
+onMounted(loadModels)
 </script>
 
 <style scoped>
@@ -356,45 +370,6 @@ function save() {
   height: 1px;
   background: var(--border-light);
   margin: 24px 0;
-}
-
-.settings-footer {
-  padding: 16px 24px;
-  border-top: 1px solid var(--border-light);
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.btn-cancel {
-  padding: 8px 20px;
-  border-radius: 8px;
-  border: 1px solid var(--border-medium);
-  background: none;
-  color: var(--text-secondary);
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.btn-cancel:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.btn-save {
-  padding: 8px 20px;
-  border-radius: 8px;
-  border: none;
-  background: var(--accent-primary);
-  color: white;
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.btn-save:hover {
-  background: var(--accent-primary-hover);
 }
 
 .settings-stats {

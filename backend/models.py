@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from sqlalchemy.dialects.mysql import LONGTEXT
 from . import db
 
 
@@ -45,7 +46,7 @@ class Message(db.Model):
     thinking_content = db.Column(db.Text, default="")
     
     # Tool call support
-    tool_calls = db.Column(db.Text)  # JSON string: tool call requests (assistant messages)
+    tool_calls = db.Column(LONGTEXT)  # JSON string: tool call requests (assistant messages)
     tool_call_id = db.Column(db.String(64))  # Tool call ID (tool messages)
     name = db.Column(db.String(64))  # Tool name (tool messages)
     

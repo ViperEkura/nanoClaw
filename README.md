@@ -29,13 +29,13 @@ db_host: localhost
 db_port: 3306
 db_user: root
 db_password: ""
-db_name: glm_chat
+db_name: nano_claw
 ```
 
 ### 3. 初始化数据库
 
 ```bash
-mysql -u root -p -e "CREATE DATABASE glm_chat CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+mysql -u root -p -e "CREATE DATABASE nano_claw CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 
 ```
 

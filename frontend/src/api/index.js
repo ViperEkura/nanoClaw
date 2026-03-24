@@ -1,5 +1,8 @@
 const BASE = '/api'
 
+// Cache for models list
+let modelsCache = null
+
 async function request(url, options = {}) {
   const res = await fetch(`${BASE}${url}`, {
     headers: { 'Content-Type': 'application/json' },
@@ -17,6 +20,34 @@ export const modelApi = {
   list() {
     return request('/models')
   },
+
+  // Get cached models or fetch from server
+  async getCached() {
+    if (modelsCache) {
+      return { data: modelsCache }
+    }
+
+    // Try localStorage cache first
+    const cached = localStorage.getItem('models_cache')
+    if (cached) {
+      try {
+        modelsCache = JSON.parse(cached)
+        return { data: modelsCache }
+      } catch (_) {}
+    }
+
+    // Fetch from server
+    const res = await this.list()
+    modelsCache = res.data
+    localStorage.setItem('models_cache', JSON.stringify(modelsCache))
+    return res
+  },
+
+  // Clear cache (e.g., when models changed on server)
+  clearCache() {
+    modelsCache = null
+    localStorage.removeItem('models_cache')
+  }
 }
 
 export const statsApi = {
