@@ -75,8 +75,8 @@ function onContextMenu(e, conv) {
 .sidebar {
   width: 280px;
   min-width: 280px;
-  background: #1a1a2e;
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  background: #ffffff;
+  border-right: 1px solid rgba(0, 0, 0, 0.08);
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -89,10 +89,10 @@ function onContextMenu(e, conv) {
 .btn-new {
   width: 100%;
   padding: 10px 16px;
-  background: rgba(37, 99, 235, 0.15);
-  border: 1px dashed rgba(37, 99, 235, 0.4);
+  background: rgba(37, 99, 235, 0.08);
+  border: 1px dashed rgba(37, 99, 235, 0.35);
   border-radius: 10px;
-  color: #60a5fa;
+  color: #2563eb;
   font-size: 14px;
   cursor: pointer;
   display: flex;
@@ -102,8 +102,8 @@ function onContextMenu(e, conv) {
 }
 
 .btn-new:hover {
-  background: rgba(37, 99, 235, 0.25);
-  border-color: rgba(37, 99, 235, 0.6);
+  background: rgba(37, 99, 235, 0.15);
+  border-color: rgba(37, 99, 235, 0.5);
 }
 
 .btn-new .icon {
@@ -122,7 +122,7 @@ function onContextMenu(e, conv) {
 }
 
 .conversation-list::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.1);
   border-radius: 2px;
 }
 
@@ -137,11 +137,11 @@ function onContextMenu(e, conv) {
 }
 
 .conversation-item:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(37, 99, 235, 0.06);
 }
 
 .conversation-item.active {
-  background: rgba(37, 99, 235, 0.2);
+  background: rgba(37, 99, 235, 0.12);
 }
 
 .conv-info {
@@ -151,7 +151,7 @@ function onContextMenu(e, conv) {
 
 .conv-title {
   font-size: 14px;
-  color: #e2e8f0;
+  color: #1e293b;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -159,7 +159,7 @@ function onContextMenu(e, conv) {
 
 .conv-meta {
   font-size: 12px;
-  color: #64748b;
+  color: #94a3b8;
   margin-top: 2px;
 }
 
@@ -167,7 +167,7 @@ function onContextMenu(e, conv) {
   opacity: 0;
   background: none;
   border: none;
-  color: #64748b;
+  color: #94a3b8;
   cursor: pointer;
   padding: 4px;
   border-radius: 4px;
@@ -180,14 +180,14 @@ function onContextMenu(e, conv) {
 }
 
 .btn-delete:hover {
-  color: #f87171;
-  background: rgba(248, 113, 113, 0.1);
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.08);
 }
 
 .loading-more,
 .empty-hint {
   text-align: center;
-  color: #475569;
+  color: #94a3b8;
   font-size: 13px;
   padding: 20px;
 }

@@ -271,8 +271,8 @@ html, body {
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC', sans-serif;
-  background: #0f172a;
-  color: #e2e8f0;
+  background: #f0f4f8;
+  color: #1e293b;
   -webkit-font-smoothing: antialiased;
 }
 

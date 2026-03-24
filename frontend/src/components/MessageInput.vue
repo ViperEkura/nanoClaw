@@ -73,15 +73,15 @@ defineExpose({ focus })
 <style scoped>
 .message-input {
   padding: 16px 24px 12px;
-  background: #16213e;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: #ffffff;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
 }
 
 .input-wrapper {
   display: flex;
-  align-items: flex-end;
-  background: #1a1a2e;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 12px;
   padding: 8px 12px;
   transition: border-color 0.2s;
@@ -95,7 +95,7 @@ textarea {
   flex: 1;
   background: none;
   border: none;
-  color: #e2e8f0;
+  color: #1e293b;
   font-size: 15px;
   line-height: 1.5;
   resize: none;
@@ -105,7 +105,7 @@ textarea {
 }
 
 textarea::placeholder {
-  color: #475569;
+  color: #94a3b8;
 }
 
 textarea:disabled {
@@ -124,8 +124,8 @@ textarea:disabled {
   height: 36px;
   border-radius: 8px;
   border: none;
-  background: rgba(255, 255, 255, 0.06);
-  color: #475569;
+  background: #e2e8f0;
+  color: #94a3b8;
   cursor: not-allowed;
   display: flex;
   align-items: center;
@@ -146,7 +146,7 @@ textarea:disabled {
 .input-hint {
   text-align: center;
   font-size: 12px;
-  color: #374151;
+  color: #94a3b8;
   margin-top: 8px;
 }
 </style>

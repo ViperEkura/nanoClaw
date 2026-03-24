@@ -136,7 +136,7 @@ function save() {
 .settings-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.3);
   z-index: 100;
   display: flex;
   justify-content: flex-end;
@@ -145,8 +145,8 @@ function save() {
 .settings-panel {
   width: 380px;
   height: 100vh;
-  background: #1a1a2e;
-  border-left: 1px solid rgba(255, 255, 255, 0.06);
+  background: #ffffff;
+  border-left: 1px solid rgba(0, 0, 0, 0.06);
   display: flex;
   flex-direction: column;
   overflow-y: auto;
@@ -157,19 +157,19 @@ function save() {
   align-items: center;
   justify-content: space-between;
   padding: 20px 24px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
 }
 
 .settings-header h3 {
   margin: 0;
   font-size: 16px;
-  color: #e2e8f0;
+  color: #1e293b;
 }
 
 .btn-close {
   background: none;
   border: none;
-  color: #64748b;
+  color: #94a3b8;
   cursor: pointer;
   padding: 4px;
   border-radius: 4px;
@@ -177,8 +177,8 @@ function save() {
 }
 
 .btn-close:hover {
-  color: #e2e8f0;
-  background: rgba(255, 255, 255, 0.06);
+  color: #1e293b;
+  background: rgba(37, 99, 235, 0.08);
 }
 
 .settings-body {
@@ -193,14 +193,14 @@ function save() {
 .form-group label {
   display: block;
   font-size: 13px;
-  color: #94a3b8;
+  color: #64748b;
   margin-bottom: 8px;
   font-weight: 500;
 }
 
 .value-display {
   float: right;
-  color: #60a5fa;
+  color: #2563eb;
   font-weight: 600;
 }
 
@@ -209,10 +209,10 @@ function save() {
 .form-group select {
   width: 100%;
   padding: 10px 12px;
-  background: #0f172a;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #f8fafc;
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 8px;
-  color: #e2e8f0;
+  color: #1e293b;
   font-size: 14px;
   font-family: inherit;
   outline: none;
@@ -236,7 +236,7 @@ function save() {
 }
 
 .form-group select option {
-  background: #0f172a;
+  background: #ffffff;
 }
 
 .form-row {
@@ -253,7 +253,7 @@ function save() {
   height: 4px;
   -webkit-appearance: none;
   appearance: none;
-  background: rgba(255, 255, 255, 0.1);
+  background: #e2e8f0;
   border-radius: 2px;
   outline: none;
 }
@@ -266,14 +266,14 @@ function save() {
   border-radius: 50%;
   background: #2563eb;
   cursor: pointer;
-  border: 2px solid #0f172a;
+  border: 2px solid #ffffff;
 }
 
 .range-labels {
   display: flex;
   justify-content: space-between;
   font-size: 11px;
-  color: #475569;
+  color: #94a3b8;
   margin-top: 4px;
 }
 
@@ -292,7 +292,7 @@ function save() {
   height: 24px;
   border-radius: 12px;
   border: none;
-  background: rgba(255, 255, 255, 0.1);
+  background: #e2e8f0;
   cursor: pointer;
   position: relative;
   transition: background 0.2s;
@@ -300,7 +300,7 @@ function save() {
 }
 
 .toggle.on {
-  background: #4f46e5;
+  background: #2563eb;
 }
 
 .toggle-thumb {
@@ -312,6 +312,7 @@ function save() {
   border-radius: 50%;
   background: white;
   transition: transform 0.2s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
 }
 
 .toggle.on .toggle-thumb {
@@ -320,7 +321,7 @@ function save() {
 
 .settings-footer {
   padding: 16px 24px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
   display: flex;
   justify-content: flex-end;
   gap: 8px;
@@ -329,17 +330,17 @@ function save() {
 .btn-cancel {
   padding: 8px 20px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(0, 0, 0, 0.1);
   background: none;
-  color: #94a3b8;
+  color: #64748b;
   font-size: 14px;
   cursor: pointer;
   transition: all 0.15s;
 }
 
 .btn-cancel:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: #e2e8f0;
+  background: rgba(37, 99, 235, 0.06);
+  color: #1e293b;
 }
 
 .btn-save {

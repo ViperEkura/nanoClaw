@@ -140,7 +140,7 @@ defineExpose({ scrollToBottom })
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: #0f172a;
+  background: #f8fafc;
   min-width: 0;
 }
 
@@ -150,14 +150,14 @@ defineExpose({ scrollToBottom })
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: #475569;
+  color: #94a3b8;
 }
 
 .welcome-icon {
   width: 64px;
   height: 64px;
   border-radius: 16px;
-  background: linear-gradient(135deg, #2563eb, #0ea5e9);
+  background: linear-gradient(135deg, #2563eb, #3b82f6);
   color: white;
   display: flex;
   align-items: center;
@@ -169,7 +169,7 @@ defineExpose({ scrollToBottom })
 
 .welcome h1 {
   font-size: 24px;
-  color: #e2e8f0;
+  color: #1e293b;
   margin: 0 0 8px;
 }
 
@@ -182,8 +182,8 @@ defineExpose({ scrollToBottom })
   align-items: center;
   justify-content: space-between;
   padding: 12px 24px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(15, 23, 42, 0.8);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(8px);
 }
 
@@ -197,7 +197,7 @@ defineExpose({ scrollToBottom })
 .chat-title {
   font-size: 16px;
   font-weight: 600;
-  color: #e2e8f0;
+  color: #1e293b;
   margin: 0;
   white-space: nowrap;
   overflow: hidden;
@@ -208,8 +208,8 @@ defineExpose({ scrollToBottom })
   font-size: 11px;
   padding: 2px 8px;
   border-radius: 10px;
-  background: rgba(37, 99, 235, 0.15);
-  color: #60a5fa;
+  background: rgba(37, 99, 235, 0.1);
+  color: #2563eb;
   flex-shrink: 0;
 }
 
@@ -217,8 +217,8 @@ defineExpose({ scrollToBottom })
   font-size: 11px;
   padding: 2px 8px;
   border-radius: 10px;
-  background: rgba(16, 185, 129, 0.15);
-  color: #6ee7b7;
+  background: rgba(16, 185, 129, 0.1);
+  color: #059669;
   flex-shrink: 0;
 }
 
@@ -233,7 +233,7 @@ defineExpose({ scrollToBottom })
   border-radius: 8px;
   border: none;
   background: none;
-  color: #64748b;
+  color: #94a3b8;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -242,8 +242,8 @@ defineExpose({ scrollToBottom })
 }
 
 .btn-icon:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: #e2e8f0;
+  background: rgba(37, 99, 235, 0.08);
+  color: #2563eb;
 }
 
 .messages-container {
@@ -257,7 +257,7 @@ defineExpose({ scrollToBottom })
 }
 
 .messages-container::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.08);
   border-radius: 3px;
 }
 
@@ -268,8 +268,8 @@ defineExpose({ scrollToBottom })
 
 .load-more-top button {
   background: none;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #94a3b8;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  color: #64748b;
   padding: 6px 16px;
   border-radius: 16px;
   cursor: pointer;
@@ -278,8 +278,8 @@ defineExpose({ scrollToBottom })
 }
 
 .load-more-top button:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: #e2e8f0;
+  background: rgba(37, 99, 235, 0.06);
+  color: #2563eb;
 }
 
 .messages-list {
@@ -289,20 +289,20 @@ defineExpose({ scrollToBottom })
 
 .streaming-thinking {
   font-size: 13px;
-  color: #94a3b8;
+  color: #64748b;
   line-height: 1.6;
   white-space: pre-wrap;
   padding: 12px;
-  background: rgba(255, 255, 255, 0.02);
+  background: #f1f5f9;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(0, 0, 0, 0.06);
   margin-bottom: 8px;
 }
 
 .streaming-content {
   font-size: 15px;
   line-height: 1.7;
-  color: #e2e8f0;
+  color: #1e293b;
   word-break: break-word;
 }
 
@@ -315,7 +315,8 @@ defineExpose({ scrollToBottom })
 }
 
 .streaming-content :deep(pre) {
-  background: #0d1117;
+  background: #f1f5f9;
+  border: 1px solid rgba(0, 0, 0, 0.06);
   border-radius: 8px;
   padding: 16px;
   overflow-x: auto;
@@ -329,7 +330,8 @@ defineExpose({ scrollToBottom })
 }
 
 .streaming-content :deep(code) {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(37, 99, 235, 0.08);
+  color: #2563eb;
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 13px;
@@ -338,6 +340,7 @@ defineExpose({ scrollToBottom })
 
 .streaming-content :deep(pre code) {
   background: none;
+  color: inherit;
   padding: 0;
 }
 
@@ -348,9 +351,9 @@ defineExpose({ scrollToBottom })
 }
 
 .streaming-content :deep(blockquote) {
-  border-left: 3px solid rgba(59, 130, 246, 0.5);
+  border-left: 3px solid rgba(59, 130, 246, 0.4);
   padding-left: 12px;
-  color: #94a3b8;
+  color: #64748b;
   margin: 8px 0;
 }
 
@@ -362,16 +365,16 @@ defineExpose({ scrollToBottom })
 
 .streaming-content :deep(th),
 .streaming-content :deep(td) {
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(0, 0, 0, 0.08);
   padding: 8px 12px;
   text-align: left;
 }
 
 .streaming-content :deep(th) {
-  background: rgba(255, 255, 255, 0.04);
+  background: #f1f5f9;
 }
 
 .streaming-content :deep(.placeholder) {
-  color: #475569;
+  color: #94a3b8;
 }
 </style>
