@@ -450,6 +450,12 @@ init_tools()
 | data    | `text_process`  | 文本处理 | -             |
 | data    | `json_process`  | JSON处理 | -             |
 | weather | `get_weather`   | 天气查询 | - (模拟数据)      |
+| file    | `file_read`     | 读取文件 | -             |
+| file    | `file_write`    | 写入文件 | -             |
+| file    | `file_delete`   | 删除文件 | -             |
+| file    | `file_list`     | 列出目录 | -             |
+| file    | `file_exists`   | 检查存在 | -             |
+| file    | `file_mkdir`    | 创建目录 | -             |
 
 ---
 

@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from sqlalchemy.dialects.mysql import LONGTEXT
-from . import db
+from backend import db
 
 
 class User(db.Model):

@@ -1,6 +1,6 @@
 """Data processing related tools"""
-from ..factory import tool
-from ..services import CalculatorService
+from backend.tools.factory import tool
+from backend.tools.services import CalculatorService
 
 
 @tool(

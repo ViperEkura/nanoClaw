@@ -1,0 +1,75 @@
+"""Message API routes"""
+import uuid
+from datetime import datetime
+from flask import Blueprint, request
+from backend import db
+from backend.models import Conversation, Message
+from backend.utils.helpers import ok, err, to_dict, get_or_create_default_user
+from backend.services.chat import ChatService
+
+
+bp = Blueprint("messages", __name__)
+
+# ChatService will be injected during registration
+_chat_service = None
+
+
+def init_chat_service(glm_client):
+    """Initialize chat service with GLM client"""
+    global _chat_service
+    _chat_service = ChatService(glm_client)
+
+
+@bp.route("/api/conversations/<conv_id>/messages", methods=["GET", "POST"])
+def message_list(conv_id):
+    """List or create messages"""
+    conv = db.session.get(Conversation, conv_id)
+    if not conv:
+        return err(404, "conversation not found")
+    
+    if request.method == "GET":
+        cursor = request.args.get("cursor")
+        limit = min(int(request.args.get("limit", 50)), 100)
+        q = Message.query.filter_by(conversation_id=conv_id)
+        if cursor:
+            q = q.filter(Message.created_at < (
+                db.session.query(Message.created_at).filter_by(id=cursor).scalar() or datetime.utcnow))
+        rows = q.order_by(Message.created_at.asc()).limit(limit + 1).all()
+        
+        items = [to_dict(r) for r in rows[:limit]]
+        return ok({
+            "items": items,
+            "next_cursor": items[-1]["id"] if len(rows) > limit else None,
+            "has_more": len(rows) > limit,
+        })
+    
+    # POST - create message and get AI response
+    d = request.json or {}
+    content = (d.get("content") or "").strip()
+    if not content:
+        return err(400, "content is required")
+    
+    user_msg = Message(id=str(uuid.uuid4()), conversation_id=conv_id, role="user", content=content)
+    db.session.add(user_msg)
+    db.session.commit()
+    
+    tools_enabled = d.get("tools_enabled", True)
+    
+    if d.get("stream", False):
+        return _chat_service.stream_response(conv, tools_enabled)
+    
+    return _chat_service.sync_response(conv, tools_enabled)
+
+
+@bp.route("/api/conversations/<conv_id>/messages/<msg_id>", methods=["DELETE"])
+def delete_message(conv_id, msg_id):
+    """Delete a message"""
+    conv = db.session.get(Conversation, conv_id)
+    if not conv:
+        return err(404, "conversation not found")
+    msg = db.session.get(Message, msg_id)
+    if not msg or msg.conversation_id != conv_id:
+        return err(404, "message not found")
+    db.session.delete(msg)
+    db.session.commit()
+    return ok(message="deleted")

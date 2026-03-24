@@ -1,5 +1,5 @@
 """Weather related tools"""
-from ..factory import tool
+from backend.tools.factory import tool
 
 
 @tool(

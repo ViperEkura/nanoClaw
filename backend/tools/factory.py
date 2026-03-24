@@ -1,6 +1,6 @@
 """Tool factory - decorator registration"""
 from typing import Callable
-from .core import ToolDefinition, registry
+from backend.tools.core import ToolDefinition, registry
 
 
 def tool(

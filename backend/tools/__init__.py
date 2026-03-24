@@ -15,9 +15,9 @@ Usage:
     result = registry.execute("web_search", {"query": "Python"})
 """
 
-from .core import ToolDefinition, ToolResult, ToolRegistry, registry
-from .factory import tool, register_tool
-from .executor import ToolExecutor
+from backend.tools.core import ToolDefinition, ToolResult, ToolRegistry, registry
+from backend.tools.factory import tool, register_tool
+from backend.tools.executor import ToolExecutor
 
 
 def init_tools() -> None:
@@ -26,7 +26,7 @@ def init_tools() -> None:
 
     Importing builtin module automatically registers all decorator-defined tools
     """
-    from .builtin import crawler, data, weather  # noqa: F401
+    from backend.tools.builtin import crawler, data, weather, file_ops  # noqa: F401
 
 
 # Public API exports
