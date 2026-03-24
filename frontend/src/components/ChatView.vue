@@ -49,10 +49,7 @@
               <div v-if="streamingThinking" class="thinking-content streaming-thinking">
                 {{ streamingThinking }}
               </div>
-              <div class="message-content streaming-content">
-                {{ streamingContent || '...' }}
-                <span class="cursor-blink">|</span>
-              </div>
+              <div class="message-content streaming-content" v-html="renderedStreamContent || '<span class=\'placeholder\'>...</span>'"></div>
             </div>
           </div>
         </div>
@@ -68,9 +65,22 @@
 </template>
 
 <script setup>
-import { ref, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import MessageBubble from './MessageBubble.vue'
 import MessageInput from './MessageInput.vue'
+import { marked } from 'marked'
+import hljs from 'highlight.js'
+
+marked.setOptions({
+  highlight(code, lang) {
+    if (lang && hljs.getLanguage(lang)) {
+      return hljs.highlight(code, { language: lang }).value
+    }
+    return hljs.highlightAuto(code).value
+  },
+  breaks: true,
+  gfm: true,
+})
 
 const props = defineProps({
   conversation: { type: Object, default: null },
@@ -86,6 +96,11 @@ defineEmits(['sendMessage', 'deleteMessage', 'toggleSettings', 'loadMoreMessages
 
 const scrollContainer = ref(null)
 const inputRef = ref(null)
+
+const renderedStreamContent = computed(() => {
+  if (!props.streamingContent) return ''
+  return marked.parse(props.streamingContent)
+})
 
 function scrollToBottom(smooth = true) {
   nextTick(() => {
@@ -142,7 +157,7 @@ defineExpose({ scrollToBottom })
   width: 64px;
   height: 64px;
   border-radius: 16px;
-  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  background: linear-gradient(135deg, #2563eb, #0ea5e9);
   color: white;
   display: flex;
   align-items: center;
@@ -193,8 +208,8 @@ defineExpose({ scrollToBottom })
   font-size: 11px;
   padding: 2px 8px;
   border-radius: 10px;
-  background: rgba(79, 70, 229, 0.15);
-  color: #a5b4fc;
+  background: rgba(37, 99, 235, 0.15);
+  color: #60a5fa;
   flex-shrink: 0;
 }
 
@@ -288,16 +303,75 @@ defineExpose({ scrollToBottom })
   font-size: 15px;
   line-height: 1.7;
   color: #e2e8f0;
-  white-space: pre-wrap;
+  word-break: break-word;
 }
 
-.cursor-blink {
-  animation: blink 0.8s infinite;
-  color: #4f46e5;
+.streaming-content :deep(p) {
+  margin: 0 0 8px;
 }
 
-@keyframes blink {
-  0%, 50% { opacity: 1; }
-  51%, 100% { opacity: 0; }
+.streaming-content :deep(p:last-child) {
+  margin-bottom: 0;
+}
+
+.streaming-content :deep(pre) {
+  background: #0d1117;
+  border-radius: 8px;
+  padding: 16px;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+
+.streaming-content :deep(pre code) {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.streaming-content :deep(code) {
+  background: rgba(255, 255, 255, 0.06);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+.streaming-content :deep(pre code) {
+  background: none;
+  padding: 0;
+}
+
+.streaming-content :deep(ul),
+.streaming-content :deep(ol) {
+  padding-left: 20px;
+  margin: 8px 0;
+}
+
+.streaming-content :deep(blockquote) {
+  border-left: 3px solid rgba(59, 130, 246, 0.5);
+  padding-left: 12px;
+  color: #94a3b8;
+  margin: 8px 0;
+}
+
+.streaming-content :deep(table) {
+  border-collapse: collapse;
+  margin: 8px 0;
+  width: 100%;
+}
+
+.streaming-content :deep(th),
+.streaming-content :deep(td) {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.streaming-content :deep(th) {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.streaming-content :deep(.placeholder) {
+  color: #475569;
 }
 </style>

@@ -103,12 +103,12 @@ function copyContent() {
 }
 
 .user .avatar {
-  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  background: linear-gradient(135deg, #2563eb, #0ea5e9);
   color: white;
 }
 
 .assistant .avatar {
-  background: linear-gradient(135deg, #059669, #10b981);
+  background: linear-gradient(135deg, #0ea5e9, #06b6d4);
   color: white;
 }
 
@@ -212,7 +212,7 @@ function copyContent() {
 }
 
 .message-content :deep(blockquote) {
-  border-left: 3px solid rgba(79, 70, 229, 0.5);
+  border-left: 3px solid rgba(59, 130, 246, 0.5);
   padding-left: 12px;
   color: #94a3b8;
   margin: 8px 0;
@@ -268,8 +268,8 @@ function copyContent() {
 }
 
 .btn-copy:hover {
-  color: #a5b4fc;
-  background: rgba(165, 180, 252, 0.1);
+  color: #60a5fa;
+  background: rgba(96, 165, 250, 0.1);
 }
 
 .btn-delete-msg:hover {

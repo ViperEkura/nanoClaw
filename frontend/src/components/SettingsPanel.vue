@@ -200,7 +200,7 @@ function save() {
 
 .value-display {
   float: right;
-  color: #a5b4fc;
+  color: #60a5fa;
   font-weight: 600;
 }
 
@@ -223,7 +223,7 @@ function save() {
 .form-group input[type="text"]:focus,
 .form-group textarea:focus,
 .form-group select:focus {
-  border-color: rgba(79, 70, 229, 0.5);
+  border-color: rgba(37, 99, 235, 0.5);
 }
 
 .form-group textarea {
@@ -264,7 +264,7 @@ function save() {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: #4f46e5;
+  background: #2563eb;
   cursor: pointer;
   border: 2px solid #0f172a;
 }
@@ -346,7 +346,7 @@ function save() {
   padding: 8px 20px;
   border-radius: 8px;
   border: none;
-  background: #4f46e5;
+  background: #2563eb;
   color: white;
   font-size: 14px;
   cursor: pointer;
@@ -354,7 +354,7 @@ function save() {
 }
 
 .btn-save:hover {
-  background: #6366f1;
+  background: #3b82f6;
 }
 
 .slide-enter-active,

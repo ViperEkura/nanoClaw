@@ -88,7 +88,7 @@ defineExpose({ focus })
 }
 
 .input-wrapper:focus-within {
-  border-color: rgba(79, 70, 229, 0.5);
+  border-color: rgba(37, 99, 235, 0.5);
 }
 
 textarea {
@@ -134,13 +134,13 @@ textarea:disabled {
 }
 
 .btn-send.active {
-  background: #4f46e5;
+  background: #2563eb;
   color: white;
   cursor: pointer;
 }
 
 .btn-send.active:hover {
-  background: #6366f1;
+  background: #3b82f6;
 }
 
 .input-hint {

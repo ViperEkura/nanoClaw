@@ -89,10 +89,10 @@ function onContextMenu(e, conv) {
 .btn-new {
   width: 100%;
   padding: 10px 16px;
-  background: rgba(79, 70, 229, 0.15);
-  border: 1px dashed rgba(79, 70, 229, 0.4);
+  background: rgba(37, 99, 235, 0.15);
+  border: 1px dashed rgba(37, 99, 235, 0.4);
   border-radius: 10px;
-  color: #a5b4fc;
+  color: #60a5fa;
   font-size: 14px;
   cursor: pointer;
   display: flex;
@@ -102,8 +102,8 @@ function onContextMenu(e, conv) {
 }
 
 .btn-new:hover {
-  background: rgba(79, 70, 229, 0.25);
-  border-color: rgba(79, 70, 229, 0.6);
+  background: rgba(37, 99, 235, 0.25);
+  border-color: rgba(37, 99, 235, 0.6);
 }
 
 .btn-new .icon {
@@ -141,7 +141,7 @@ function onContextMenu(e, conv) {
 }
 
 .conversation-item.active {
-  background: rgba(79, 70, 229, 0.2);
+  background: rgba(37, 99, 235, 0.2);
 }
 
 .conv-info {
