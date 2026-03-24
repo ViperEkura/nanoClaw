@@ -4,21 +4,21 @@
 
 ### 会话管理
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| `POST` | `/api/conversations` | 创建会话 |
-| `GET` | `/api/conversations` | 获取会话列表 |
-| `GET` | `/api/conversations/:id` | 获取会话详情 |
-| `PATCH` | `/api/conversations/:id` | 更新会话 |
-| `DELETE` | `/api/conversations/:id` | 删除会话 |
+| 方法       | 路径                       | 说明     |
+| -------- | ------------------------ | ------ |
+| `POST`   | `/api/conversations`     | 创建会话   |
+| `GET`    | `/api/conversations`     | 获取会话列表 |
+| `GET`    | `/api/conversations/:id` | 获取会话详情 |
+| `PATCH`  | `/api/conversations/:id` | 更新会话   |
+| `DELETE` | `/api/conversations/:id` | 删除会话   |
 
 ### 消息管理
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| `GET` | `/api/conversations/:id/messages` | 获取消息列表 |
-| `POST` | `/api/conversations/:id/messages` | 发送消息（对话补全，支持 `stream` 流式） |
-| `DELETE` | `/api/conversations/:id/messages/:message_id` | 删除消息 |
+| 方法       | 路径                                            | 说明                        |
+| -------- | --------------------------------------------- | ------------------------- |
+| `GET`    | `/api/conversations/:id/messages`             | 获取消息列表                    |
+| `POST`   | `/api/conversations/:id/messages`             | 发送消息（对话补全，支持 `stream` 流式） |
+| `DELETE` | `/api/conversations/:id/messages/:message_id` | 删除消息                      |
 
 ---
 
