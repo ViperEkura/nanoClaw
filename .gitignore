@@ -1,0 +1,27 @@
+# Ignore everything
+*
+
+# # Allow directories
+!*/
+
+# Allow docs and settings
+!/docs/*.md
+!/README.md
+!.gitignore
+
+# Allow backend source
+!*.py
+!*.toml
+
+# Allow frontend source
+!frontend/
+!frontend/package.json
+!frontend/package-lock.json
+!frontend/*.js
+!frontend/*.html
+!frontend/src/
+!frontend/src/**/*.js
+!frontend/src/**/*.vue
+!frontend/src/**/*.css
+!frontend/public/
+!frontend/public/**

@@ -1,0 +1,303 @@
+<template>
+  <div class="chat-view">
+    <div v-if="!conversation" class="welcome">
+      <div class="welcome-icon">G</div>
+      <h1>GLM Chat</h1>
+      <p>选择一个对话开始，或创建新对话</p>
+    </div>
+
+    <template v-else>
+      <div class="chat-header">
+        <div class="chat-title-area">
+          <h2 class="chat-title">{{ conversation.title || '新对话' }}</h2>
+          <span class="model-badge">{{ conversation.model }}</span>
+          <span v-if="conversation.thinking_enabled" class="thinking-badge">思考</span>
+        </div>
+        <div class="chat-actions">
+          <button class="btn-icon" @click="$emit('toggleSettings')" title="设置">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div ref="scrollContainer" class="messages-container" @scroll="onScroll">
+        <div v-if="hasMoreMessages" class="load-more-top">
+          <button @click="$emit('loadMoreMessages')" :disabled="loadingMore">
+            {{ loadingMore ? '加载中...' : '加载更早的消息' }}
+          </button>
+        </div>
+
+        <div class="messages-list">
+          <MessageBubble
+            v-for="msg in messages"
+            :key="msg.id"
+            :role="msg.role"
+            :content="msg.content"
+            :thinking-content="msg.thinking_content"
+            :token-count="msg.token_count"
+            :created-at="msg.created_at"
+            :deletable="msg.role === 'user'"
+            @delete="$emit('deleteMessage', msg.id)"
+          />
+
+          <div v-if="streaming" class="message-bubble assistant">
+            <div class="avatar">G</div>
+            <div class="message-body">
+              <div v-if="streamingThinking" class="thinking-content streaming-thinking">
+                {{ streamingThinking }}
+              </div>
+              <div class="message-content streaming-content">
+                {{ streamingContent || '...' }}
+                <span class="cursor-blink">|</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <MessageInput
+        ref="inputRef"
+        :disabled="streaming"
+        @send="$emit('sendMessage', $event)"
+      />
+    </template>
+  </div>
+</template>
+
+<script setup>
+import { ref, watch, nextTick } from 'vue'
+import MessageBubble from './MessageBubble.vue'
+import MessageInput from './MessageInput.vue'
+
+const props = defineProps({
+  conversation: { type: Object, default: null },
+  messages: { type: Array, required: true },
+  streaming: { type: Boolean, default: false },
+  streamingContent: { type: String, default: '' },
+  streamingThinking: { type: String, default: '' },
+  hasMoreMessages: { type: Boolean, default: false },
+  loadingMore: { type: Boolean, default: false },
+})
+
+defineEmits(['sendMessage', 'deleteMessage', 'toggleSettings', 'loadMoreMessages'])
+
+const scrollContainer = ref(null)
+const inputRef = ref(null)
+
+function scrollToBottom(smooth = true) {
+  nextTick(() => {
+    const el = scrollContainer.value
+    if (el) {
+      el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'instant' })
+    }
+  })
+}
+
+function onScroll(e) {
+  if (e.target.scrollTop < 50 && props.hasMoreMessages && !props.loadingMore) {
+    // emit loadMore if needed
+  }
+}
+
+watch(() => props.messages.length, () => {
+  scrollToBottom()
+})
+
+watch(() => props.streamingContent, () => {
+  scrollToBottom()
+})
+
+watch(() => props.conversation?.id, () => {
+  if (props.conversation) {
+    nextTick(() => inputRef.value?.focus())
+  }
+})
+
+defineExpose({ scrollToBottom })
+</script>
+
+<style scoped>
+.chat-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: #0f172a;
+  min-width: 0;
+}
+
+.welcome {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #475569;
+}
+
+.welcome-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 20px;
+}
+
+.welcome h1 {
+  font-size: 24px;
+  color: #e2e8f0;
+  margin: 0 0 8px;
+}
+
+.welcome p {
+  font-size: 14px;
+}
+
+.chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(15, 23, 42, 0.8);
+  backdrop-filter: blur(8px);
+}
+
+.chat-title-area {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.chat-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #e2e8f0;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.model-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(79, 70, 229, 0.15);
+  color: #a5b4fc;
+  flex-shrink: 0;
+}
+
+.thinking-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(16, 185, 129, 0.15);
+  color: #6ee7b7;
+  flex-shrink: 0;
+}
+
+.chat-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.btn-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: none;
+  background: none;
+  color: #64748b;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.btn-icon:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #e2e8f0;
+}
+
+.messages-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 24px;
+}
+
+.messages-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.messages-container::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+}
+
+.load-more-top {
+  text-align: center;
+  padding: 12px 0;
+}
+
+.load-more-top button {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #94a3b8;
+  padding: 6px 16px;
+  border-radius: 16px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.15s;
+}
+
+.load-more-top button:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #e2e8f0;
+}
+
+.messages-list {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.streaming-thinking {
+  font-size: 13px;
+  color: #94a3b8;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: 8px;
+}
+
+.streaming-content {
+  font-size: 15px;
+  line-height: 1.7;
+  color: #e2e8f0;
+  white-space: pre-wrap;
+}
+
+.cursor-blink {
+  animation: blink 0.8s infinite;
+  color: #4f46e5;
+}
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+</style>

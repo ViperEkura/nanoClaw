@@ -1,0 +1,46 @@
+from datetime import datetime
+from . import db
+
+
+class User(db.Model):
+    __tablename__ = "users"
+
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    username = db.Column(db.String(50), unique=True, nullable=False)
+    password = db.Column(db.String(255), nullable=False)
+    phone = db.Column(db.String(20))
+
+    conversations = db.relationship("Conversation", backref="user", lazy="dynamic",
+                                    cascade="all, delete-orphan",
+                                    order_by="Conversation.updated_at.desc()")
+
+
+class Conversation(db.Model):
+    __tablename__ = "conversations"
+
+    id = db.Column(db.String(64), primary_key=True)
+    user_id = db.Column(db.BigInteger, db.ForeignKey("users.id"), nullable=False)
+    title = db.Column(db.String(255), nullable=False, default="")
+    model = db.Column(db.String(64), nullable=False, default="glm-5")
+    system_prompt = db.Column(db.Text, default="")
+    temperature = db.Column(db.Float, nullable=False, default=1.0)
+    max_tokens = db.Column(db.Integer, nullable=False, default=65536)
+    thinking_enabled = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    messages = db.relationship("Message", backref="conversation", lazy="dynamic",
+                               cascade="all, delete-orphan",
+                               order_by="Message.created_at.asc()")
+
+
+class Message(db.Model):
+    __tablename__ = "messages"
+
+    id = db.Column(db.String(64), primary_key=True)
+    conversation_id = db.Column(db.String(64), db.ForeignKey("conversations.id"), nullable=False)
+    role = db.Column(db.String(16), nullable=False)
+    content = db.Column(db.Text, default="")
+    token_count = db.Column(db.Integer, default=0)
+    thinking_content = db.Column(db.Text, default="")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
