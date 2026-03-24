@@ -180,6 +180,7 @@ watch(() => props.streaming, (streaming) => {
   border: 1px solid var(--border-light);
   overflow: hidden;
   background: var(--bg-secondary);
+  max-width: 100%;
 }
 
 .process-toggle {
@@ -309,6 +310,7 @@ watch(() => props.streaming, (streaming) => {
   padding: 12px;
   background: var(--bg-primary);
   border-top: 1px solid var(--border-light);
+  overflow: hidden;
 }
 
 .thinking-text {
@@ -357,6 +359,8 @@ watch(() => props.streaming, (streaming) => {
   color: var(--text-secondary);
   overflow-x: auto;
   border: 1px solid var(--border-light);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .result-label {

@@ -139,6 +139,8 @@ defineExpose({ scrollToBottom })
   height: 100vh;
   background: var(--bg-secondary);
   min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   transition: background 0.2s;
 }
 
@@ -247,6 +249,7 @@ defineExpose({ scrollToBottom })
   flex: 1;
   overflow-y: auto;
   padding: 0 24px;
+  width: 100%;
 }
 
 .messages-container::-webkit-scrollbar {
@@ -305,6 +308,12 @@ defineExpose({ scrollToBottom })
   color: white;
 }
 
+.message-bubble .message-body {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
 .streaming-content {
   font-size: 15px;
   line-height: 1.7;
@@ -327,6 +336,7 @@ defineExpose({ scrollToBottom })
   padding: 16px;
   overflow-x: auto;
   margin: 8px 0;
+  max-width: 100%;
 }
 
 .streaming-content :deep(pre code) {

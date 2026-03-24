@@ -106,7 +106,7 @@ function copyContent() {
 }
 
 .message-body {
-  max-width: 720px;
+  flex: 1;
   min-width: 0;
 }
 

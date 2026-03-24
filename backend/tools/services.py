@@ -1,5 +1,6 @@
 """Tool helper services"""
 from typing import List, Dict, Optional, Any
+from ddgs import DDGS
 import re
 
 
@@ -38,10 +39,6 @@ class SearchService:
         region: str
     ) -> List[dict]:
         """DuckDuckGo search"""
-        try:
-            from duckduckgo_search import DDGS
-        except ImportError:
-            return [{"error": "Please install duckduckgo-search: pip install duckduckgo-search"}]
 
         with DDGS() as ddgs:
             results = list(ddgs.text(

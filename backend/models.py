@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from . import db
 
 
@@ -26,8 +26,8 @@ class Conversation(db.Model):
     temperature = db.Column(db.Float, nullable=False, default=1.0)
     max_tokens = db.Column(db.Integer, nullable=False, default=65536)
     thinking_enabled = db.Column(db.Boolean, default=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     messages = db.relationship("Message", backref="conversation", lazy="dynamic",
                                cascade="all, delete-orphan",
@@ -49,7 +49,7 @@ class Message(db.Model):
     tool_call_id = db.Column(db.String(64))  # Tool call ID (tool messages)
     name = db.Column(db.String(64))  # Tool name (tool messages)
     
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 class TokenUsage(db.Model):
@@ -62,7 +62,7 @@ class TokenUsage(db.Model):
     prompt_tokens = db.Column(db.Integer, default=0)
     completion_tokens = db.Column(db.Integer, default=0)
     total_tokens = db.Column(db.Integer, default=0)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         db.UniqueConstraint("user_id", "date", "model", name="uq_user_date_model"),

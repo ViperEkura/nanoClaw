@@ -197,6 +197,7 @@ GET /api/conversations/:id/messages?cursor=msg_001&limit=50
         "content": "你好",
         "token_count": 2,
         "thinking_content": null,
+        "tool_calls": null,
         "created_at": "2026-03-24T10:00:00Z"
       },
       {
@@ -206,6 +207,7 @@ GET /api/conversations/:id/messages?cursor=msg_001&limit=50
         "content": "你好！有什么可以帮你的？",
         "token_count": 15,
         "thinking_content": null,
+        "tool_calls": null,
         "created_at": "2026-03-24T10:00:01Z"
       }
     ],
@@ -226,9 +228,16 @@ POST /api/conversations/:id/messages
 ```json
 {
   "content": "介绍一下你的能力",
-  "stream": true
+  "stream": true,
+  "tools_enabled": true
 }
 ```
+
+| 参数              | 类型       | 说明                     |
+| --------------- | -------- | ---------------------- |
+| `content`       | string   | 用户消息内容                 |
+| `stream`        | boolean  | 是否流式响应，默认 `true`       |
+| `tools_enabled` | boolean  | 是否启用工具调用，默认 `true`（可选） |
 
 **流式响应 (stream=true)：**
 
@@ -298,6 +307,7 @@ data: {"message_id": "msg_003", "token_count": 150}
       "content": "我是智谱AI开发的大语言模型...",
       "token_count": 200,
       "thinking_content": "用户想了解我的能力...",
+      "tool_calls": null,
       "created_at": "2026-03-24T10:01:00Z"
     },
     "usage": {
@@ -534,13 +544,11 @@ User  1 ── * Conversation  1 ── * Message
 | ------------------ | ------------- | ------------------------------- |
 | `id`               | string (UUID) | 消息 ID                           |
 | `conversation_id`  | string        | 所属会话 ID                         |
-| `role`             | enum          | `user` / `assistant` / `system` / `tool` |
+| `role`             | enum          | `user` / `assistant` / `system`  |
 | `content`          | string        | 消息内容                            |
 | `token_count`      | integer       | token 消耗数                       |
 | `thinking_content` | string        | 思维链内容（启用时）                      |
-| `tool_calls`       | string (JSON) | 工具调用请求（assistant 消息）            |
-| `tool_call_id`     | string        | 工具调用 ID（tool 消息）                |
-| `name`             | string        | 工具名称（tool 消息）                   |
+| `tool_calls`       | array (JSON)  | 工具调用信息（含结果），仅 assistant 消息      |
 | `created_at`       | datetime      | 创建时间                            |
 
 #### 消息类型说明
@@ -563,16 +571,22 @@ User  1 ── * Conversation  1 ── * Message
   "content": "北京今天天气晴朗...",
   "token_count": 50,
   "thinking_content": "用户想了解天气...",
+  "tool_calls": null,
   "created_at": "2026-03-24T10:00:01Z"
 }
 ```
 
-**3. 助手消息 - 工具调用 (role=assistant, with tool_calls)**
+**3. 助手消息 - 含工具调用 (role=assistant, with tool_calls)**
+
+工具调用结果直接合并到 `tool_calls` 数组中，每个调用包含 `result` 字段：
+
 ```json
 {
   "id": "msg_003",
   "role": "assistant",
-  "content": "",
+  "content": "北京今天天气晴朗，温度25°C，湿度60%",
+  "token_count": 80,
+  "thinking_content": "用户想知道北京天气，需要调用工具获取...",
   "tool_calls": [
     {
       "id": "call_abc123",
@@ -580,21 +594,10 @@ User  1 ── * Conversation  1 ── * Message
       "function": {
         "name": "get_weather",
         "arguments": "{\"city\": \"北京\"}"
-      }
+      },
+      "result": "{\"temperature\": 25, \"humidity\": 60, \"description\": \"晴天\"}"
     }
   ],
-  "created_at": "2026-03-24T10:00:01Z"
-}
-```
-
-**4. 工具返回消息 (role=tool)**
-```json
-{
-  "id": "msg_004",
-  "role": "tool",
-  "content": "{\"temperature\": 25, \"humidity\": 60, \"description\": \"晴天\"}",
-  "tool_call_id": "call_abc123",
-  "name": "get_weather",
   "created_at": "2026-03-24T10:00:02Z"
 }
 ```
@@ -606,9 +609,29 @@ User  1 ── * Conversation  1 ── * Message
     ↓
 [msg_001] role=user, content="北京今天天气怎么样？"
     ↓
-[msg_002] role=assistant, tool_calls=[{get_weather, args:{"city":"北京"}}]
+[AI 调用工具 get_weather]
     ↓
-[msg_003] role=tool, name=get_weather, content="{...weather data...}"
-    ↓
-[msg_004] role=assistant, content="北京今天天气晴朗，温度25°C..."
+[msg_002] role=assistant, tool_calls=[{get_weather, args:{"city":"北京"}, result="{...}"}]
+          content="北京今天天气晴朗，温度25°C..."
 ```
+
+**说明：**
+- 工具调用结果直接存储在 `tool_calls[].result` 字段中
+- 不再创建独立的 `role=tool` 消息
+- 前端可通过 `tool_calls` 数组展示完整的工具调用过程
+
+---
+
+## 前端特性
+
+### 工具调用控制
+
+- 工具调用开关位于输入框右侧（扳手图标）
+- 状态存储在浏览器 localStorage（`tools_enabled`）
+- 默认开启，可通过请求参数 `tools_enabled` 控制每次请求
+
+### 消息渲染
+
+- 助手消息的 `tool_calls` 通过可折叠面板展示
+- 面板显示：思考过程 → 工具调用 → 工具结果
+- 每个子项可独立展开/折叠
