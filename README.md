@@ -8,13 +8,6 @@
 ### 1. 克隆并安装后端
 
 ```bash
-cd Nano-Claw
-
-# 创建虚拟环境
-python -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
-
-# 安装依赖
 pip install -e .
 ```
 
@@ -23,6 +16,10 @@ pip install -e .
 创建并编辑 `config.yml`，填入你的信息：
 
 ```yaml
+# Port
+backend_port: 3000
+frontend_port: 4000
+
 # GLM API
 api_key: your-api-key-here
 api_url: https://open.bigmodel.cn/api/paas/v4/chat/completions
@@ -45,7 +42,7 @@ mysql -u root -p -e "CREATE DATABASE glm_chat CHARACTER SET utf8mb4 COLLATE utf8
 ### 4. 启动后端
 
 ```bash
-flask --app backend run --port 5000
+python -m backend.run
 ```
 
 ### 5. 启动前端
@@ -56,7 +53,6 @@ npm install
 npm run dev
 ```
 
-打开 http://localhost:3000 即可使用。
 
 ## 项目结构
 

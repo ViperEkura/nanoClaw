@@ -1,6 +1,7 @@
-from backend import create_app
+from backend import create_app, load_config
 
 app = create_app()
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    cfg = load_config()
+    app.run(debug=True, port=cfg.get("backend_port"))

@@ -9,12 +9,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "vue": "^3.4.0",
+    "highlight.js": "^11.10.0",
     "marked": "^15.0.0",
-    "highlight.js": "^11.10.0"
+    "vue": "^3.4.0"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.0",
+    "js-yaml": "^4.1.1",
     "vite": "^6.0.0"
   }
 }
