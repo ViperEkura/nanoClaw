@@ -21,7 +21,7 @@
           <div class="form-group">
             <label>模型</label>
             <select v-model="form.model">
-              <option value="glm-5">GLM-5</option>
+              <option v-for="m in models" :key="m.id" :value="m.id">{{ m.name }}</option>
             </select>
           </div>
 
@@ -94,7 +94,8 @@
 </template>
 
 <script setup>
-import { reactive, watch } from 'vue'
+import { reactive, ref, watch, onMounted } from 'vue'
+import { modelApi } from '../api'
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
@@ -103,25 +104,38 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'save'])
 
+const models = ref([])
+
 const form = reactive({
   title: '',
-  model: 'glm-5',
+  model: '',
   system_prompt: '',
   temperature: 1.0,
   max_tokens: 65536,
   thinking_enabled: false,
 })
 
+async function loadModels() {
+  try {
+    const res = await modelApi.list()
+    models.value = res.data || []
+  } catch (e) {
+    console.error('Failed to load models:', e)
+  }
+}
+
 watch(() => props.visible, (val) => {
   if (val && props.conversation) {
     form.title = props.conversation.title || ''
-    form.model = props.conversation.model || 'default'
+    form.model = props.conversation.model || ''
     form.system_prompt = props.conversation.system_prompt || ''
     form.temperature = props.conversation.temperature ?? 1.0
     form.max_tokens = props.conversation.max_tokens ?? 65536
     form.thinking_enabled = props.conversation.thinking_enabled ?? false
   }
 })
+
+onMounted(loadModels)
 
 function save() {
   emit('save', { ...form })

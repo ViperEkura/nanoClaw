@@ -13,6 +13,12 @@ async function request(url, options = {}) {
   return data
 }
 
+export const modelApi = {
+  list() {
+    return request('/models')
+  },
+}
+
 export const conversationApi = {
   list(cursor, limit = 20) {
     const params = new URLSearchParams()

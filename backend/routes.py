@@ -11,8 +11,10 @@ from . import load_config
 bp = Blueprint("api", __name__)
 
 cfg = load_config()
-GLM_API_URL = cfg.get("api_url")
-GLM_API_KEY = cfg["api_key"]
+API_URL = cfg.get("api_url")
+API_KEY = cfg["api_key"]
+MODELS = cfg.get("models", [])
+DEFAULT_MODEL = cfg.get("default_model", "glm-5")
 
 
 # -- Helpers ----------------------------------------------
@@ -57,6 +59,14 @@ def build_glm_messages(conv):
     return msgs
 
 
+# -- Models API -------------------------------------------
+
+@bp.route("/api/models", methods=["GET"])
+def list_models():
+    """获取可用模型列表"""
+    return ok(MODELS)
+
+
 # -- Conversation CRUD ------------------------------------
 
 @bp.route("/api/conversations", methods=["GET", "POST"])
@@ -68,7 +78,7 @@ def conversation_list():
             id=str(uuid.uuid4()),
             user_id=user.id,
             title=d.get("title", ""),
-            model=d.get("model", "glm-5"),
+            model=d.get("model", DEFAULT_MODEL),
             system_prompt=d.get("system_prompt", ""),
             temperature=d.get("temperature", 1.0),
             max_tokens=d.get("max_tokens", 65536),
@@ -183,8 +193,8 @@ def _call_glm(conv, stream=False):
     if stream:
         body["stream"] = True
     return requests.post(
-        GLM_API_URL,
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {GLM_API_KEY}"},
+        API_URL,
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {API_KEY}"},
         json=body, stream=stream, timeout=120,
     )
 
