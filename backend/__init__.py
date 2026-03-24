@@ -2,6 +2,7 @@ import os
 import yaml
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
+from flask_cors import CORS
 from pathlib import Path
 
 # Initialize db BEFORE importing models/routes that depend on it
@@ -24,6 +25,9 @@ def create_app():
         f"?charset=utf8mb4"
     )
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
+    # Enable CORS for all routes
+    CORS(app)
 
     db.init_app(app)
 

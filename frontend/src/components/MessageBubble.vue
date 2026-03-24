@@ -3,19 +3,16 @@
     <div v-if="role === 'user'" class="avatar">user</div>
     <div v-else class="avatar">claw</div>
     <div class="message-body">
-      <div v-if="thinkingContent" class="thinking-block">
-        <button class="thinking-toggle" @click="showThinking = !showThinking">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
-          </svg>
-          <span>思考过程</span>
-          <svg class="arrow" :class="{ open: showThinking }" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="6 9 12 15 18 9"></polyline>
-          </svg>
-        </button>
-        <div v-if="showThinking" class="thinking-content">{{ thinkingContent }}</div>
+      <ProcessBlock
+        v-if="thinkingContent || (toolCalls && toolCalls.length > 0)"
+        :thinking-content="thinkingContent"
+        :tool-calls="toolCalls"
+      />
+      <div v-if="role === 'tool'" class="tool-result-content">
+        <div class="tool-badge">工具返回结果: {{ toolName }}</div>
+        <pre>{{ content }}</pre>
       </div>
-      <div class="message-content" v-html="renderedContent"></div>
+      <div v-else class="message-content" v-html="renderedContent"></div>
       <div class="message-footer">
         <span class="token-count" v-if="tokenCount">{{ tokenCount }} tokens</span>
         <span class="message-time">{{ formatTime(createdAt) }}</span>
@@ -39,19 +36,20 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { renderMarkdown } from '../utils/markdown'
+import ProcessBlock from './ProcessBlock.vue'
 
 const props = defineProps({
   role: { type: String, required: true },
   content: { type: String, default: '' },
   thinkingContent: { type: String, default: '' },
+  toolCalls: { type: Array, default: () => [] },
+  toolName: { type: String, default: '' },
   tokenCount: { type: Number, default: 0 },
   createdAt: { type: String, default: '' },
   deletable: { type: Boolean, default: false },
 })
 
 defineEmits(['delete'])
-
-const showThinking = ref(false)
 
 const renderedContent = computed(() => {
   if (!props.content) return ''
@@ -112,56 +110,40 @@ function copyContent() {
   min-width: 0;
 }
 
-.thinking-block {
-  margin-bottom: 8px;
-  border-radius: 8px;
-  border: 1px solid var(--border-light);
-  overflow: hidden;
-}
-
-.thinking-toggle {
-  width: 100%;
-  padding: 8px 12px;
-  background: var(--bg-secondary);
-  border: none;
-  color: var(--text-secondary);
-  font-size: 13px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  transition: background 0.15s;
-}
-
-.thinking-toggle:hover {
-  background: var(--bg-code);
-}
-
-.thinking-toggle .arrow {
-  margin-left: auto;
-  transition: transform 0.2s;
-}
-
-.thinking-toggle .arrow.open {
-  transform: rotate(180deg);
-}
-
-.thinking-content {
-  padding: 12px;
-  font-size: 13px;
-  color: var(--text-secondary);
-  line-height: 1.6;
-  border-top: 1px solid var(--border-light);
-  background: var(--bg-secondary);
-  white-space: pre-wrap;
-  max-height: 300px;
-  overflow-y: auto;
-}
-
 .message-content {
   font-size: 15px;
   line-height: 1.7;
   color: var(--text-primary);
+  word-break: break-word;
+}
+
+.tool-result-content {
+  background: var(--bg-code);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  padding: 12px;
+  overflow: hidden;
+}
+
+.tool-badge {
+  font-size: 11px;
+  color: var(--success-color);
+  font-weight: 600;
+  margin-bottom: 8px;
+  padding: 2px 8px;
+  background: var(--success-bg);
+  border-radius: 4px;
+  display: inline-block;
+}
+
+.tool-result-content pre {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  margin: 0;
+  overflow-x: auto;
+  white-space: pre-wrap;
   word-break: break-word;
 }
 

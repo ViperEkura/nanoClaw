@@ -18,12 +18,15 @@
       :streaming="streaming"
       :streaming-content="streamContent"
       :streaming-thinking="streamThinking"
+      :streaming-tool-calls="streamToolCalls"
       :has-more-messages="hasMoreMessages"
       :loading-more="loadingMessages"
+      :tools-enabled="toolsEnabled"
       @send-message="sendMessage"
       @delete-message="deleteMessage"
       @toggle-settings="showSettings = true"
       @load-more-messages="loadMoreMessages"
+      @toggle-tools="updateToolsEnabled"
     />
 
     <SettingsPanel
@@ -61,9 +64,11 @@ const nextMsgCursor = ref(null)
 const streaming = ref(false)
 const streamContent = ref('')
 const streamThinking = ref('')
+const streamToolCalls = ref([])
 
 // -- UI state --
 const showSettings = ref(false)
+const toolsEnabled = ref(localStorage.getItem('tools_enabled') !== 'false') // 默认开启
 
 const currentConv = computed(() =>
   conversations.value.find(c => c.id === currentConvId.value) || null
@@ -122,9 +127,10 @@ async function loadMessages(reset = true) {
   try {
     const res = await messageApi.list(currentConvId.value, reset ? null : nextMsgCursor.value)
     if (reset) {
-      messages.value = res.data.items
+      // Filter out tool messages (they're merged into assistant messages)
+      messages.value = res.data.items.filter(m => m.role !== 'tool')
     } else {
-      messages.value = [...res.data.items, ...messages.value]
+      messages.value = [...res.data.items.filter(m => m.role !== 'tool'), ...messages.value]
     }
     nextMsgCursor.value = res.data.next_cursor
     hasMoreMessages.value = res.data.has_more
@@ -158,14 +164,33 @@ async function sendMessage(content) {
   streaming.value = true
   streamContent.value = ''
   streamThinking.value = ''
+  streamToolCalls.value = []
 
   await messageApi.send(currentConvId.value, content, {
     stream: true,
+    toolsEnabled: toolsEnabled.value,
     onThinking(text) {
       streamThinking.value += text
     },
     onMessage(text) {
       streamContent.value += text
+    },
+    onToolCalls(calls) {
+      console.log('🔧 Tool calls received:', calls)
+      streamToolCalls.value = calls
+    },
+    onToolResult(result) {
+      console.log('✅ Tool result received:', result)
+      // 更新工具调用结果
+      const call = streamToolCalls.value.find(c => c.function?.name === result.name)
+      if (call) {
+        call.result = result.content
+      } else {
+        // 如果找不到，添加到第一个调用（兜底处理）
+        if (streamToolCalls.value.length > 0) {
+          streamToolCalls.value[0].result = result.content
+        }
+      }
     },
     async onDone(data) {
       streaming.value = false
@@ -178,6 +203,7 @@ async function sendMessage(content) {
         content: streamContent.value,
         token_count: data.token_count,
         thinking_content: streamThinking.value || null,
+        tool_calls: streamToolCalls.value.length > 0 ? streamToolCalls.value : null,
         created_at: new Date().toISOString(),
       })
       streamContent.value = ''
@@ -249,6 +275,12 @@ async function saveSettings(data) {
   } catch (e) {
     console.error('Failed to save settings:', e)
   }
+}
+
+// -- Update tools enabled --
+function updateToolsEnabled(val) {
+  toolsEnabled.value = val
+  localStorage.setItem('tools_enabled', String(val))
 }
 
 // -- Init --

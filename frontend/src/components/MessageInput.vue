@@ -12,6 +12,17 @@
       ></textarea>
       <div class="input-actions">
         <button
+          class="btn-tool"
+          :class="{ active: toolsEnabled }"
+          :disabled="disabled"
+          @click="toggleTools"
+          :title="toolsEnabled ? '工具调用: 已开启' : '工具调用: 已关闭'"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+          </svg>
+        </button>
+        <button
           class="btn-send"
           :class="{ active: text.trim() && !disabled }"
           :disabled="!text.trim() || disabled"
@@ -33,9 +44,10 @@ import { ref, nextTick } from 'vue'
 
 const props = defineProps({
   disabled: { type: Boolean, default: false },
+  toolsEnabled: { type: Boolean, default: true },
 })
 
-const emit = defineEmits(['send'])
+const emit = defineEmits(['send', 'toggleTools'])
 const text = ref('')
 const textareaRef = ref(null)
 
@@ -61,6 +73,10 @@ function send() {
   nextTick(() => {
     autoResize()
   })
+}
+
+function toggleTools() {
+  emit('toggleTools', !props.toolsEnabled)
 }
 
 function focus() {
@@ -118,6 +134,35 @@ textarea:disabled {
   align-items: center;
   gap: 8px;
   margin-left: 8px;
+}
+
+.btn-tool {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: none;
+  background: var(--bg-code);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.btn-tool:hover {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.btn-tool.active {
+  background: var(--success-bg);
+  color: var(--success-color);
+}
+
+.btn-tool:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .btn-send {

@@ -26,7 +26,7 @@ def init_tools() -> None:
 
     Importing builtin module automatically registers all decorator-defined tools
     """
-    from .builtin import crawler, data  # noqa: F401
+    from .builtin import crawler, data, weather  # noqa: F401
 
 
 # Public API exports

@@ -47,6 +47,17 @@ def to_dict(inst, **extra):
     for k in ("created_at", "updated_at"):
         if k in d and hasattr(d[k], "strftime"):
             d[k] = d[k].strftime("%Y-%m-%dT%H:%M:%SZ")
+    
+    # Parse tool_calls JSON if present
+    if "tool_calls" in d and d["tool_calls"]:
+        try:
+            d["tool_calls"] = json.loads(d["tool_calls"])
+        except:
+            pass
+    
+    # Filter out None values for cleaner API response
+    d = {k: v for k, v in d.items() if v is not None}
+    
     d.update(extra)
     return d
 
@@ -296,10 +307,12 @@ def message_list(conv_id):
     db.session.add(user_msg)
     db.session.commit()
 
-    if d.get("stream", False):
-        return _stream_response(conv)
+    tools_enabled = d.get("tools_enabled", True)
 
-    return _sync_response(conv)
+    if d.get("stream", False):
+        return _stream_response(conv, tools_enabled)
+
+    return _sync_response(conv, tools_enabled)
 
 
 @bp.route("/api/conversations/<conv_id>/messages/<msg_id>", methods=["DELETE"])
@@ -339,16 +352,20 @@ def _call_glm(conv, stream=False, tools=None, messages=None):
     )
 
 
-def _sync_response(conv):
+def _sync_response(conv, tools_enabled=True):
     """Sync response with tool call support"""
     executor = ToolExecutor(registry=registry)
-    tools = registry.list_all()
+    tools = registry.list_all() if tools_enabled else None
     messages = build_glm_messages(conv)
     max_iterations = 5  # Max tool call iterations
+    
+    # Collect all tool calls and results
+    all_tool_calls = []
+    all_tool_results = []
 
     for _ in range(max_iterations):
         try:
-            resp = _call_glm(conv, tools=tools if tools else None, messages=messages)
+            resp = _call_glm(conv, tools=tools, messages=messages)
             resp.raise_for_status()
             result = resp.json()
         except Exception as e:
@@ -363,11 +380,23 @@ def _sync_response(conv):
             prompt_tokens = usage.get("prompt_tokens", 0)
             completion_tokens = usage.get("completion_tokens", 0)
 
+            # Merge tool results into tool_calls
+            merged_tool_calls = []
+            for i, tc in enumerate(all_tool_calls):
+                merged_tc = dict(tc)
+                if i < len(all_tool_results):
+                    merged_tc["result"] = all_tool_results[i]["content"]
+                merged_tool_calls.append(merged_tc)
+
+            # Save assistant message with all tool calls (including results)
             msg = Message(
-                id=str(uuid.uuid4()), conversation_id=conv.id, role="assistant",
+                id=str(uuid.uuid4()), 
+                conversation_id=conv.id, 
+                role="assistant",
                 content=message.get("content", ""),
                 token_count=completion_tokens,
                 thinking_content=message.get("reasoning_content", ""),
+                tool_calls=json.dumps(merged_tool_calls) if merged_tool_calls else None
             )
             db.session.add(msg)
             db.session.commit()
@@ -386,39 +415,38 @@ def _sync_response(conv):
 
         # Process tool calls
         tool_calls = message["tool_calls"]
+        all_tool_calls.extend(tool_calls)
         messages.append(message)
 
         # Execute tools and add results
         tool_results = executor.process_tool_calls(tool_calls)
+        all_tool_results.extend(tool_results)
         messages.extend(tool_results)
-
-        # Save tool call records to database
-        for i, call in enumerate(tool_calls):
-            tool_msg = Message(
-                id=str(uuid.uuid4()),
-                conversation_id=conv.id,
-                role="tool",
-                content=tool_results[i]["content"]
-            )
-            db.session.add(tool_msg)
-        db.session.commit()
 
     return err(500, "exceeded maximum tool call iterations")
 
 
-def _stream_response(conv):
+def _stream_response(conv, tools_enabled=True):
     """Stream response with tool call support"""
     conv_id = conv.id
     conv_model = conv.model
     app = current_app._get_current_object()
     executor = ToolExecutor(registry=registry)
-    tools = registry.list_all()
+    tools = registry.list_all() if tools_enabled else None
     # Build messages BEFORE entering generator (in request context)
     initial_messages = build_glm_messages(conv)
 
     def generate():
         messages = list(initial_messages)  # Copy to avoid mutation
         max_iterations = 5
+        
+        # Collect all tool calls and results
+        all_tool_calls = []
+        all_tool_results = []
+        total_content = ""
+        total_thinking = ""
+        total_tokens = 0
+        total_prompt_tokens = 0
 
         for iteration in range(max_iterations):
             full_content = ""
@@ -432,7 +460,7 @@ def _stream_response(conv):
             try:
                 with app.app_context():
                     active_conv = db.session.get(Conversation, conv_id)
-                    resp = _call_glm(active_conv, stream=True, tools=tools if tools else None, messages=messages)
+                    resp = _call_glm(active_conv, stream=True, tools=tools, messages=messages)
                     resp.raise_for_status()
 
                 for line in resp.iter_lines():
@@ -492,6 +520,9 @@ def _stream_response(conv):
 
             # If tool calls exist, execute and continue loop
             if tool_calls_list:
+                # Collect tool calls
+                all_tool_calls.extend(tool_calls_list)
+                
                 # Send tool call info
                 yield f"event: tool_calls\ndata: {json.dumps({'calls': tool_calls_list}, ensure_ascii=False)}\n\n"
 
@@ -503,6 +534,9 @@ def _stream_response(conv):
                     "tool_calls": tool_calls_list
                 })
                 messages.extend(tool_results)
+                
+                # Collect tool results
+                all_tool_results.extend(tool_results)
 
                 # Send tool results
                 for tr in tool_results:
@@ -510,19 +544,38 @@ def _stream_response(conv):
 
                 continue
 
-            # No tool calls, finish
+            # No tool calls, finish - save everything
+            total_content = full_content
+            total_thinking = full_thinking
+            total_tokens = token_count
+            total_prompt_tokens = prompt_tokens
+            
+            # Merge tool results into tool_calls
+            merged_tool_calls = []
+            for i, tc in enumerate(all_tool_calls):
+                merged_tc = dict(tc)
+                if i < len(all_tool_results):
+                    merged_tc["result"] = all_tool_results[i]["content"]
+                merged_tool_calls.append(merged_tc)
+            
             with app.app_context():
+                # Save assistant message with all tool calls (including results)
                 msg = Message(
-                    id=msg_id, conversation_id=conv_id, role="assistant",
-                    content=full_content, token_count=token_count, thinking_content=full_thinking,
+                    id=msg_id, 
+                    conversation_id=conv_id, 
+                    role="assistant",
+                    content=total_content, 
+                    token_count=total_tokens, 
+                    thinking_content=total_thinking,
+                    tool_calls=json.dumps(merged_tool_calls) if merged_tool_calls else None
                 )
                 db.session.add(msg)
                 db.session.commit()
 
                 user = get_or_create_default_user()
-                record_token_usage(user.id, conv_model, prompt_tokens, token_count)
+                record_token_usage(user.id, conv_model, total_prompt_tokens, total_tokens)
 
-            yield f"event: done\ndata: {json.dumps({'message_id': msg_id, 'token_count': token_count})}\n\n"
+            yield f"event: done\ndata: {json.dumps({'message_id': msg_id, 'token_count': total_tokens})}\n\n"
             return
 
         yield f"event: error\ndata: {json.dumps({'content': 'exceeded maximum tool call iterations'}, ensure_ascii=False)}\n\n"

@@ -20,6 +20,19 @@
 | `POST`   | `/api/conversations/:id/messages`             | 发送消息（对话补全，支持 `stream` 流式） |
 | `DELETE` | `/api/conversations/:id/messages/:message_id` | 删除消息                      |
 
+### 模型与工具
+
+| 方法     | 路径            | 说明       |
+| ------ | ------------- | -------- |
+| `GET`  | `/api/models`  | 获取模型列表   |
+| `GET`  | `/api/tools`   | 获取工具列表   |
+
+### 统计信息
+
+| 方法     | 路径                   | 说明               |
+| ------ | -------------------- | ---------------- |
+| `GET`  | `/api/stats/tokens`   | 获取 Token 使用统计    |
+
 ---
 
 ## API 接口
@@ -219,6 +232,8 @@ POST /api/conversations/:id/messages
 
 **流式响应 (stream=true)：**
 
+**普通回复示例：**
+
 ```
 HTTP/1.1 200 OK
 Content-Type: text/event-stream
@@ -237,6 +252,37 @@ data: {"content": "开发的大语言模型"}
 
 event: done
 data: {"message_id": "msg_003", "token_count": 200}
+```
+
+**工具调用示例：**
+
+```
+HTTP/1.1 200 OK
+Content-Type: text/event-stream
+
+event: thinking
+data: {"content": "用户想知道北京天气..."}
+
+event: tool_calls
+data: {"calls": [{"id": "call_001", "type": "function", "function": {"name": "get_weather", "arguments": "{\"city\": \"北京\"}"}}]}
+
+event: tool_result
+data: {"name": "get_weather", "content": "{\"temperature\": 25, \"humidity\": 60, \"description\": \"晴天\"}"}
+
+event: message
+data: {"content": "北京"}
+
+event: message
+data: {"content": "今天天气晴朗，"}
+
+event: message
+data: {"content": "温度25°C，"}
+
+event: message
+data: {"content": "湿度60%"}
+
+event: done
+data: {"message_id": "msg_003", "token_count": 150}
 ```
 
 **非流式响应 (stream=false)：**
@@ -280,18 +326,162 @@ DELETE /api/conversations/:id/messages/:message_id
 
 ---
 
-### 3. SSE 事件说明
+### 3. 模型与工具
 
-| 事件         | 说明                              |
-| ---------- | ------------------------------- |
-| `thinking` | 思维链增量内容（启用时）                    |
-| `message`  | 回复内容的增量片段                       |
-| `error`    | 错误信息                            |
-| `done`     | 回复结束，携带完整 message_id 和 token 统计 |
+#### 获取模型列表
+
+```
+GET /api/models
+```
+
+**响应：**
+
+```json
+{
+  "code": 0,
+  "data": ["glm-5", "glm-4", "glm-3-turbo"]
+}
+```
+
+#### 获取工具列表
+
+```
+GET /api/tools
+```
+
+**响应：**
+
+```json
+{
+  "code": 0,
+  "data": {
+    "tools": [
+      {
+        "name": "get_weather",
+        "description": "获取指定城市的天气信息",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "city": {
+              "type": "string",
+              "description": "城市名称"
+            }
+          },
+          "required": ["city"]
+        }
+      }
+    ],
+    "total": 1
+  }
+}
+```
 
 ---
 
-### 4. 错误码
+### 4. 统计信息
+
+#### 获取 Token 使用统计
+
+```
+GET /api/stats/tokens?period=daily
+```
+
+**参数：**
+
+| 参数       | 类型     | 说明                                    |
+| -------- | ------ | ------------------------------------- |
+| `period` | string | 统计周期：`daily`（今日）、`weekly`（近7天）、`monthly`（近30天） |
+
+**响应（daily）：**
+
+```json
+{
+  "code": 0,
+  "data": {
+    "period": "daily",
+    "date": "2026-03-24",
+    "prompt_tokens": 1000,
+    "completion_tokens": 2000,
+    "total_tokens": 3000,
+    "by_model": {
+      "glm-5": {
+        "prompt": 500,
+        "completion": 1000,
+        "total": 1500
+      },
+      "glm-4": {
+        "prompt": 500,
+        "completion": 1000,
+        "total": 1500
+      }
+    }
+  }
+}
+```
+
+**响应（weekly/monthly）：**
+
+```json
+{
+  "code": 0,
+  "data": {
+    "period": "weekly",
+    "start_date": "2026-03-18",
+    "end_date": "2026-03-24",
+    "prompt_tokens": 7000,
+    "completion_tokens": 14000,
+    "total_tokens": 21000,
+    "daily": {
+      "2026-03-18": {"prompt": 1000, "completion": 2000, "total": 3000},
+      "2026-03-19": {"prompt": 1000, "completion": 2000, "total": 3000},
+      ...
+    }
+  }
+}
+```
+
+---
+
+### 5. SSE 事件说明
+
+| 事件            | 说明                                       |
+| ------------- | ---------------------------------------- |
+| `thinking`    | 思维链增量内容（启用时）                             |
+| `message`     | 回复内容的增量片段                                |
+| `tool_calls`  | 工具调用信息，包含工具名称和参数                         |
+| `tool_result` | 工具执行结果，包含工具名称和返回内容                       |
+| `error`       | 错误信息                                     |
+| `done`        | 回复结束，携带完整 message_id 和 token 统计          |
+
+**tool_calls 事件数据格式：**
+
+```json
+{
+  "calls": [
+    {
+      "id": "call_001",
+      "type": "function",
+      "function": {
+        "name": "get_weather",
+        "arguments": "{\"city\": \"北京\"}"
+      }
+    }
+  ]
+}
+```
+
+**tool_result 事件数据格式：**
+
+```json
+{
+  "name": "get_weather",
+  "content": "{\"temperature\": 25, \"humidity\": 60}"
+}
+```
+
+---
+
+### 6. 错误码
 
 | code  | 说明       |
 | ----- | -------- |
@@ -344,8 +534,81 @@ User  1 ── * Conversation  1 ── * Message
 | ------------------ | ------------- | ------------------------------- |
 | `id`               | string (UUID) | 消息 ID                           |
 | `conversation_id`  | string        | 所属会话 ID                         |
-| `role`             | enum          | `user` / `assistant` / `system` |
+| `role`             | enum          | `user` / `assistant` / `system` / `tool` |
 | `content`          | string        | 消息内容                            |
 | `token_count`      | integer       | token 消耗数                       |
 | `thinking_content` | string        | 思维链内容（启用时）                      |
+| `tool_calls`       | string (JSON) | 工具调用请求（assistant 消息）            |
+| `tool_call_id`     | string        | 工具调用 ID（tool 消息）                |
+| `name`             | string        | 工具名称（tool 消息）                   |
 | `created_at`       | datetime      | 创建时间                            |
+
+#### 消息类型说明
+
+**1. 用户消息 (role=user)**
+```json
+{
+  "id": "msg_001",
+  "role": "user",
+  "content": "北京今天天气怎么样？",
+  "created_at": "2026-03-24T10:00:00Z"
+}
+```
+
+**2. 助手消息 - 普通回复 (role=assistant)**
+```json
+{
+  "id": "msg_002",
+  "role": "assistant",
+  "content": "北京今天天气晴朗...",
+  "token_count": 50,
+  "thinking_content": "用户想了解天气...",
+  "created_at": "2026-03-24T10:00:01Z"
+}
+```
+
+**3. 助手消息 - 工具调用 (role=assistant, with tool_calls)**
+```json
+{
+  "id": "msg_003",
+  "role": "assistant",
+  "content": "",
+  "tool_calls": [
+    {
+      "id": "call_abc123",
+      "type": "function",
+      "function": {
+        "name": "get_weather",
+        "arguments": "{\"city\": \"北京\"}"
+      }
+    }
+  ],
+  "created_at": "2026-03-24T10:00:01Z"
+}
+```
+
+**4. 工具返回消息 (role=tool)**
+```json
+{
+  "id": "msg_004",
+  "role": "tool",
+  "content": "{\"temperature\": 25, \"humidity\": 60, \"description\": \"晴天\"}",
+  "tool_call_id": "call_abc123",
+  "name": "get_weather",
+  "created_at": "2026-03-24T10:00:02Z"
+}
+```
+
+#### 工具调用流程示例
+
+```
+用户: "北京今天天气怎么样？"
+    ↓
+[msg_001] role=user, content="北京今天天气怎么样？"
+    ↓
+[msg_002] role=assistant, tool_calls=[{get_weather, args:{"city":"北京"}}]
+    ↓
+[msg_003] role=tool, name=get_weather, content="{...weather data...}"
+    ↓
+[msg_004] role=assistant, content="北京今天天气晴朗，温度25°C..."
+```

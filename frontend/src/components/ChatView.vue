@@ -37,6 +37,8 @@
             :role="msg.role"
             :content="msg.content"
             :thinking-content="msg.thinking_content"
+            :tool-calls="msg.tool_calls"
+            :tool-name="msg.name"
             :token-count="msg.token_count"
             :created-at="msg.created_at"
             :deletable="msg.role === 'user'"
@@ -46,9 +48,11 @@
           <div v-if="streaming" class="message-bubble assistant">
             <div class="avatar">claw</div>
             <div class="message-body">
-              <div v-if="streamingThinking" class="thinking-content streaming-thinking">
-                {{ streamingThinking }}
-              </div>
+              <ProcessBlock
+                :thinking-content="streamingThinking"
+                :tool-calls="streamingToolCalls"
+                :streaming="streaming"
+              />
               <div class="message-content streaming-content" v-html="renderedStreamContent || '<span class=\'placeholder\'>...</span>'"></div>
             </div>
           </div>
@@ -58,7 +62,9 @@
       <MessageInput
         ref="inputRef"
         :disabled="streaming"
+        :tools-enabled="toolsEnabled"
         @send="$emit('sendMessage', $event)"
+        @toggle-tools="$emit('toggleTools', $event)"
       />
     </template>
   </div>
@@ -68,6 +74,7 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import MessageBubble from './MessageBubble.vue'
 import MessageInput from './MessageInput.vue'
+import ProcessBlock from './ProcessBlock.vue'
 import { renderMarkdown } from '../utils/markdown'
 
 const props = defineProps({
@@ -76,11 +83,13 @@ const props = defineProps({
   streaming: { type: Boolean, default: false },
   streamingContent: { type: String, default: '' },
   streamingThinking: { type: String, default: '' },
+  streamingToolCalls: { type: Array, default: () => [] },
   hasMoreMessages: { type: Boolean, default: false },
   loadingMore: { type: Boolean, default: false },
+  toolsEnabled: { type: Boolean, default: true },
 })
 
-defineEmits(['sendMessage', 'deleteMessage', 'toggleSettings', 'loadMoreMessages'])
+defineEmits(['sendMessage', 'deleteMessage', 'toggleSettings', 'loadMoreMessages', 'toggleTools'])
 
 const scrollContainer = ref(null)
 const inputRef = ref(null)
@@ -294,18 +303,6 @@ defineExpose({ scrollToBottom })
   flex-shrink: 0;
   background: var(--avatar-gradient);
   color: white;
-}
-
-.streaming-thinking {
-  font-size: 13px;
-  color: var(--text-secondary);
-  line-height: 1.6;
-  white-space: pre-wrap;
-  padding: 12px;
-  background: var(--bg-thinking);
-  border-radius: 8px;
-  border: 1px solid var(--border-light);
-  margin-bottom: 8px;
 }
 
 .streaming-content {

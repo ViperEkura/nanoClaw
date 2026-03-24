@@ -64,11 +64,11 @@ export const messageApi = {
     return request(`/conversations/${convId}/messages?${params}`)
   },
 
-  send(convId, content, { stream = true, onThinking, onMessage, onDone, onError } = {}) {
+  send(convId, content, { stream = true, toolsEnabled = true, onThinking, onMessage, onToolCalls, onToolResult, onDone, onError } = {}) {
     if (!stream) {
       return request(`/conversations/${convId}/messages`, {
         method: 'POST',
-        body: { content, stream: false },
+        body: { content, stream: false, tools_enabled: toolsEnabled },
       })
     }
 
@@ -79,7 +79,7 @@ export const messageApi = {
         const res = await fetch(`${BASE}/conversations/${convId}/messages`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content, stream: true }),
+          body: JSON.stringify({ content, stream: true, tools_enabled: toolsEnabled }),
           signal: controller.signal,
         })
 
@@ -110,6 +110,10 @@ export const messageApi = {
                 onThinking(data.content)
               } else if (currentEvent === 'message' && onMessage) {
                 onMessage(data.content)
+              } else if (currentEvent === 'tool_calls' && onToolCalls) {
+                onToolCalls(data.calls)
+              } else if (currentEvent === 'tool_result' && onToolResult) {
+                onToolResult(data)
               } else if (currentEvent === 'done' && onDone) {
                 onDone(data)
               } else if (currentEvent === 'error' && onError) {

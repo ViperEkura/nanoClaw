@@ -39,10 +39,16 @@ class Message(db.Model):
 
     id = db.Column(db.String(64), primary_key=True)
     conversation_id = db.Column(db.String(64), db.ForeignKey("conversations.id"), nullable=False)
-    role = db.Column(db.String(16), nullable=False)
+    role = db.Column(db.String(16), nullable=False)  # user, assistant, system, tool
     content = db.Column(db.Text, default="")
     token_count = db.Column(db.Integer, default=0)
     thinking_content = db.Column(db.Text, default="")
+    
+    # Tool call support
+    tool_calls = db.Column(db.Text)  # JSON string: tool call requests (assistant messages)
+    tool_call_id = db.Column(db.String(64))  # Tool call ID (tool messages)
+    name = db.Column(db.String(64))  # Tool name (tool messages)
+    
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
