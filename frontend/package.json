@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "highlight.js": "^11.10.0",
+    "katex": "^0.16.40",
     "marked": "^15.0.0",
     "vue": "^3.4.0"
   },

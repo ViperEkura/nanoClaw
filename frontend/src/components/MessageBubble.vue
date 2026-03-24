@@ -38,8 +38,7 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import { marked } from 'marked'
-import hljs from 'highlight.js'
+import { renderMarkdown } from '../utils/markdown'
 
 const props = defineProps({
   role: { type: String, required: true },
@@ -54,20 +53,9 @@ defineEmits(['delete'])
 
 const showThinking = ref(false)
 
-marked.setOptions({
-  highlight(code, lang) {
-    if (lang && hljs.getLanguage(lang)) {
-      return hljs.highlight(code, { language: lang }).value
-    }
-    return hljs.highlightAuto(code).value
-  },
-  breaks: true,
-  gfm: true,
-})
-
 const renderedContent = computed(() => {
   if (!props.content) return ''
-  return marked.parse(props.content)
+  return renderMarkdown(props.content)
 })
 
 function formatTime(iso) {
@@ -286,5 +274,13 @@ function copyContent() {
 .btn-delete-msg:hover {
   color: #ef4444;
   background: rgba(239, 68, 68, 0.08);
+}
+
+.message-content :deep(.math-block) {
+  display: block;
+  text-align: center;
+  padding: 12px 0;
+  margin: 8px 0;
+  overflow-x: auto;
 }
 </style>

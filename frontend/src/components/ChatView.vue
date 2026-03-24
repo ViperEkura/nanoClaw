@@ -68,19 +68,7 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import MessageBubble from './MessageBubble.vue'
 import MessageInput from './MessageInput.vue'
-import { marked } from 'marked'
-import hljs from 'highlight.js'
-
-marked.setOptions({
-  highlight(code, lang) {
-    if (lang && hljs.getLanguage(lang)) {
-      return hljs.highlight(code, { language: lang }).value
-    }
-    return hljs.highlightAuto(code).value
-  },
-  breaks: true,
-  gfm: true,
-})
+import { renderMarkdown } from '../utils/markdown'
 
 const props = defineProps({
   conversation: { type: Object, default: null },
@@ -99,7 +87,7 @@ const inputRef = ref(null)
 
 const renderedStreamContent = computed(() => {
   if (!props.streamingContent) return ''
-  return marked.parse(props.streamingContent)
+  return renderMarkdown(props.streamingContent)
 })
 
 function scrollToBottom(smooth = true) {
@@ -374,5 +362,14 @@ defineExpose({ scrollToBottom })
 
 .streaming-content :deep(.placeholder) {
   color: #94a3b8;
+}
+
+.streaming-content :deep(.math-block),
+.message-content :deep(.math-block) {
+  display: block;
+  text-align: center;
+  padding: 12px 0;
+  margin: 8px 0;
+  overflow-x: auto;
 }
 </style>
