@@ -9,7 +9,7 @@ def get_or_create_default_user():
     """Get or create default user"""
     user = User.query.filter_by(username="default").first()
     if not user:
-        user = User(username="default", password="")
+        user = User(username="default", password=None)
         db.session.add(user)
         db.session.commit()
     return user
@@ -38,13 +38,6 @@ def to_dict(inst, **extra):
     for k in ("created_at", "updated_at"):
         if k in d and hasattr(d[k], "strftime"):
             d[k] = d[k].strftime("%Y-%m-%dT%H:%M:%SZ")
-    
-    # Parse tool_calls JSON if present
-    if "tool_calls" in d and d["tool_calls"]:
-        try:
-            d["tool_calls"] = json.loads(d["tool_calls"])
-        except:
-            pass
     
     # Filter out None values for cleaner API response
     d = {k: v for k, v in d.items() if v is not None}

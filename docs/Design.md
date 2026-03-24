@@ -526,15 +526,24 @@ GET /api/stats/tokens?period=daily
 ### ER 关系
 
 ```
-User  1 ── * Conversation  1 ── * Message
+User  1 ── * Conversation  1 ── * Message  1 ── * ToolCall
 ```
+
+### User（用户）
+
+| 字段         | 类型            | 说明                    |
+| ------------ | --------------- | ----------------------- |
+| `id`         | bigint          | 用户 ID（自增）           |
+| `username`   | string(50)      | 用户名（唯一）            |
+| `password`   | string(255)     | 密码（可为空，第三方登录）  |
+| `phone`      | string(20)      | 手机号                  |
 
 ### Conversation（会话）
 
 | 字段                 | 类型            | 说明                    |
 | ------------------ | ------------- | --------------------- |
 | `id`               | string (UUID) | 会话 ID                 |
-| `user_id`          | string        | 所属用户 ID               |
+| `user_id`          | bigint        | 所属用户 ID               |
 | `title`            | string        | 会话标题                  |
 | `model`            | string        | 使用的模型，默认 `glm-5`      |
 | `system_prompt`    | string        | 系统提示词                 |
@@ -550,12 +559,40 @@ User  1 ── * Conversation  1 ── * Message
 | ------------------ | ------------- | ------------------------------- |
 | `id`               | string (UUID) | 消息 ID                           |
 | `conversation_id`  | string        | 所属会话 ID                         |
-| `role`             | enum          | `user` / `assistant` / `system`  |
-| `content`          | string        | 消息内容                            |
+| `role`             | enum          | `user` / `assistant` / `system` / `tool` |
+| `content`          | LONGTEXT      | 消息内容                            |
 | `token_count`      | integer       | token 消耗数                       |
-| `thinking_content` | string        | 思维链内容（启用时）                      |
-| `tool_calls`       | array (JSON)  | 工具调用信息（含结果），仅 assistant 消息      |
+| `thinking_content` | LONGTEXT      | 思维链内容（启用时）                      |
 | `created_at`       | datetime      | 创建时间                            |
+
+**说明**：工具调用信息存储在关联的 `ToolCall` 表中，通过 `message.tool_calls` 关系获取。
+
+### ToolCall（工具调用）
+
+| 字段              | 类型            | 说明                        |
+| ----------------- | --------------- | --------------------------- |
+| `id`              | bigint          | 调用记录 ID（自增）            |
+| `message_id`      | string(64)      | 关联的消息 ID                 |
+| `call_id`         | string(64)      | 工具调用 ID                   |
+| `call_index`      | integer         | 调用顺序（从 0 开始）           |
+| `tool_name`       | string(64)      | 工具名称                      |
+| `arguments`       | LONGTEXT        | 调用参数 JSON                 |
+| `result`          | LONGTEXT        | 执行结果 JSON                 |
+| `execution_time`  | float           | 执行时间（秒）                  |
+| `created_at`      | datetime        | 创建时间                      |
+
+### TokenUsage（Token 使用统计）
+
+| 字段                | 类型       | 说明                       |
+| ------------------- | ---------- | -------------------------- |
+| `id`                | bigint     | 记录 ID（自增）             |
+| `user_id`           | bigint     | 用户 ID                    |
+| `date`              | date       | 统计日期                   |
+| `model`             | string(64) | 模型名称                   |
+| `prompt_tokens`     | integer    | 输入 token 数              |
+| `completion_tokens` | integer    | 输出 token 数              |
+| `total_tokens`      | integer    | 总 token 数                |
+| `created_at`        | datetime   | 创建时间                   |
 
 #### 消息类型说明
 
@@ -563,8 +600,10 @@ User  1 ── * Conversation  1 ── * Message
 ```json
 {
   "id": "msg_001",
+  "conversation_id": "conv_abc123",
   "role": "user",
   "content": "北京今天天气怎么样？",
+  "token_count": 0,
   "created_at": "2026-03-24T10:00:00Z"
 }
 ```
@@ -573,22 +612,23 @@ User  1 ── * Conversation  1 ── * Message
 ```json
 {
   "id": "msg_002",
+  "conversation_id": "conv_abc123",
   "role": "assistant",
   "content": "北京今天天气晴朗...",
   "token_count": 50,
   "thinking_content": "用户想了解天气...",
-  "tool_calls": null,
   "created_at": "2026-03-24T10:00:01Z"
 }
 ```
 
 **3. 助手消息 - 含工具调用 (role=assistant, with tool_calls)**
 
-工具调用结果直接合并到 `tool_calls` 数组中，每个调用包含 `result` 字段：
+工具调用记录存储在独立的 `tool_calls` 表中，API 响应时会自动关联并返回：
 
 ```json
 {
   "id": "msg_003",
+  "conversation_id": "conv_abc123",
   "role": "assistant",
   "content": "北京今天天气晴朗，温度25°C，湿度60%",
   "token_count": 80,
@@ -608,6 +648,18 @@ User  1 ── * Conversation  1 ── * Message
 }
 ```
 
+**4. 工具消息 (role=tool)**
+
+用于 API 调用时传递工具执行结果（不存储在数据库）：
+```json
+{
+  "role": "tool",
+  "tool_call_id": "call_abc123",
+  "name": "get_weather",
+  "content": "{\"temperature\": 25, \"humidity\": 60}"
+}
+```
+
 #### 工具调用流程示例
 
 ```
@@ -617,14 +669,16 @@ User  1 ── * Conversation  1 ── * Message
     ↓
 [AI 调用工具 get_weather]
     ↓
-[msg_002] role=assistant, tool_calls=[{get_weather, args:{"city":"北京"}, result="{...}"}]
-          content="北京今天天气晴朗，温度25°C..."
+[msg_002] role=assistant, content="北京今天天气晴朗，温度25°C..."
+          tool_calls=[{get_weather, args:{"city":"北京"}, result="{...}"}]
 ```
 
 **说明：**
-- 工具调用结果直接存储在 `tool_calls[].result` 字段中
-- 不再创建独立的 `role=tool` 消息
-- 前端可通过 `tool_calls` 数组展示完整的工具调用过程
+- 工具调用记录存储在独立的 `tool_calls` 表中，与 `messages` 表通过 `message_id` 关联
+- API 响应时自动查询并组装 `tool_calls` 数组
+- 工具调用包含完整的调用参数和执行结果
+- `call_index` 字段记录同一消息中多次工具调用的顺序
+- `execution_time` 字段记录工具执行耗时
 
 ---
 

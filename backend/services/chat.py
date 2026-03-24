@@ -3,7 +3,7 @@ import json
 import uuid
 from flask import current_app, Response
 from backend import db
-from backend.models import Conversation, Message
+from backend.models import Conversation, Message, ToolCall
 from backend.tools import registry, ToolExecutor
 from backend.utils.helpers import (
     get_or_create_default_user,
@@ -60,8 +60,7 @@ class ChatService:
                 prompt_tokens = usage.get("prompt_tokens", 0)
                 completion_tokens = usage.get("completion_tokens", 0)
                 
-                merged_tool_calls = self._merge_tool_results(all_tool_calls, all_tool_results)
-                
+                # Create message
                 msg = Message(
                     id=str(uuid.uuid4()),
                     conversation_id=conv.id,
@@ -69,16 +68,18 @@ class ChatService:
                     content=message.get("content", ""),
                     token_count=completion_tokens,
                     thinking_content=message.get("reasoning_content", ""),
-                    tool_calls=json.dumps(merged_tool_calls) if merged_tool_calls else None
                 )
                 db.session.add(msg)
+                
+                # Create tool call records
+                self._save_tool_calls(msg.id, all_tool_calls, all_tool_results)
                 db.session.commit()
                 
                 user = get_or_create_default_user()
                 record_token_usage(user.id, conv.model, prompt_tokens, completion_tokens)
                 
                 return ok({
-                    "message": to_dict(msg, thinking_content=msg.thinking_content or None),
+                    "message": self._message_to_dict(msg),
                     "usage": {
                         "prompt_tokens": prompt_tokens,
                         "completion_tokens": completion_tokens,
@@ -194,8 +195,6 @@ class ChatService:
                     continue
                 
                 # No tool calls - finish
-                merged_tool_calls = self._merge_tool_results(all_tool_calls, all_tool_results)
-                
                 with app.app_context():
                     msg = Message(
                         id=msg_id,
@@ -204,9 +203,11 @@ class ChatService:
                         content=full_content,
                         token_count=token_count,
                         thinking_content=full_thinking,
-                        tool_calls=json.dumps(merged_tool_calls) if merged_tool_calls else None
                     )
                     db.session.add(msg)
+                    
+                    # Create tool call records
+                    self._save_tool_calls(msg_id, all_tool_calls, all_tool_results)
                     db.session.commit()
                     
                     user = get_or_create_default_user()
@@ -222,6 +223,53 @@ class ChatService:
             mimetype="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
         )
+    
+    def _save_tool_calls(self, message_id: str, tool_calls: list, tool_results: list) -> None:
+        """Save tool calls to database"""
+        for i, tc in enumerate(tool_calls):
+            result_content = tool_results[i]["content"] if i < len(tool_results) else None
+            
+            # Parse result to extract execution_time if present
+            execution_time = 0
+            if result_content:
+                try:
+                    result_data = json.loads(result_content)
+                    execution_time = result_data.get("execution_time", 0)
+                except:
+                    pass
+            
+            tool_call = ToolCall(
+                message_id=message_id,
+                call_id=tc.get("id", ""),
+                call_index=i,
+                tool_name=tc["function"]["name"],
+                arguments=tc["function"]["arguments"],
+                result=result_content,
+                execution_time=execution_time,
+            )
+            db.session.add(tool_call)
+    
+    def _message_to_dict(self, msg: Message) -> dict:
+        """Convert message to dict with tool calls"""
+        result = to_dict(msg, thinking_content=msg.thinking_content or None)
+        
+        # Add tool calls if any
+        tool_calls = msg.tool_calls.all() if msg.tool_calls else []
+        if tool_calls:
+            result["tool_calls"] = [
+                {
+                    "id": tc.call_id,
+                    "type": "function",
+                    "function": {
+                        "name": tc.tool_name,
+                        "arguments": tc.arguments,
+                    },
+                    "result": tc.result,
+                }
+                for tc in tool_calls
+            ]
+        
+        return result
     
     def _process_tool_calls_delta(self, delta: dict, tool_calls_list: list) -> list:
         """Process tool calls from streaming delta"""
@@ -242,13 +290,3 @@ class ChatService:
                 if tc["function"].get("arguments"):
                     tool_calls_list[idx]["function"]["arguments"] += tc["function"]["arguments"]
         return tool_calls_list
-    
-    def _merge_tool_results(self, tool_calls: list, tool_results: list) -> list:
-        """Merge tool results into tool calls"""
-        merged = []
-        for i, tc in enumerate(tool_calls):
-            merged_tc = dict(tc)
-            if i < len(tool_results):
-                merged_tc["result"] = tool_results[i]["content"]
-            merged.append(merged_tc)
-        return merged
