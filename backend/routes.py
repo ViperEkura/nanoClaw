@@ -3,7 +3,7 @@ import json
 import os
 import requests
 from datetime import datetime
-from flask import request, jsonify, Response, Blueprint
+from flask import request, jsonify, Response, Blueprint, current_app
 from . import db
 from .models import Conversation, Message, User
 from . import load_config
@@ -217,6 +217,9 @@ def _sync_response(conv):
 
 
 def _stream_response(conv):
+    conv_id = conv.id
+    app = current_app._get_current_object()
+
     def generate():
         full_content = ""
         full_thinking = ""
@@ -224,8 +227,11 @@ def _stream_response(conv):
         msg_id = str(uuid.uuid4())
 
         try:
-            resp = _call_glm(conv, stream=True)
-            resp.raise_for_status()
+            with app.app_context():
+                active_conv = db.session.get(Conversation, conv_id)
+                resp = _call_glm(active_conv, stream=True)
+                resp.raise_for_status()
+
             for line in resp.iter_lines():
                 if not line:
                     continue
@@ -255,12 +261,15 @@ def _stream_response(conv):
             yield f"event: error\ndata: {json.dumps({'content': str(e)}, ensure_ascii=False)}\n\n"
             return
 
-        msg = Message(
-            id=msg_id, conversation_id=conv.id, role="assistant",
-            content=full_content, token_count=token_count, thinking_content=full_thinking,
-        )
-        db.session.add(msg)
-        db.session.commit()
+        # 流式结束后最后写入数据库
+        with app.app_context():
+            msg = Message(
+                id=msg_id, conversation_id=conv_id, role="assistant",
+                content=full_content, token_count=token_count, thinking_content=full_thinking,
+            )
+            db.session.add(msg)
+            db.session.commit()
+
         yield f"event: done\ndata: {json.dumps({'message_id': msg_id, 'token_count': token_count})}\n\n"
 
     return Response(generate(), mimetype="text/event-stream",
