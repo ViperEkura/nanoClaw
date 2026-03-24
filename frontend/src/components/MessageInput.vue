@@ -24,7 +24,7 @@
         </button>
       </div>
     </div>
-    <div class="input-hint">基于 GLM 大语言模型，回复内容仅供参考</div>
+    <div class="input-hint">AI 助手回复内容仅供参考</div>
   </div>
 </template>
 

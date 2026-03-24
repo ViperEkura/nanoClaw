@@ -22,9 +22,6 @@
             <label>模型</label>
             <select v-model="form.model">
               <option value="glm-5">GLM-5</option>
-              <option value="glm-4-plus">GLM-4 Plus</option>
-              <option value="glm-4-flash">GLM-4 Flash</option>
-              <option value="glm-4-long">GLM-4 Long</option>
             </select>
           </div>
 
@@ -118,7 +115,7 @@ const form = reactive({
 watch(() => props.visible, (val) => {
   if (val && props.conversation) {
     form.title = props.conversation.title || ''
-    form.model = props.conversation.model || 'glm-5'
+    form.model = props.conversation.model || 'default'
     form.system_prompt = props.conversation.system_prompt || ''
     form.temperature = props.conversation.temperature ?? 1.0
     form.max_tokens = props.conversation.max_tokens ?? 65536

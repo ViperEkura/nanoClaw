@@ -1,8 +1,8 @@
 <template>
   <div class="chat-view">
     <div v-if="!conversation" class="welcome">
-      <div class="welcome-icon">G</div>
-      <h1>GLM Chat</h1>
+      <div class="welcome-icon"><svg viewBox="0 0 64 64" width="36" height="36"><rect width="64" height="64" rx="14" fill="url(#favBg)"/><defs><linearGradient id="favBg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#2563eb"/><stop offset="100%" stop-color="#60a5fa"/></linearGradient></defs><text x="32" y="40" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="18" font-weight="800" fill="#fff" letter-spacing="-0.5">claw</text></svg></div>
+      <h1>Chat</h1>
       <p>选择一个对话开始，或创建新对话</p>
     </div>
 
@@ -44,7 +44,7 @@
           />
 
           <div v-if="streaming" class="message-bubble assistant">
-            <div class="avatar">G</div>
+            <div class="avatar">claw</div>
             <div class="message-body">
               <div v-if="streamingThinking" class="thinking-content streaming-thinking">
                 {{ streamingThinking }}
@@ -157,14 +157,12 @@ defineExpose({ scrollToBottom })
   width: 64px;
   height: 64px;
   border-radius: 16px;
-  background: linear-gradient(135deg, #2563eb, #3b82f6);
-  color: white;
+  background: none;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 28px;
-  font-weight: 700;
   margin-bottom: 20px;
+  overflow: hidden;
 }
 
 .welcome h1 {

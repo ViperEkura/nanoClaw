@@ -1,6 +1,7 @@
 <template>
   <div class="message-bubble" :class="[role]">
-    <div class="avatar">{{ role === 'user' ? 'U' : 'G' }}</div>
+    <div v-if="role === 'user'" class="avatar">user</div>
+    <div v-else class="avatar">claw</div>
     <div class="message-body">
       <div v-if="thinkingContent" class="thinking-block">
         <button class="thinking-toggle" @click="showThinking = !showThinking">
@@ -97,19 +98,25 @@ function copyContent() {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
   flex-shrink: 0;
 }
 
 .user .avatar {
   background: linear-gradient(135deg, #2563eb, #3b82f6);
   color: white;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
 }
 
 .assistant .avatar {
   background: linear-gradient(135deg, #3b82f6, #60a5fa);
   color: white;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
 }
 
 .message-body {
