@@ -82,6 +82,19 @@
               <span class="toggle-thumb"></span>
             </button>
           </div>
+
+          <div class="settings-divider"></div>
+
+          <div class="form-group toggle-group">
+            <label>夜间模式</label>
+            <button
+              class="toggle"
+              :class="{ on: isDark }"
+              @click="toggleTheme"
+            >
+              <span class="toggle-thumb"></span>
+            </button>
+          </div>
         </div>
 
         <div class="settings-footer">
@@ -96,6 +109,7 @@
 <script setup>
 import { reactive, ref, watch, onMounted } from 'vue'
 import { modelApi } from '../api'
+import { useTheme } from '../composables/useTheme'
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
@@ -104,6 +118,7 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'save'])
 
+const { isDark, toggleTheme } = useTheme()
 const models = ref([])
 
 const form = reactive({
@@ -147,20 +162,22 @@ function save() {
 .settings-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.3);
+  background: var(--overlay-bg);
   z-index: 100;
   display: flex;
   justify-content: flex-end;
+  transition: background 0.2s;
 }
 
 .settings-panel {
   width: 380px;
   height: 100vh;
-  background: #ffffff;
-  border-left: 1px solid rgba(0, 0, 0, 0.06);
+  background: var(--bg-primary);
+  border-left: 1px solid var(--border-light);
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  transition: background 0.2s, border-color 0.2s;
 }
 
 .settings-header {
@@ -168,19 +185,19 @@ function save() {
   align-items: center;
   justify-content: space-between;
   padding: 20px 24px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  border-bottom: 1px solid var(--border-light);
 }
 
 .settings-header h3 {
   margin: 0;
   font-size: 16px;
-  color: #1e293b;
+  color: var(--text-primary);
 }
 
 .btn-close {
   background: none;
   border: none;
-  color: #94a3b8;
+  color: var(--text-tertiary);
   cursor: pointer;
   padding: 4px;
   border-radius: 4px;
@@ -188,8 +205,8 @@ function save() {
 }
 
 .btn-close:hover {
-  color: #1e293b;
-  background: rgba(37, 99, 235, 0.08);
+  color: var(--text-primary);
+  background: var(--bg-hover);
 }
 
 .settings-body {
@@ -204,14 +221,14 @@ function save() {
 .form-group label {
   display: block;
   font-size: 13px;
-  color: #64748b;
+  color: var(--text-secondary);
   margin-bottom: 8px;
   font-weight: 500;
 }
 
 .value-display {
   float: right;
-  color: #2563eb;
+  color: var(--accent-primary);
   font-weight: 600;
 }
 
@@ -220,21 +237,21 @@ function save() {
 .form-group select {
   width: 100%;
   padding: 10px 12px;
-  background: #f8fafc;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
   border-radius: 8px;
-  color: #1e293b;
+  color: var(--text-primary);
   font-size: 14px;
   font-family: inherit;
   outline: none;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, background 0.2s;
   box-sizing: border-box;
 }
 
 .form-group input[type="text"]:focus,
 .form-group textarea:focus,
 .form-group select:focus {
-  border-color: rgba(37, 99, 235, 0.5);
+  border-color: var(--accent-primary);
 }
 
 .form-group textarea {
@@ -247,7 +264,7 @@ function save() {
 }
 
 .form-group select option {
-  background: #ffffff;
+  background: var(--bg-primary);
 }
 
 .form-row {
@@ -264,7 +281,7 @@ function save() {
   height: 4px;
   -webkit-appearance: none;
   appearance: none;
-  background: #e2e8f0;
+  background: var(--bg-code);
   border-radius: 2px;
   outline: none;
 }
@@ -275,16 +292,16 @@ function save() {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: #2563eb;
+  background: var(--accent-primary);
   cursor: pointer;
-  border: 2px solid #ffffff;
+  border: 2px solid var(--bg-primary);
 }
 
 .range-labels {
   display: flex;
   justify-content: space-between;
   font-size: 11px;
-  color: #94a3b8;
+  color: var(--text-tertiary);
   margin-top: 4px;
 }
 
@@ -303,7 +320,7 @@ function save() {
   height: 24px;
   border-radius: 12px;
   border: none;
-  background: #e2e8f0;
+  background: var(--bg-code);
   cursor: pointer;
   position: relative;
   transition: background 0.2s;
@@ -311,7 +328,7 @@ function save() {
 }
 
 .toggle.on {
-  background: #2563eb;
+  background: var(--accent-primary);
 }
 
 .toggle-thumb {
@@ -330,9 +347,15 @@ function save() {
   transform: translateX(20px);
 }
 
+.settings-divider {
+  height: 1px;
+  background: var(--border-light);
+  margin: 24px 0;
+}
+
 .settings-footer {
   padding: 16px 24px;
-  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  border-top: 1px solid var(--border-light);
   display: flex;
   justify-content: flex-end;
   gap: 8px;
@@ -341,24 +364,24 @@ function save() {
 .btn-cancel {
   padding: 8px 20px;
   border-radius: 8px;
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  border: 1px solid var(--border-medium);
   background: none;
-  color: #64748b;
+  color: var(--text-secondary);
   font-size: 14px;
   cursor: pointer;
   transition: all 0.15s;
 }
 
 .btn-cancel:hover {
-  background: rgba(37, 99, 235, 0.06);
-  color: #1e293b;
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .btn-save {
   padding: 8px 20px;
   border-radius: 8px;
   border: none;
-  background: #2563eb;
+  background: var(--accent-primary);
   color: white;
   font-size: 14px;
   cursor: pointer;
@@ -366,7 +389,7 @@ function save() {
 }
 
 .btn-save:hover {
-  background: #3b82f6;
+  background: var(--accent-primary-hover);
 }
 
 .slide-enter-active,

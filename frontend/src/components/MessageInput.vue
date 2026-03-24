@@ -73,29 +73,30 @@ defineExpose({ focus })
 <style scoped>
 .message-input {
   padding: 16px 24px 12px;
-  background: #ffffff;
-  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  background: var(--bg-primary);
+  border-top: 1px solid var(--border-light);
+  transition: background 0.2s, border-color 0.2s;
 }
 
 .input-wrapper {
   display: flex;
   align-items: center;
-  background: #f8fafc;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
   border-radius: 12px;
   padding: 8px 12px;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, background 0.2s;
 }
 
 .input-wrapper:focus-within {
-  border-color: rgba(37, 99, 235, 0.5);
+  border-color: var(--accent-primary);
 }
 
 textarea {
   flex: 1;
   background: none;
   border: none;
-  color: #1e293b;
+  color: var(--text-primary);
   font-size: 15px;
   line-height: 1.5;
   resize: none;
@@ -105,7 +106,7 @@ textarea {
 }
 
 textarea::placeholder {
-  color: #94a3b8;
+  color: var(--text-tertiary);
 }
 
 textarea:disabled {
@@ -124,8 +125,8 @@ textarea:disabled {
   height: 36px;
   border-radius: 8px;
   border: none;
-  background: #e2e8f0;
-  color: #94a3b8;
+  background: var(--bg-code);
+  color: var(--text-tertiary);
   cursor: not-allowed;
   display: flex;
   align-items: center;
@@ -134,19 +135,19 @@ textarea:disabled {
 }
 
 .btn-send.active {
-  background: #2563eb;
+  background: var(--accent-primary);
   color: white;
   cursor: pointer;
 }
 
 .btn-send.active:hover {
-  background: #3b82f6;
+  background: var(--accent-primary-hover);
 }
 
 .input-hint {
   text-align: center;
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--text-tertiary);
   margin-top: 8px;
 }
 </style>

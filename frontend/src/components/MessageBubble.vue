@@ -100,7 +100,7 @@ function copyContent() {
 }
 
 .assistant .avatar {
-  background: linear-gradient(135deg, #3b82f6, #60a5fa);
+  background: var(--avatar-gradient);
   color: white;
   font-size: 8px;
   font-weight: 700;
@@ -115,16 +115,16 @@ function copyContent() {
 .thinking-block {
   margin-bottom: 8px;
   border-radius: 8px;
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  border: 1px solid var(--border-light);
   overflow: hidden;
 }
 
 .thinking-toggle {
   width: 100%;
   padding: 8px 12px;
-  background: #f8fafc;
+  background: var(--bg-secondary);
   border: none;
-  color: #64748b;
+  color: var(--text-secondary);
   font-size: 13px;
   cursor: pointer;
   display: flex;
@@ -134,7 +134,7 @@ function copyContent() {
 }
 
 .thinking-toggle:hover {
-  background: #f1f5f9;
+  background: var(--bg-code);
 }
 
 .thinking-toggle .arrow {
@@ -149,10 +149,10 @@ function copyContent() {
 .thinking-content {
   padding: 12px;
   font-size: 13px;
-  color: #64748b;
+  color: var(--text-secondary);
   line-height: 1.6;
-  border-top: 1px solid rgba(0, 0, 0, 0.06);
-  background: #f8fafc;
+  border-top: 1px solid var(--border-light);
+  background: var(--bg-secondary);
   white-space: pre-wrap;
   max-height: 300px;
   overflow-y: auto;
@@ -161,7 +161,7 @@ function copyContent() {
 .message-content {
   font-size: 15px;
   line-height: 1.7;
-  color: #1e293b;
+  color: var(--text-primary);
   word-break: break-word;
 }
 
@@ -174,8 +174,8 @@ function copyContent() {
 }
 
 .message-content :deep(pre) {
-  background: #f1f5f9;
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  background: var(--bg-code);
+  border: 1px solid var(--border-light);
   border-radius: 8px;
   padding: 16px;
   overflow-x: auto;
@@ -190,8 +190,8 @@ function copyContent() {
 }
 
 .message-content :deep(code) {
-  background: rgba(37, 99, 235, 0.08);
-  color: #2563eb;
+  background: var(--accent-primary-light);
+  color: var(--accent-primary);
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 13px;
@@ -213,7 +213,7 @@ function copyContent() {
 .message-content :deep(blockquote) {
   border-left: 3px solid rgba(59, 130, 246, 0.4);
   padding-left: 12px;
-  color: #64748b;
+  color: var(--text-secondary);
   margin: 8px 0;
 }
 
@@ -225,13 +225,13 @@ function copyContent() {
 
 .message-content :deep(th),
 .message-content :deep(td) {
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--border-medium);
   padding: 8px 12px;
   text-align: left;
 }
 
 .message-content :deep(th) {
-  background: #f1f5f9;
+  background: var(--bg-code);
 }
 
 .message-footer {
@@ -250,14 +250,14 @@ function copyContent() {
 .token-count,
 .message-time {
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--text-tertiary);
 }
 
 .btn-copy,
 .btn-delete-msg {
   background: none;
   border: none;
-  color: #94a3b8;
+  color: var(--text-tertiary);
   cursor: pointer;
   padding: 4px;
   border-radius: 4px;
@@ -267,13 +267,13 @@ function copyContent() {
 }
 
 .btn-copy:hover {
-  color: #2563eb;
-  background: rgba(37, 99, 235, 0.08);
+  color: var(--accent-primary);
+  background: var(--accent-primary-light);
 }
 
 .btn-delete-msg:hover {
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.08);
+  color: var(--danger-color);
+  background: var(--danger-bg);
 }
 
 .message-content :deep(.math-block) {
