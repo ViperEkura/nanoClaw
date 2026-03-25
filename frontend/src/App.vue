@@ -19,6 +19,7 @@
       :streaming-content="streamContent"
       :streaming-thinking="streamThinking"
       :streaming-tool-calls="streamToolCalls"
+      :streaming-process-steps="streamProcessSteps"
       :has-more-messages="hasMoreMessages"
       :loading-more="loadingMessages"
       :tools-enabled="toolsEnabled"
@@ -65,6 +66,13 @@ const streaming = ref(false)
 const streamContent = ref('')
 const streamThinking = ref('')
 const streamToolCalls = ref([])
+const streamProcessSteps = ref([])
+
+// 保存每个对话的流式状态
+const streamStates = new Map()
+
+// 保存当前流式请求引用
+let currentStreamPromise = null
 
 // -- UI state --
 const showSettings = ref(false)
@@ -111,12 +119,38 @@ async function createConversation() {
 
 // -- Select conversation --
 async function selectConversation(id) {
+  // 保存当前对话的流式状态（如果有）
+  if (currentConvId.value && streaming.value) {
+    streamStates.set(currentConvId.value, {
+      streaming: true,
+      streamContent: streamContent.value,
+      streamThinking: streamThinking.value,
+      streamToolCalls: [...streamToolCalls.value],
+      streamProcessSteps: [...streamProcessSteps.value],
+    })
+  }
+
   currentConvId.value = id
   messages.value = []
   nextMsgCursor.value = null
   hasMoreMessages.value = false
-  streamContent.value = ''
-  streamThinking.value = ''
+
+  // 恢复新对话的流式状态
+  const savedState = streamStates.get(id)
+  if (savedState && savedState.streaming) {
+    streaming.value = true
+    streamContent.value = savedState.streamContent
+    streamThinking.value = savedState.streamThinking
+    streamToolCalls.value = savedState.streamToolCalls
+    streamProcessSteps.value = savedState.streamProcessSteps
+  } else {
+    streaming.value = false
+    streamContent.value = ''
+    streamThinking.value = ''
+    streamToolCalls.value = []
+    streamProcessSteps.value = []
+  }
+
   await loadMessages(true)
 }
 
@@ -149,10 +183,12 @@ function loadMoreMessages() {
 async function sendMessage(content) {
   if (!currentConvId.value || streaming.value) return
 
+  const convId = currentConvId.value  // 保存当前对话ID
+
   // Add user message optimistically
   const userMsg = {
     id: 'temp_' + Date.now(),
-    conversation_id: currentConvId.value,
+    conversation_id: convId,
     role: 'user',
     content,
     token_count: 0,
@@ -165,71 +201,138 @@ async function sendMessage(content) {
   streamContent.value = ''
   streamThinking.value = ''
   streamToolCalls.value = []
+  streamProcessSteps.value = []
 
-  await messageApi.send(currentConvId.value, content, {
+  currentStreamPromise = messageApi.send(convId, content, {
     stream: true,
     toolsEnabled: toolsEnabled.value,
+    onThinkingStart() {
+      if (currentConvId.value === convId) {
+        streamThinking.value = ''
+      } else {
+        const saved = streamStates.get(convId) || {}
+        streamStates.set(convId, { ...saved, streamThinking: '' })
+      }
+    },
     onThinking(text) {
-      streamThinking.value += text
+      if (currentConvId.value === convId) {
+        streamThinking.value += text
+      } else {
+        const saved = streamStates.get(convId) || { streamThinking: '' }
+        streamStates.set(convId, { ...saved, streamThinking: (saved.streamThinking || '') + text })
+      }
     },
     onMessage(text) {
-      streamContent.value += text
+      if (currentConvId.value === convId) {
+        streamContent.value += text
+      } else {
+        const saved = streamStates.get(convId) || { streamContent: '' }
+        streamStates.set(convId, { ...saved, streamContent: (saved.streamContent || '') + text })
+      }
     },
     onToolCalls(calls) {
       console.log('🔧 Tool calls received:', calls)
-      streamToolCalls.value = calls
+      if (currentConvId.value === convId) {
+        streamToolCalls.value.push(...calls.map(c => ({ ...c, result: null })))
+      } else {
+        const saved = streamStates.get(convId) || { streamToolCalls: [] }
+        const newCalls = [...(saved.streamToolCalls || []), ...calls.map(c => ({ ...c, result: null }))]
+        streamStates.set(convId, { ...saved, streamToolCalls: newCalls })
+      }
     },
     onToolResult(result) {
       console.log('✅ Tool result received:', result)
-      // 更新工具调用结果
-      const call = streamToolCalls.value.find(c => c.function?.name === result.name)
-      if (call) {
-        call.result = result.content
+      if (currentConvId.value === convId) {
+        const call = streamToolCalls.value.find(c => c.id === result.id)
+        if (call) call.result = result.content
       } else {
-        // 如果找不到，添加到第一个调用（兜底处理）
-        if (streamToolCalls.value.length > 0) {
-          streamToolCalls.value[0].result = result.content
+        const saved = streamStates.get(convId) || { streamToolCalls: [] }
+        const call = saved.streamToolCalls?.find(c => c.id === result.id)
+        if (call) call.result = result.content
+        streamStates.set(convId, { ...saved })
+      }
+    },
+    onProcessStep(step) {
+      const idx = step.index
+      if (currentConvId.value === convId) {
+        // 创建新数组确保响应式更新
+        const newSteps = [...streamProcessSteps.value]
+        while (newSteps.length <= idx) {
+          newSteps.push(null)
         }
+        newSteps[idx] = step
+        streamProcessSteps.value = newSteps
+      } else {
+        const saved = streamStates.get(convId) || { streamProcessSteps: [] }
+        const steps = [...(saved.streamProcessSteps || [])]
+        while (steps.length <= idx) steps.push(null)
+        steps[idx] = step
+        streamStates.set(convId, { ...saved, streamProcessSteps: steps })
       }
     },
     async onDone(data) {
-      streaming.value = false
-      // Replace temp message and add assistant message from server
-      messages.value = messages.value.filter(m => m.id !== userMsg.id)
-      messages.value.push({
-        id: data.message_id,
-        conversation_id: currentConvId.value,
-        role: 'assistant',
-        content: streamContent.value,
-        token_count: data.token_count,
-        thinking_content: streamThinking.value || null,
-        tool_calls: streamToolCalls.value.length > 0 ? streamToolCalls.value : null,
-        created_at: new Date().toISOString(),
-      })
-      streamContent.value = ''
-      streamThinking.value = ''
-      // Update conversation in list (move to top)
-      const idx = conversations.value.findIndex(c => c.id === currentConvId.value)
-      if (idx > 0) {
-        const [conv] = conversations.value.splice(idx, 1)
-        conv.message_count = (conv.message_count || 0) + 2
-        conversations.value.unshift(conv)
-      } else if (idx === 0) {
-        conversations.value[0].message_count = (conversations.value[0].message_count || 0) + 2
-      }
-      // Auto title: use first message if title is empty
-      if (conversations.value[0] && !conversations.value[0].title) {
+      // 清除保存的状态
+      streamStates.delete(convId)
+
+      if (currentConvId.value === convId) {
+        streaming.value = false
+        currentStreamPromise = null
+        // Replace temp message and add assistant message from server
+        messages.value = messages.value.filter(m => m.id !== userMsg.id)
+        messages.value.push({
+          id: data.message_id,
+          conversation_id: convId,
+          role: 'assistant',
+          content: streamContent.value,
+          token_count: data.token_count,
+          thinking_content: streamThinking.value || null,
+          tool_calls: streamToolCalls.value.length > 0 ? streamToolCalls.value : null,
+          process_steps: streamProcessSteps.value.filter(Boolean),
+          created_at: new Date().toISOString(),
+        })
+        streamContent.value = ''
+        streamThinking.value = ''
+        streamToolCalls.value = []
+        streamProcessSteps.value = []
+        // Update conversation in list (move to top)
+        const idx = conversations.value.findIndex(c => c.id === convId)
+        if (idx > 0) {
+          const [conv] = conversations.value.splice(idx, 1)
+          conv.message_count = (conv.message_count || 0) + 2
+          conversations.value.unshift(conv)
+        } else if (idx === 0) {
+          conversations.value[0].message_count = (conversations.value[0].message_count || 0) + 2
+        }
+        // Auto title: use first message if title is empty
+        if (conversations.value[0] && !conversations.value[0].title) {
+          try {
+            await conversationApi.update(convId, { title: content.slice(0, 30) })
+            conversations.value[0].title = content.slice(0, 30)
+          } catch (_) {}
+        }
+      } else {
+        // 后台完成，重新加载该对话的消息
         try {
-          await conversationApi.update(currentConvId.value, { title: content.slice(0, 30) })
-          conversations.value[0].title = content.slice(0, 30)
+          const res = await messageApi.list(convId, null, 50)
+          // 更新对话列表中的消息计数
+          const idx = conversations.value.findIndex(c => c.id === convId)
+          if (idx >= 0) {
+            conversations.value[idx].message_count = res.data.items.length
+          }
         } catch (_) {}
       }
     },
     onError(msg) {
-      streaming.value = false
-      streamContent.value = ''
-      streamThinking.value = ''
-      console.error('Stream error:', msg)
+      streamStates.delete(convId)
+      if (currentConvId.value === convId) {
+        streaming.value = false
+        currentStreamPromise = null
+        streamContent.value = ''
+        streamThinking.value = ''
+        streamToolCalls.value = []
+        streamProcessSteps.value = []
+        console.error('Stream error:', msg)
+      }
     },
   })
 }

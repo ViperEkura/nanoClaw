@@ -158,6 +158,7 @@ classDiagram
         -_save_tool_calls(msg_id, calls, results) void
         -_message_to_dict(msg) dict
         -_process_tool_calls_delta(delta, list) list
+        -_emit_process_step(event, data) void
     }
 
     class GLMClient {
@@ -173,7 +174,6 @@ classDiagram
         +process_tool_calls(calls, context) list
         +build_request(messages, model, tools) dict
         +clear_history() void
-        +execute_with_retry(name, args, retries) dict
     }
 
     ChatService --> GLMClient : 使用
@@ -266,12 +266,55 @@ classDiagram
 
 | 事件 | 说明 |
 |------|------|
+| `thinking_start` | 新一轮思考开始，前端应清空之前的思考缓冲 |
 | `thinking` | 思维链增量内容（启用时） |
 | `message` | 回复内容的增量片段 |
 | `tool_calls` | 工具调用信息 |
 | `tool_result` | 工具执行结果 |
+| `process_step` | 处理步骤（按顺序：thinking/tool_call/tool_result），支持交替显示 |
 | `error` | 错误信息 |
 | `done` | 回复结束，携带 message_id 和 token_count |
+
+### 思考与工具调用交替流程
+
+```
+iteration 1:
+  thinking_start  -> 前端清空 streamThinking
+  thinking (增量)  -> 前端累加到 streamThinking
+  process_step(thinking, "思考内容A")
+  tool_calls -> 批量通知（兼容）
+  process_step(tool_call, "file_read")   -> 调用工具
+  process_step(tool_result, {...})       -> 立即返回结果
+  process_step(tool_call, "file_list")   -> 下一个工具
+  process_step(tool_result, {...})       -> 立即返回结果
+
+iteration 2:
+  thinking_start  -> 前端清空 streamThinking
+  thinking (增量)  -> 前端累加到 streamThinking
+  process_step(thinking, "思考内容B")
+  done
+```
+
+### process_step 事件格式
+
+```json
+// 思考过程
+{"index": 0, "type": "thinking", "content": "完整思考内容..."}
+
+// 工具调用
+{"index": 1, "type": "tool_call", "id": "call_abc123", "name": "web_search", "arguments": "{\"query\": \"...\"}"}
+
+// 工具返回
+{"index": 2, "type": "tool_result", "id": "call_abc123", "name": "web_search", "content": "{\"success\": true, ...}", "skipped": false}
+```
+
+字段说明：
+- `index`: 步骤序号，确保按正确顺序显示
+- `type`: 步骤类型（thinking/tool_call/tool_result）
+- `id`: 工具调用唯一标识，用于匹配工具调用和返回结果
+- `name`: 工具名称
+- `content`: 内容或结果
+- `skipped`: 工具是否被跳过（失败后跳过）
 
 ---
 

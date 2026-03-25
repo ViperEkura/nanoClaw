@@ -99,7 +99,11 @@ class ChatService:
         return err(500, "exceeded maximum tool call iterations")
     
     def stream_response(self, conv: Conversation, tools_enabled: bool = True):
-        """Stream response with tool call support"""
+        """Stream response with tool call support
+        
+        Uses 'process_step' events to send thinking and tool calls in order,
+        allowing them to be interleaved properly in the frontend.
+        """
         conv_id = conv.id
         conv_model = conv.model
         app = current_app._get_current_object()
@@ -113,6 +117,7 @@ class ChatService:
             messages = list(initial_messages)
             all_tool_calls = []
             all_tool_results = []
+            step_index = 0  # Track global step index for ordering
             
             for iteration in range(self.MAX_ITERATIONS):
                 full_content = ""
@@ -121,6 +126,9 @@ class ChatService:
                 prompt_tokens = 0
                 msg_id = str(uuid.uuid4())
                 tool_calls_list = []
+                
+                # Send thinking_start event to clear previous thinking in frontend
+                yield f"event: thinking_start\ndata: {{}}\n\n"
                 
                 try:
                     with app.app_context():
@@ -152,10 +160,11 @@ class ChatService:
                         
                         delta = chunk["choices"][0].get("delta", {})
                         
-                        # Process thinking
+                        # Process thinking - send as process_step
                         reasoning = delta.get("reasoning_content", "")
                         if reasoning:
                             full_thinking += reasoning
+                            # Still send thinking event for backward compatibility
                             yield f"event: thinking\ndata: {json.dumps({'content': reasoning}, ensure_ascii=False)}\n\n"
                         
                         # Process text
@@ -179,9 +188,40 @@ class ChatService:
                 # Tool calls exist - execute and continue
                 if tool_calls_list:
                     all_tool_calls.extend(tool_calls_list)
+                    
+                    # Send thinking as a complete step if exists
+                    if full_thinking:
+                        yield f"event: process_step\ndata: {json.dumps({'index': step_index, 'type': 'thinking', 'content': full_thinking}, ensure_ascii=False)}\n\n"
+                        step_index += 1
+                    
+                    # Also send legacy tool_calls event for backward compatibility
                     yield f"event: tool_calls\ndata: {json.dumps({'calls': tool_calls_list}, ensure_ascii=False)}\n\n"
                     
-                    tool_results = self.executor.process_tool_calls(tool_calls_list)
+                    # Process each tool call one by one, send result immediately
+                    tool_results = []
+                    for tc in tool_calls_list:
+                        # Send tool call step
+                        yield f"event: process_step\ndata: {json.dumps({'index': step_index, 'type': 'tool_call', 'id': tc['id'], 'name': tc['function']['name'], 'arguments': tc['function']['arguments']}, ensure_ascii=False)}\n\n"
+                        step_index += 1
+                        
+                        # Execute this single tool call
+                        single_result = self.executor.process_tool_calls([tc])
+                        tool_results.extend(single_result)
+                        
+                        # Send tool result step immediately
+                        tr = single_result[0]
+                        try:
+                            result_data = json.loads(tr["content"])
+                            skipped = result_data.get("skipped", False)
+                        except:
+                            skipped = False
+                        
+                        yield f"event: process_step\ndata: {json.dumps({'index': step_index, 'type': 'tool_result', 'id': tr['tool_call_id'], 'name': tr['name'], 'content': tr['content'], 'skipped': skipped}, ensure_ascii=False)}\n\n"
+                        step_index += 1
+                        
+                        # Also send legacy tool_result event
+                        yield f"event: tool_result\ndata: {json.dumps({'id': tr['tool_call_id'], 'name': tr['name'], 'content': tr['content'], 'skipped': skipped}, ensure_ascii=False)}\n\n"
+                    
                     messages.append({
                         "role": "assistant",
                         "content": full_content or None,
@@ -189,12 +229,14 @@ class ChatService:
                     })
                     messages.extend(tool_results)
                     all_tool_results.extend(tool_results)
-                    
-                    for tr in tool_results:
-                        yield f"event: tool_result\ndata: {json.dumps({'name': tr['name'], 'content': tr['content']}, ensure_ascii=False)}\n\n"
                     continue
                 
                 # No tool calls - finish
+                # Send thinking as a step if exists
+                if full_thinking:
+                    yield f"event: process_step\ndata: {json.dumps({'index': step_index, 'type': 'thinking', 'content': full_thinking}, ensure_ascii=False)}\n\n"
+                    step_index += 1
+                
                 with app.app_context():
                     msg = Message(
                         id=msg_id,
@@ -221,7 +263,12 @@ class ChatService:
         return Response(
             generate(),
             mimetype="text/event-stream",
-            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "X-Accel-Buffering": "no",
+                "Connection": "keep-alive",
+                "Transfer-Encoding": "chunked",
+            }
         )
     
     def _save_tool_calls(self, message_id: str, tool_calls: list, tool_results: list) -> None:
@@ -256,8 +303,20 @@ class ChatService:
         # Add tool calls if any
         tool_calls = msg.tool_calls.all() if msg.tool_calls else []
         if tool_calls:
-            result["tool_calls"] = [
-                {
+            result["tool_calls"] = []
+            for tc in tool_calls:
+                # Parse result to extract success/skipped status
+                success = True
+                skipped = False
+                if tc.result:
+                    try:
+                        result_data = json.loads(tc.result)
+                        success = result_data.get("success", True)
+                        skipped = result_data.get("skipped", False)
+                    except:
+                        pass
+                
+                result["tool_calls"].append({
                     "id": tc.call_id,
                     "type": "function",
                     "function": {
@@ -265,9 +324,10 @@ class ChatService:
                         "arguments": tc.arguments,
                     },
                     "result": tc.result,
-                }
-                for tc in tool_calls
-            ]
+                    "success": success,
+                    "skipped": skipped,
+                    "execution_time": tc.execution_time,
+                })
         
         return result
     

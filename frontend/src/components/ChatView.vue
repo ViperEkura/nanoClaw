@@ -38,6 +38,7 @@
             :content="msg.content"
             :thinking-content="msg.thinking_content"
             :tool-calls="msg.tool_calls"
+            :process-steps="msg.process_steps"
             :tool-name="msg.name"
             :token-count="msg.token_count"
             :created-at="msg.created_at"
@@ -51,6 +52,7 @@
               <ProcessBlock
                 :thinking-content="streamingThinking"
                 :tool-calls="streamingToolCalls"
+                :process-steps="streamingProcessSteps"
                 :streaming="streaming"
               />
               <div class="message-content streaming-content" v-html="renderedStreamContent || '<span class=\'placeholder\'>...</span>'"></div>
@@ -84,6 +86,7 @@ const props = defineProps({
   streamingContent: { type: String, default: '' },
   streamingThinking: { type: String, default: '' },
   streamingToolCalls: { type: Array, default: () => [] },
+  streamingProcessSteps: { type: Array, default: () => [] },
   hasMoreMessages: { type: Boolean, default: false },
   loadingMore: { type: Boolean, default: false },
   toolsEnabled: { type: Boolean, default: true },

@@ -95,7 +95,7 @@ export const messageApi = {
     return request(`/conversations/${convId}/messages?${params}`)
   },
 
-  send(convId, content, { stream = true, toolsEnabled = true, onThinking, onMessage, onToolCalls, onToolResult, onDone, onError } = {}) {
+  send(convId, content, { stream = true, toolsEnabled = true, onThinkingStart, onThinking, onMessage, onToolCalls, onToolResult, onProcessStep, onDone, onError } = {}) {
     if (!stream) {
       return request(`/conversations/${convId}/messages`, {
         method: 'POST',
@@ -137,7 +137,9 @@ export const messageApi = {
               currentEvent = line.slice(7).trim()
             } else if (line.startsWith('data: ')) {
               const data = JSON.parse(line.slice(6))
-              if (currentEvent === 'thinking' && onThinking) {
+              if (currentEvent === 'thinking_start' && onThinkingStart) {
+                onThinkingStart()
+              } else if (currentEvent === 'thinking' && onThinking) {
                 onThinking(data.content)
               } else if (currentEvent === 'message' && onMessage) {
                 onMessage(data.content)
@@ -145,6 +147,8 @@ export const messageApi = {
                 onToolCalls(data.calls)
               } else if (currentEvent === 'tool_result' && onToolResult) {
                 onToolResult(data)
+              } else if (currentEvent === 'process_step' && onProcessStep) {
+                onProcessStep(data)
               } else if (currentEvent === 'done' && onDone) {
                 onDone(data)
               } else if (currentEvent === 'error' && onError) {

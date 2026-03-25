@@ -40,7 +40,6 @@ classDiagram
         +process_tool_calls(list tool_calls, dict context) list~dict~
         +build_request(list messages, str model, list tools, dict kwargs) dict
         +clear_history() void
-        +execute_with_retry(str name, dict args, int max_retries) dict
     }
 
     class ToolResult {
@@ -236,6 +235,14 @@ class ToolExecutor:
         self._cache: Dict[str, tuple] = {}  # key -> (result, timestamp)
         self._call_history: List[dict] = []  # 当前会话的调用历史
 
+    def _execute_with_retry(self, name: str, arguments: dict) -> dict:
+        """
+        执行工具，不自动重试。
+        成功或失败都直接返回结果，由模型决定下一步操作。
+        """
+        result = self.registry.execute(name, arguments)
+        return result
+
     def _make_cache_key(self, name: str, args: dict) -> str:
         """生成缓存键"""
         args_str = json.dumps(args, sort_keys=True, ensure_ascii=False)
@@ -389,29 +396,6 @@ class ToolExecutor:
             "tools": tools or self.registry.list_all(),
             "tool_choice": kwargs.get("tool_choice", "auto"),
             **{k: v for k, v in kwargs.items() if k not in ["tool_choice"]}
-        }
-
-    def execute_with_retry(
-        self,
-        name: str,
-        arguments: dict,
-        max_retries: int = 3,
-        retry_delay: float = 1.0
-    ) -> dict:
-        """带重试的工具执行"""
-        last_error = None
-
-        for attempt in range(max_retries):
-            try:
-                return self.registry.execute(name, arguments)
-            except Exception as e:
-                last_error = e
-                if attempt < max_retries - 1:
-                    time.sleep(retry_delay)
-
-        return {
-            "success": False,
-            "error": f"Failed after {max_retries} retries: {last_error}"
         }
 ```
 
@@ -954,7 +938,13 @@ def my_tool(arguments: dict) -> dict:
 - **历史去重**：同一会话内已调用过的工具会直接返回缓存结果
 - **自动清理**：新会话开始时调用 `clear_history()` 清理历史
 
-### 9.4 安全设计
+### 9.4 无自动重试
+
+- **直接返回结果**：工具执行成功或失败都直接返回，不自动重试
+- **模型决策**：失败时返回错误信息，由模型决定是否重试或尝试其他工具
+- **灵活性**：模型可以根据错误类型选择不同的解决策略
+
+### 9.5 安全设计
 
 - **计算器安全**：禁止函数调用和变量名，只支持数学运算
 - **文件沙箱**：文件操作限制在项目根目录内，防止越权访问
@@ -970,5 +960,6 @@ def my_tool(arguments: dict) -> dict:
 2. **工厂模式**：使用 `@tool` 装饰器注册工具
 3. **服务分离**：工具依赖的服务独立，不与工具类耦合
 4. **性能优化**：支持缓存和重复检测，减少重复计算和网络请求
-5. **易于扩展**：新增工具只需写一个函数并加装饰器
-6. **安全可靠**：文件沙箱、安全计算、完善的错误处理
+5. **智能决策**：工具执行失败时不自动重试，由模型决定下一步操作
+6. **易于扩展**：新增工具只需写一个函数并加装饰器
+7. **安全可靠**：文件沙箱、安全计算、完善的错误处理

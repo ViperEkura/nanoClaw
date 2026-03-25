@@ -10,9 +10,9 @@
         <polyline points="6 9 12 15 18 9"></polyline>
       </svg>
     </button>
-    
+
     <div v-if="allExpanded" class="process-list">
-      <div v-for="(item, index) in processItems" :key="index" class="process-item" :class="item.type">
+      <div v-for="item in processItems" :key="item.key" class="process-item" :class="[item.type, { loading: item.loading }]">
         <div class="process-header" @click="toggleItem(item.index)">
           <div class="process-icon">
             <svg v-if="item.type === 'thinking'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -27,16 +27,17 @@
             </svg>
           </div>
           <span class="process-label">{{ item.label }}</span>
-          <span v-if="item.type === 'tool_result'" class="process-summary" :class="{ success: item.isSuccess, error: !item.isSuccess }">{{ item.summary }}</span>
+          <span v-if="item.loading" class="loading-dots">...</span>
+          <span v-else-if="item.type === 'tool_result'" class="process-summary" :class="{ success: item.isSuccess, error: !item.isSuccess }">{{ item.summary }}</span>
           <span class="process-time">{{ item.time }}</span>
-          <svg class="item-arrow" :class="{ open: isItemExpanded(item.index) }" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg v-if="!item.loading" class="item-arrow" :class="{ open: isItemExpanded(item.index) }" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="6 9 12 15 18 9"></polyline>
           </svg>
         </div>
-        
-        <div v-if="isItemExpanded(item.index)" class="process-content">
+
+        <div v-if="isItemExpanded(item.index) && !item.loading" class="process-content">
           <div v-if="item.type === 'thinking'" class="thinking-text">{{ item.content }}</div>
-          
+
           <div v-else-if="item.type === 'tool_call'" class="tool-call-detail">
             <div class="tool-name">
               <span class="label">工具名称:</span>
@@ -47,7 +48,7 @@
               <pre>{{ item.arguments }}</pre>
             </div>
           </div>
-          
+
           <div v-else-if="item.type === 'tool_result'" class="tool-result-detail">
             <div class="result-label">返回结果:</div>
             <pre>{{ item.content }}</pre>
@@ -64,6 +65,7 @@ import { ref, computed, watch } from 'vue'
 const props = defineProps({
   thinkingContent: { type: String, default: '' },
   toolCalls: { type: Array, default: () => [] },
+  processSteps: { type: Array, default: () => [] },
   streaming: { type: Boolean, default: false }
 })
 
@@ -72,32 +74,106 @@ const itemExpanded = ref({}) // 存储每个项目的展开状态
 
 const processItems = computed(() => {
   const items = []
-  let index = 0
-  
-  // 添加思考过程
+  let idx = 0
+
+  // 优先使用新的 processSteps（按顺序的步骤列表）
+  if (props.processSteps && props.processSteps.length > 0) {
+    props.processSteps.forEach((step, stepIdx) => {
+      if (!step) return
+
+      if (step.type === 'thinking') {
+        items.push({
+          type: 'thinking',
+          label: '思考过程',
+          content: step.content,
+          time: '',
+          index: idx,
+          key: `thinking-${idx}`,
+          loading: false
+        })
+        idx++
+      } else if (step.type === 'tool_call') {
+        items.push({
+          type: 'tool_call',
+          label: `调用工具: ${step.name || '未知工具'}`,
+          toolName: step.name || '未知工具',
+          arguments: formatArgs(step.arguments),
+          id: step.id,
+          index: idx,
+          key: `tool_call-${step.id || idx}`,
+          loading: false
+        })
+        idx++
+      } else if (step.type === 'tool_result') {
+        const resultSummary = getResultSummary(step.content)
+        items.push({
+          type: 'tool_result',
+          label: `工具返回: ${step.name || '未知工具'}`,
+          content: formatResult(step.content),
+          summary: resultSummary.text,
+          isSuccess: resultSummary.success,
+          id: step.id,
+          index: idx,
+          key: `tool_result-${step.id || idx}`,
+          loading: false
+        })
+        idx++
+      }
+    })
+
+    // 如果正在流式传输，检查是否需要添加加载状态
+    if (props.streaming && items.length > 0) {
+      const lastItem = items[items.length - 1]
+      // 最后一个工具调用还没有结果，显示执行中
+      if (lastItem.type === 'tool_call') {
+        lastItem.loading = true
+        lastItem.label = `执行工具: ${lastItem.toolName}`
+      }
+    }
+
+    return items
+  }
+
+  // 回退到旧逻辑：先添加思考过程，再添加工具调用
   if (props.thinkingContent) {
     items.push({
       type: 'thinking',
       label: '思考过程',
       content: props.thinkingContent,
       time: '',
-      index: index++
+      index: idx,
+      key: `thinking-${idx}`,
+      loading: false
     })
+    idx++
+  } else if (props.streaming && items.length === 0) {
+    // 正在思考中
+    items.push({
+      type: 'thinking',
+      label: '思考中',
+      content: '',
+      time: '',
+      index: idx,
+      key: `thinking-loading`,
+      loading: true
+    })
+    idx++
   }
-  
-  // 添加工具调用
+
   if (props.toolCalls && props.toolCalls.length > 0) {
     props.toolCalls.forEach((call, i) => {
-      // 工具调用
       items.push({
         type: 'tool_call',
         label: `调用工具: ${call.function?.name || '未知工具'}`,
         toolName: call.function?.name || '未知工具',
         arguments: formatArgs(call.function?.arguments),
-        index: index++
+        id: call.id,
+        index: idx,
+        key: `tool_call-${call.id || idx}`,
+        loading: false
       })
-      
-      // 工具结果
+      idx++
+
       if (call.result) {
         const resultSummary = getResultSummary(call.result)
         items.push({
@@ -106,12 +182,20 @@ const processItems = computed(() => {
           content: formatResult(call.result),
           summary: resultSummary.text,
           isSuccess: resultSummary.success,
-          index: index++
+          id: call.id,
+          index: idx,
+          key: `tool_result-${call.id || idx}`,
+          loading: false
         })
+        idx++
+      } else if (props.streaming) {
+        // 工具正在执行中
+        items[items.length - 1].loading = true
+        items[items.length - 1].label = `执行工具: ${call.function?.name || '未知工具'}`
       }
     })
   }
-  
+
   return items
 })
 
@@ -304,6 +388,31 @@ watch(() => props.streaming, (streaming) => {
 
 .item-arrow.open {
   transform: rotate(180deg);
+}
+
+.loading-dots {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--accent-primary);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+.process-item.loading .process-header {
+  background: var(--bg-hover);
+}
+
+.process-item.loading .process-icon {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .process-content {

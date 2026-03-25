@@ -16,12 +16,14 @@ class ToolExecutor:
         api_key: Optional[str] = None,
         enable_cache: bool = True,
         cache_ttl: int = 300,  # 5 minutes
+        max_retries: int = 2,  # Max retries per tool
     ):
         self.registry = registry or ToolRegistry()
         self.api_url = api_url
         self.api_key = api_key
         self.enable_cache = enable_cache
         self.cache_ttl = cache_ttl
+        self.max_retries = max_retries
         self._cache: Dict[str, tuple] = {}  # key -> (result, timestamp)
         self._call_history: List[dict] = []  # Track calls in current session
 
@@ -115,11 +117,12 @@ class ToolExecutor:
                 results.append(self._create_tool_result(call_id, name, result))
                 continue
 
-            # Execute tool
-            result = self.registry.execute(name, args)
+            # Execute tool with retry
+            result = self._execute_with_retry(name, args)
             
-            # Cache the result
-            self._set_cache(cache_key, result)
+            # Cache the result (only cache successful results)
+            if result.get("success"):
+                self._set_cache(cache_key, result)
             
             # Add to history
             self._call_history.append({
@@ -131,6 +134,24 @@ class ToolExecutor:
             results.append(self._create_tool_result(call_id, name, result))
 
         return results
+
+    def _execute_with_retry(
+        self,
+        name: str,
+        arguments: dict,
+    ) -> dict:
+        """
+        Execute tool without automatic retry.
+        
+        If the tool fails, return the error to let the model decide
+        whether to retry with the same tool or try a different approach.
+        
+        Returns:
+            Result dict with success status. Failed tool returns:
+            {"success": False, "error": "..."}
+        """
+        result = self.registry.execute(name, arguments)
+        return result
 
     def _create_tool_result(
         self,
@@ -190,38 +211,4 @@ class ToolExecutor:
             "tools": tools or self.registry.list_all(),
             "tool_choice": kwargs.get("tool_choice", "auto"),
             **{k: v for k, v in kwargs.items() if k not in ["tool_choice"]}
-        }
-
-    def execute_with_retry(
-        self,
-        name: str,
-        arguments: dict,
-        max_retries: int = 3,
-        retry_delay: float = 1.0
-    ) -> dict:
-        """
-        Execute tool with retry
-
-        Args:
-            name: Tool name
-            arguments: Tool arguments
-            max_retries: Max retry count
-            retry_delay: Retry delay in seconds
-
-        Returns:
-            Execution result
-        """
-        last_error = None
-
-        for attempt in range(max_retries):
-            try:
-                return self.registry.execute(name, arguments)
-            except Exception as e:
-                last_error = e
-                if attempt < max_retries - 1:
-                    time.sleep(retry_delay)
-
-        return {
-            "success": False,
-            "error": f"Failed after {max_retries} retries: {last_error}"
         }

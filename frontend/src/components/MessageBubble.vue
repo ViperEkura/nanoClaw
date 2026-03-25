@@ -4,9 +4,10 @@
     <div v-else class="avatar">claw</div>
     <div class="message-body">
       <ProcessBlock
-        v-if="thinkingContent || (toolCalls && toolCalls.length > 0)"
+        v-if="thinkingContent || (toolCalls && toolCalls.length > 0) || (processSteps && processSteps.length > 0)"
         :thinking-content="thinkingContent"
         :tool-calls="toolCalls"
+        :process-steps="processSteps"
       />
       <div v-if="role === 'tool'" class="tool-result-content">
         <div class="tool-badge">工具返回结果: {{ toolName }}</div>
@@ -43,6 +44,7 @@ const props = defineProps({
   content: { type: String, default: '' },
   thinkingContent: { type: String, default: '' },
   toolCalls: { type: Array, default: () => [] },
+  processSteps: { type: Array, default: () => [] },
   toolName: { type: String, default: '' },
   tokenCount: { type: Number, default: 0 },
   createdAt: { type: String, default: '' },
