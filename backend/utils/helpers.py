@@ -46,6 +46,30 @@ def to_dict(inst, **extra):
     return d
 
 
+def message_to_dict(msg: Message) -> dict:
+    """Convert message to dict with tool calls"""
+    result = to_dict(msg, thinking_content=msg.thinking_content or None)
+    
+    # Add tool calls if any
+    tool_calls = msg.tool_calls.all() if msg.tool_calls else []
+    if tool_calls:
+        result["tool_calls"] = [
+            {
+                "id": tc.call_id,
+                "type": "function",
+                "function": {
+                    "name": tc.tool_name,
+                    "arguments": tc.arguments,
+                },
+                "result": tc.result,
+                "execution_time": tc.execution_time,
+            }
+            for tc in tool_calls
+        ]
+    
+    return result
+
+
 def record_token_usage(user_id, model, prompt_tokens, completion_tokens):
     """Record token usage"""
     today = date.today()

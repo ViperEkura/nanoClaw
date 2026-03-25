@@ -4,7 +4,7 @@ from datetime import datetime
 from flask import Blueprint, request
 from backend import db
 from backend.models import Conversation, Message
-from backend.utils.helpers import ok, err, to_dict, get_or_create_default_user
+from backend.utils.helpers import ok, err, to_dict, message_to_dict, get_or_create_default_user
 from backend.services.chat import ChatService
 
 
@@ -36,7 +36,7 @@ def message_list(conv_id):
                 db.session.query(Message.created_at).filter_by(id=cursor).scalar() or datetime.utcnow))
         rows = q.order_by(Message.created_at.asc()).limit(limit + 1).all()
         
-        items = [to_dict(r) for r in rows[:limit]]
+        items = [message_to_dict(r) for r in rows[:limit]]
         return ok({
             "items": items,
             "next_cursor": items[-1]["id"] if len(rows) > limit else None,
