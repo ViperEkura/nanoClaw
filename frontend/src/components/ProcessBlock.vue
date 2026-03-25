@@ -1,15 +1,27 @@
 <template>
-  <div class="process-block">
-    <button class="process-toggle" @click="toggleAll">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
-      </svg>
-      <span>思考与工具调用过程</span>
-      <span class="process-count">{{ processItems.length }} 步</span>
-      <svg class="arrow" :class="{ open: allExpanded }" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <polyline points="6 9 12 15 18 9"></polyline>
-      </svg>
-    </button>
+  <div class="process-block" :class="{ 'is-streaming': streaming }">
+    <!-- 流式加载状态 -->
+    <div v-if="streaming && processItems.length === 0" class="streaming-placeholder">
+      <div class="streaming-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+        </svg>
+      </div>
+      <span class="streaming-text">正在思考中<span class="dots">...</span></span>
+    </div>
+
+    <!-- 正常内容 -->
+    <template v-else>
+      <button class="process-toggle" @click="toggleAll">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+        </svg>
+        <span>思考与工具调用过程</span>
+        <span class="process-count">{{ processItems.length }} 步</span>
+        <svg class="arrow" :class="{ open: allExpanded }" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+      </button>
 
     <div v-if="allExpanded" class="process-list">
       <div v-for="item in processItems" :key="item.key" class="process-item" :class="[item.type, { loading: item.loading }]">
@@ -56,6 +68,7 @@
         </div>
       </div>
     </div>
+    </template>
   </div>
 </template>
 
@@ -267,6 +280,37 @@ watch(() => props.streaming, (streaming) => {
   max-width: 100%;
 }
 
+.streaming-placeholder {
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--bg-hover);
+}
+
+.streaming-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: #fef3c7;
+  color: #f59e0b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: spin 2s linear infinite;
+}
+
+.streaming-text {
+  font-size: 14px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.streaming-text .dots {
+  display: inline-block;
+  animation: pulse 1s ease-in-out infinite;
+}
+
 .process-toggle {
   width: 100%;
   padding: 10px 12px;
@@ -406,7 +450,7 @@ watch(() => props.streaming, (streaming) => {
   background: var(--bg-hover);
 }
 
-.process-item.loading .process-icon {
+.process-item.loading.tool_call .process-icon {
   animation: spin 1s linear infinite;
 }
 

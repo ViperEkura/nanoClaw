@@ -119,7 +119,7 @@ async function createConversation() {
 
 // -- Select conversation --
 async function selectConversation(id) {
-  // 保存当前对话的流式状态（如果有）
+  // 保存当前对话的流式状态和消息列表（如果有）
   if (currentConvId.value && streaming.value) {
     streamStates.set(currentConvId.value, {
       streaming: true,
@@ -127,11 +127,11 @@ async function selectConversation(id) {
       streamThinking: streamThinking.value,
       streamToolCalls: [...streamToolCalls.value],
       streamProcessSteps: [...streamProcessSteps.value],
+      messages: [...messages.value],  // 保存消息列表（包括临时用户消息）
     })
   }
 
   currentConvId.value = id
-  messages.value = []
   nextMsgCursor.value = null
   hasMoreMessages.value = false
 
@@ -143,15 +143,20 @@ async function selectConversation(id) {
     streamThinking.value = savedState.streamThinking
     streamToolCalls.value = savedState.streamToolCalls
     streamProcessSteps.value = savedState.streamProcessSteps
+    messages.value = savedState.messages || []  // 恢复消息列表
   } else {
     streaming.value = false
     streamContent.value = ''
     streamThinking.value = ''
     streamToolCalls.value = []
     streamProcessSteps.value = []
+    messages.value = []
   }
 
-  await loadMessages(true)
+  // 如果不是正在流式传输，从服务器加载消息
+  if (!streaming.value) {
+    await loadMessages(true)
+  }
 }
 
 // -- Load messages --
@@ -277,8 +282,7 @@ async function sendMessage(content) {
       if (currentConvId.value === convId) {
         streaming.value = false
         currentStreamPromise = null
-        // Replace temp message and add assistant message from server
-        messages.value = messages.value.filter(m => m.id !== userMsg.id)
+        // 添加助手消息（保留临时用户消息）
         messages.value.push({
           id: data.message_id,
           conversation_id: convId,

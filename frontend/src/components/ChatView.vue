@@ -46,7 +46,7 @@
             @delete="$emit('deleteMessage', msg.id)"
           />
 
-          <div v-if="streaming" class="message-bubble assistant">
+          <div v-if="streaming" class="message-bubble assistant streaming">
             <div class="avatar">claw</div>
             <div class="message-body">
               <ProcessBlock
@@ -56,6 +56,12 @@
                 :streaming="streaming"
               />
               <div class="message-content streaming-content" v-html="renderedStreamContent || '<span class=\'placeholder\'>...</span>'"></div>
+              <div class="streaming-indicator">
+                <svg class="spinner" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                </svg>
+                <span>正在生成...</span>
+              </div>
             </div>
           </div>
         </div>
@@ -328,6 +334,26 @@ defineExpose({ scrollToBottom })
   line-height: 1.7;
   color: var(--text-primary);
   word-break: break-word;
+}
+
+.streaming-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-light);
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .streaming-content :deep(p) {
