@@ -298,30 +298,37 @@ async function sendMessage(content) {
         streamThinking.value = ''
         streamToolCalls.value = []
         streamProcessSteps.value = []
+
         // Update conversation in list (move to top)
         const idx = conversations.value.findIndex(c => c.id === convId)
         if (idx > 0) {
           const [conv] = conversations.value.splice(idx, 1)
           conv.message_count = (conv.message_count || 0) + 2
+          if (data.suggested_title) {
+            conv.title = data.suggested_title
+          }
           conversations.value.unshift(conv)
         } else if (idx === 0) {
           conversations.value[0].message_count = (conversations.value[0].message_count || 0) + 2
-        }
-        // Auto title: use first message if title is empty
-        if (conversations.value[0] && !conversations.value[0].title) {
-          try {
-            await conversationApi.update(convId, { title: content.slice(0, 30) })
-            conversations.value[0].title = content.slice(0, 30)
-          } catch (_) {}
+          if (data.suggested_title) {
+            conversations.value[0].title = data.suggested_title
+          }
         }
       } else {
         // 后台完成，重新加载该对话的消息
         try {
           const res = await messageApi.list(convId, null, 50)
-          // 更新对话列表中的消息计数
+          // 更新对话列表中的消息计数和标题
           const idx = conversations.value.findIndex(c => c.id === convId)
           if (idx >= 0) {
             conversations.value[idx].message_count = res.data.items.length
+            // 从服务器获取最新标题
+            if (res.data.items.length > 0) {
+              const convRes = await conversationApi.get(convId)
+              if (convRes.data.title) {
+                conversations.value[idx].title = convRes.data.title
+              }
+            }
           }
         } catch (_) {}
       }

@@ -18,13 +18,14 @@ from backend.services.glm_client import GLMClient
 
 class ChatService:
     """Chat completion service with tool support"""
-    
+
     MAX_ITERATIONS = 5
-    
+
     def __init__(self, glm_client: GLMClient):
         self.glm_client = glm_client
         self.executor = ToolExecutor(registry=registry)
-    
+
+
     def sync_response(self, conv: Conversation, tools_enabled: bool = True):
         """Sync response with tool call support"""
         tools = registry.list_all() if tools_enabled else None
@@ -59,7 +60,7 @@ class ChatService:
                 usage = result.get("usage", {})
                 prompt_tokens = usage.get("prompt_tokens", 0)
                 completion_tokens = usage.get("completion_tokens", 0)
-                
+
                 # Create message
                 msg = Message(
                     id=str(uuid.uuid4()),
@@ -70,14 +71,27 @@ class ChatService:
                     thinking_content=message.get("reasoning_content", ""),
                 )
                 db.session.add(msg)
-                
+
                 # Create tool call records
                 self._save_tool_calls(msg.id, all_tool_calls, all_tool_results)
                 db.session.commit()
-                
+
                 user = get_or_create_default_user()
                 record_token_usage(user.id, conv.model, prompt_tokens, completion_tokens)
-                
+
+                # Set title if needed (first message)
+                suggested_title = None
+                if not conv.title or conv.title == "新对话":
+                    user_msg = Message.query.filter_by(
+                        conversation_id=conv.id, role="user"
+                    ).order_by(Message.created_at.asc()).first()
+                    if user_msg and user_msg.content:
+                        suggested_title = user_msg.content.strip()[:30]
+                        if not suggested_title:
+                            suggested_title = "新对话"
+                        conv.title = suggested_title
+                        db.session.commit()
+
                 return ok({
                     "message": self._message_to_dict(msg),
                     "usage": {
@@ -85,6 +99,7 @@ class ChatService:
                         "completion_tokens": completion_tokens,
                         "total_tokens": usage.get("total_tokens", 0)
                     },
+                    "suggested_title": suggested_title,
                 })
             
             # Process tool calls
@@ -236,7 +251,8 @@ class ChatService:
                 if full_thinking:
                     yield f"event: process_step\ndata: {json.dumps({'index': step_index, 'type': 'thinking', 'content': full_thinking}, ensure_ascii=False)}\n\n"
                     step_index += 1
-                
+
+                suggested_title = None
                 with app.app_context():
                     msg = Message(
                         id=msg_id,
@@ -247,15 +263,34 @@ class ChatService:
                         thinking_content=full_thinking,
                     )
                     db.session.add(msg)
-                    
+
                     # Create tool call records
                     self._save_tool_calls(msg_id, all_tool_calls, all_tool_results)
                     db.session.commit()
-                    
+
                     user = get_or_create_default_user()
                     record_token_usage(user.id, conv_model, prompt_tokens, token_count)
-                
-                yield f"event: done\ndata: {json.dumps({'message_id': msg_id, 'token_count': token_count})}\n\n"
+
+                    # Check if we need to set title (first message in conversation)
+                    conv = db.session.get(Conversation, conv_id)
+                    if conv and (not conv.title or conv.title == "新对话"):
+                        # Get user message content
+                        user_msg = Message.query.filter_by(
+                            conversation_id=conv_id, role="user"
+                        ).order_by(Message.created_at.asc()).first()
+                        if user_msg and user_msg.content:
+                            # Use first 30 chars of user message as title
+                            suggested_title = user_msg.content.strip()[:30]
+                            if not suggested_title:
+                                suggested_title = "新对话"
+                            # Refresh conv to avoid stale state
+                            db.session.refresh(conv)
+                            conv.title = suggested_title
+                            db.session.commit()
+                    else:
+                        suggested_title = None
+
+                yield f"event: done\ndata: {json.dumps({'message_id': msg_id, 'token_count': token_count, 'suggested_title': suggested_title}, ensure_ascii=False)}\n\n"
                 return
             
             yield f"event: error\ndata: {json.dumps({'content': 'exceeded maximum tool call iterations'}, ensure_ascii=False)}\n\n"

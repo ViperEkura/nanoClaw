@@ -297,7 +297,6 @@ watch(() => props.streaming, (streaming) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  animation: spin 2s linear infinite;
 }
 
 .streaming-text {
@@ -448,15 +447,6 @@ watch(() => props.streaming, (streaming) => {
 
 .process-item.loading .process-header {
   background: var(--bg-hover);
-}
-
-.process-item.loading.tool_call .process-icon {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
 }
 
 .process-content {
