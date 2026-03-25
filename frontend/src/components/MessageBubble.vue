@@ -95,7 +95,7 @@ function copyContent() {
 .user .avatar {
   background: linear-gradient(135deg, #2563eb, #3b82f6);
   color: white;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: -0.3px;
 }
@@ -103,7 +103,7 @@ function copyContent() {
 .assistant .avatar {
   background: var(--avatar-gradient);
   color: white;
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: -0.3px;
 }

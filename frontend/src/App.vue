@@ -435,21 +435,22 @@ onMounted(() => {
 }
 
 [data-theme="dark"] {
-  --bg-primary: #0f172a;
-  --bg-secondary: #1e293b;
-  --bg-tertiary: #0f172a;
-  --bg-hover: rgba(59, 130, 246, 0.15);
-  --bg-active: rgba(59, 130, 246, 0.25);
-  --bg-input: #1e293b;
-  --bg-code: #1e293b;
-  --bg-thinking: #1e293b;
+  /* Dark theme - 保持与浅色模式相同的相对色差 */
+  --bg-primary: #1a1a1a;    /* 聊天框，最浅（对应浅色 #ffffff） */
+  --bg-secondary: #141414;  /* 侧边栏，中等（对应浅色 #f8fafc） */
+  --bg-tertiary: #0a0a0a;   /* 整体背景，最深（对应浅色 #f0f4f8） */
+  --bg-hover: rgba(255, 255, 255, 0.08);
+  --bg-active: rgba(255, 255, 255, 0.12);
+  --bg-input: #141414;
+  --bg-code: #141414;
+  --bg-thinking: #141414;
 
-  --text-primary: #f1f5f9;
-  --text-secondary: #94a3b8;
-  --text-tertiary: #64748b;
+  --text-primary: #f0f0f0;
+  --text-secondary: #a0a0a0;
+  --text-tertiary: #606060;
 
   --border-light: rgba(255, 255, 255, 0.08);
-  --border-medium: rgba(255, 255, 255, 0.1);
+  --border-medium: rgba(255, 255, 255, 0.12);
   --border-input: rgba(255, 255, 255, 0.1);
 
   --accent-primary: #3b82f6;

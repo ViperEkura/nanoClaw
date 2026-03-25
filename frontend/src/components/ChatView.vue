@@ -310,7 +310,7 @@ defineExpose({ scrollToBottom })
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: -0.3px;
   flex-shrink: 0;
