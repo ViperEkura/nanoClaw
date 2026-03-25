@@ -1,517 +1,382 @@
-# 对话系统后端 API 设计
+# NanoClaw 后端设计文档
+
+## 架构概览
+
+```mermaid
+graph TB
+    subgraph Frontend[前端]
+        UI[Vue 3 UI]
+    end
+
+    subgraph Backend[后端]
+        API[Flask Routes]
+        SVC[Services]
+        TOOLS[Tool System]
+        DB[(Database)]
+    end
+
+    subgraph External[外部服务]
+        GLM[GLM API]
+        WEB[Web Resources]
+    end
+
+    UI -->|REST/SSE| API
+    API --> SVC
+    API --> TOOLS
+    SVC --> GLM
+    TOOLS --> WEB
+    SVC --> DB
+    TOOLS --> DB
+```
+
+---
+
+## 项目结构
+
+```
+backend/
+├── __init__.py          # 应用工厂，数据库初始化
+├── models.py            # SQLAlchemy 模型
+├── run.py               # 入口文件
+├── config.py            # 配置加载器
+│
+├── routes/              # API 路由
+│   ├── __init__.py
+│   ├── conversations.py # 会话 CRUD
+│   ├── messages.py      # 消息 CRUD + 聊天
+│   ├── models.py        # 模型列表
+│   ├── stats.py         # Token 统计
+│   └── tools.py         # 工具列表
+│
+├── services/            # 业务逻辑
+│   ├── __init__.py
+│   ├── chat.py          # 聊天补全服务
+│   └── glm_client.py    # GLM API 客户端
+│
+├── tools/               # 工具系统
+│   ├── __init__.py
+│   ├── core.py          # 核心类
+│   ├── factory.py       # 工具装饰器
+│   ├── executor.py      # 工具执行器
+│   ├── services.py      # 辅助服务
+│   └── builtin/         # 内置工具
+│       ├── crawler.py   # 网页搜索、抓取
+│       ├── data.py      # 计算器、文本、JSON
+│       ├── weather.py   # 天气查询
+│       ├── file_ops.py  # 文件操作
+│       └── code.py      # 代码执行
+│
+└── utils/               # 辅助函数
+    ├── __init__.py
+    └── helpers.py       # 通用函数
+```
+
+---
+
+## 类图
+
+### 核心数据模型
+
+```mermaid
+classDiagram
+    direction TB
+
+    class User {
+        +Integer id
+        +String username
+        +String password
+        +String phone
+        +relationship conversations
+    }
+
+    class Conversation {
+        +String id
+        +Integer user_id
+        +String title
+        +String model
+        +String system_prompt
+        +Float temperature
+        +Integer max_tokens
+        +Boolean thinking_enabled
+        +DateTime created_at
+        +DateTime updated_at
+        +relationship messages
+    }
+
+    class Message {
+        +String id
+        +String conversation_id
+        +String role
+        +LongText content
+        +Integer token_count
+        +LongText thinking_content
+        +DateTime created_at
+        +relationship tool_calls
+    }
+
+    class ToolCall {
+        +Integer id
+        +String message_id
+        +String call_id
+        +Integer call_index
+        +String tool_name
+        +LongText arguments
+        +LongText result
+        +Float execution_time
+        +DateTime created_at
+    }
+
+    class TokenUsage {
+        +Integer id
+        +Integer user_id
+        +Date date
+        +String model
+        +Integer prompt_tokens
+        +Integer completion_tokens
+        +Integer total_tokens
+        +DateTime created_at
+    }
+
+    User "1" --> "*" Conversation : 拥有
+    Conversation "1" --> "*" Message : 包含
+    Message "1" --> "*" ToolCall : 触发
+    User "1" --> "*" TokenUsage : 消耗
+```
+
+### 服务层
+
+```mermaid
+classDiagram
+    direction TB
+
+    class ChatService {
+        -GLMClient glm_client
+        -ToolExecutor executor
+        +Integer MAX_ITERATIONS
+        +sync_response(conv, tools_enabled) Response
+        +stream_response(conv, tools_enabled) Response
+        -_save_tool_calls(msg_id, calls, results) void
+        -_message_to_dict(msg) dict
+        -_process_tool_calls_delta(delta, list) list
+    }
+
+    class GLMClient {
+        -str api_url
+        -str api_key
+        +call(model, messages, kwargs) Response
+    }
+
+    class ToolExecutor {
+        -ToolRegistry registry
+        -dict _cache
+        -list _call_history
+        +process_tool_calls(calls, context) list
+        +build_request(messages, model, tools) dict
+        +clear_history() void
+        +execute_with_retry(name, args, retries) dict
+    }
+
+    ChatService --> GLMClient : 使用
+    ChatService --> ToolExecutor : 使用
+```
+
+### 工具系统
+
+```mermaid
+classDiagram
+    direction TB
+
+    class ToolDefinition {
+        <<dataclass>>
+        +str name
+        +str description
+        +dict parameters
+        +Callable handler
+        +str category
+        +to_openai_format() dict
+    }
+
+    class ToolRegistry {
+        -dict _tools
+        +register(ToolDefinition) void
+        +get(str name) ToolDefinition?
+        +list_all() list~dict~
+        +list_by_category(str) list~dict~
+        +execute(str name, dict args) dict
+        +remove(str name) bool
+        +has(str name) bool
+    }
+
+    class ToolExecutor {
+        -ToolRegistry registry
+        -dict _cache
+        -list _call_history
+        +process_tool_calls(list, dict) list
+        +clear_history() void
+    }
+
+    class ToolResult {
+        <<dataclass>>
+        +bool success
+        +Any data
+        +str? error
+        +to_dict() dict
+        +ok(Any)$ ToolResult
+        +fail(str)$ ToolResult
+    }
+
+    ToolRegistry "1" --> "*" ToolDefinition : 管理
+    ToolExecutor "1" --> "1" ToolRegistry : 使用
+    ToolDefinition ..> ToolResult : 返回
+```
+
+---
 
 ## API 总览
 
 ### 会话管理
 
-| 方法       | 路径                       | 说明     |
-| -------- | ------------------------ | ------ |
-| `POST`   | `/api/conversations`     | 创建会话   |
-| `GET`    | `/api/conversations`     | 获取会话列表 |
-| `GET`    | `/api/conversations/:id` | 获取会话详情 |
-| `PATCH`  | `/api/conversations/:id` | 更新会话   |
-| `DELETE` | `/api/conversations/:id` | 删除会话   |
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `POST` | `/api/conversations` | 创建会话 |
+| `GET` | `/api/conversations` | 获取会话列表（游标分页） |
+| `GET` | `/api/conversations/:id` | 获取会话详情 |
+| `PATCH` | `/api/conversations/:id` | 更新会话 |
+| `DELETE` | `/api/conversations/:id` | 删除会话 |
 
 ### 消息管理
 
-| 方法       | 路径                                            | 说明                        |
-| -------- | --------------------------------------------- | ------------------------- |
-| `GET`    | `/api/conversations/:id/messages`             | 获取消息列表                    |
-| `POST`   | `/api/conversations/:id/messages`             | 发送消息（对话补全，支持 `stream` 流式） |
-| `DELETE` | `/api/conversations/:id/messages/:message_id` | 删除消息                      |
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET` | `/api/conversations/:id/messages` | 获取消息列表（游标分页） |
+| `POST` | `/api/conversations/:id/messages` | 发送消息（支持 SSE 流式） |
+| `DELETE` | `/api/conversations/:id/messages/:mid` | 删除消息 |
 
-### 模型与工具
+### 其他
 
-| 方法     | 路径            | 说明       |
-| ------ | ------------- | -------- |
-| `GET`  | `/api/models`  | 获取模型列表   |
-| `GET`  | `/api/tools`   | 获取工具列表   |
-
-### 统计信息
-
-| 方法     | 路径                   | 说明               |
-| ------ | -------------------- | ---------------- |
-| `GET`  | `/api/stats/tokens`   | 获取 Token 使用统计    |
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET` | `/api/models` | 获取模型列表 |
+| `GET` | `/api/tools` | 获取工具列表 |
+| `GET` | `/api/stats/tokens` | Token 使用统计 |
 
 ---
 
-## API 接口
+## SSE 事件
 
-### 1. 会话管理
+| 事件 | 说明 |
+|------|------|
+| `thinking` | 思维链增量内容（启用时） |
+| `message` | 回复内容的增量片段 |
+| `tool_calls` | 工具调用信息 |
+| `tool_result` | 工具执行结果 |
+| `error` | 错误信息 |
+| `done` | 回复结束，携带 message_id 和 token_count |
 
-#### 创建会话
+---
+
+## 数据模型
+
+### User（用户）
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | Integer | 自增主键 |
+| `username` | String(50) | 用户名（唯一） |
+| `password` | String(255) | 密码（可为空，支持第三方登录） |
+| `phone` | String(20) | 手机号 |
+
+### Conversation（会话）
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `id` | String(64) | UUID | 主键 |
+| `user_id` | Integer | - | 外键关联 User |
+| `title` | String(255) | "" | 会话标题 |
+| `model` | String(64) | "glm-5" | 模型名称 |
+| `system_prompt` | Text | "" | 系统提示词 |
+| `temperature` | Float | 1.0 | 采样温度 |
+| `max_tokens` | Integer | 65536 | 最大输出 token |
+| `thinking_enabled` | Boolean | False | 是否启用思维链 |
+| `created_at` | DateTime | now | 创建时间 |
+| `updated_at` | DateTime | now | 更新时间 |
+
+### Message（消息）
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | String(64) | UUID 主键 |
+| `conversation_id` | String(64) | 外键关联 Conversation |
+| `role` | String(16) | user/assistant/system/tool |
+| `content` | LongText | 消息内容 |
+| `token_count` | Integer | Token 数量 |
+| `thinking_content` | LongText | 思维链内容 |
+| `created_at` | DateTime | 创建时间 |
+
+### ToolCall（工具调用）
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | Integer | 自增主键 |
+| `message_id` | String(64) | 外键关联 Message |
+| `call_id` | String(64) | LLM 返回的工具调用 ID |
+| `call_index` | Integer | 消息内的调用顺序 |
+| `tool_name` | String(64) | 工具名称 |
+| `arguments` | LongText | JSON 参数 |
+| `result` | LongText | JSON 结果 |
+| `execution_time` | Float | 执行时间（秒） |
+| `created_at` | DateTime | 创建时间 |
+
+### TokenUsage（Token 使用统计）
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | Integer | 自增主键 |
+| `user_id` | Integer | 外键关联 User |
+| `date` | Date | 统计日期 |
+| `model` | String(64) | 模型名称 |
+| `prompt_tokens` | Integer | 输入 token |
+| `completion_tokens` | Integer | 输出 token |
+| `total_tokens` | Integer | 总 token |
+| `created_at` | DateTime | 创建时间 |
+
+---
+
+## 分页机制
+
+所有列表接口使用**游标分页**：
 
 ```
-POST /api/conversations
+GET /api/conversations?limit=20&cursor=conv_abc123
 ```
 
-**请求体：**
-
-```json
-{
-  "title": "新对话",
-  "model": "glm-5",
-  "system_prompt": "你是一个有帮助的助手",
-  "temperature": 1.0,
-  "max_tokens": 65536,
-  "thinking_enabled": false
-}
-```
-
-**响应：**
-
+响应：
 ```json
 {
   "code": 0,
   "data": {
-    "id": "conv_abc123",
-    "title": "新对话",
-    "model": "glm-5",
-    "system_prompt": "你是一个有帮助的助手",
-    "temperature": 1.0,
-    "max_tokens": 65536,
-    "thinking_enabled": false,
-    "created_at": "2026-03-24T10:00:00Z",
-    "updated_at": "2026-03-24T10:00:00Z"
-  }
-}
-```
-
-#### 获取会话列表
-
-```
-GET /api/conversations?cursor=conv_abc123&limit=20
-```
-
-| 参数       | 类型      | 说明                |
-| -------- | ------- | ----------------- |
-| `cursor` | string  | 分页游标，为空取首页        |
-| `limit`  | integer | 每页数量，默认 20，最大 100 |
-
-**响应：**
-
-```json
-{
-  "code": 0,
-  "data": {
-    "items": [
-      {
-        "id": "conv_abc123",
-        "title": "新对话",
-        "model": "glm-5",
-        "created_at": "2026-03-24T10:00:00Z",
-        "updated_at": "2026-03-24T10:05:00Z",
-        "message_count": 6
-      }
-    ],
+    "items": [...],
     "next_cursor": "conv_def456",
     "has_more": true
   }
 }
 ```
 
-#### 获取会话详情
-
-```
-GET /api/conversations/:id
-```
-
-**响应：**
-
-```json
-{
-  "code": 0,
-  "data": {
-    "id": "conv_abc123",
-    "title": "新对话",
-    "model": "glm-5",
-    "system_prompt": "你是一个有帮助的助手",
-    "temperature": 1.0,
-    "max_tokens": 65536,
-    "thinking_enabled": false,
-    "created_at": "2026-03-24T10:00:00Z",
-    "updated_at": "2026-03-24T10:05:00Z"
-  }
-}
-```
-
-#### 更新会话
-
-```
-PATCH /api/conversations/:id
-```
-
-**请求体（仅传需更新的字段）：**
-
-```json
-{
-  "title": "修改后的标题",
-  "system_prompt": "新的系统提示词",
-  "temperature": 0.8
-}
-```
-
-**响应：** 同获取会话详情
-
-#### 删除会话
-
-```
-DELETE /api/conversations/:id
-```
-
-**响应：**
-
-```json
-{
-  "code": 0,
-  "message": "deleted"
-}
-```
+- `limit`：每页数量（会话默认 20，消息默认 50，最大 100）
+- `cursor`：上一页最后一条的 ID
 
 ---
 
-### 2. 消息管理
-
-#### 获取消息列表
-
-```
-GET /api/conversations/:id/messages?cursor=msg_001&limit=50
-```
-
-| 参数       | 类型      | 说明                |
-| -------- | ------- | ----------------- |
-| `cursor` | string  | 分页游标              |
-| `limit`  | integer | 每页数量，默认 50，最大 100 |
-
-**响应：**
-
-```json
-{
-  "code": 0,
-  "data": {
-    "items": [
-      {
-        "id": "msg_001",
-        "conversation_id": "conv_abc123",
-        "role": "user",
-        "content": "你好",
-        "token_count": 2,
-        "thinking_content": null,
-        "tool_calls": null,
-        "created_at": "2026-03-24T10:00:00Z"
-      },
-      {
-        "id": "msg_002",
-        "conversation_id": "conv_abc123",
-        "role": "assistant",
-        "content": "你好！有什么可以帮你的？",
-        "token_count": 15,
-        "thinking_content": null,
-        "tool_calls": null,
-        "created_at": "2026-03-24T10:00:01Z"
-      }
-    ],
-    "next_cursor": "msg_003",
-    "has_more": false
-  }
-}
-```
-
-#### 发送消息（对话补全）
-
-```
-POST /api/conversations/:id/messages
-```
-
-**请求体：**
-
-```json
-{
-  "content": "介绍一下你的能力",
-  "stream": true,
-  "tools_enabled": true
-}
-```
-
-| 参数              | 类型       | 说明                     |
-| --------------- | -------- | ---------------------- |
-| `content`       | string   | 用户消息内容                 |
-| `stream`        | boolean  | 是否流式响应，默认 `true`       |
-| `tools_enabled` | boolean  | 是否启用工具调用，默认 `true`（可选） |
-
-**流式响应 (stream=true)：**
-
-**普通回复示例：**
-
-```
-HTTP/1.1 200 OK
-Content-Type: text/event-stream
-
-event: thinking
-data: {"content": "用户想了解我的能力..."}
-
-event: message
-data: {"content": "我是"}
-
-event: message
-data: {"content": "智谱AI"}
-
-event: message
-data: {"content": "开发的大语言模型"}
-
-event: done
-data: {"message_id": "msg_003", "token_count": 200}
-```
-
-**工具调用示例：**
-
-```
-HTTP/1.1 200 OK
-Content-Type: text/event-stream
-
-event: thinking
-data: {"content": "用户想知道北京天气..."}
-
-event: tool_calls
-data: {"calls": [{"id": "call_001", "type": "function", "function": {"name": "get_weather", "arguments": "{\"city\": \"北京\"}"}}]}
-
-event: tool_result
-data: {"name": "get_weather", "content": "{\"temperature\": 25, \"humidity\": 60, \"description\": \"晴天\"}"}
-
-event: message
-data: {"content": "北京"}
-
-event: message
-data: {"content": "今天天气晴朗，"}
-
-event: message
-data: {"content": "温度25°C，"}
-
-event: message
-data: {"content": "湿度60%"}
-
-event: done
-data: {"message_id": "msg_003", "token_count": 150}
-```
-
-**非流式响应 (stream=false)：**
-
-```json
-{
-  "code": 0,
-  "data": {
-    "message": {
-      "id": "msg_003",
-      "conversation_id": "conv_abc123",
-      "role": "assistant",
-      "content": "我是智谱AI开发的大语言模型...",
-      "token_count": 200,
-      "thinking_content": "用户想了解我的能力...",
-      "tool_calls": null,
-      "created_at": "2026-03-24T10:01:00Z"
-    },
-    "usage": {
-      "prompt_tokens": 50,
-      "completion_tokens": 200,
-      "total_tokens": 250
-    }
-  }
-}
-```
-
-#### 删除消息
-
-```
-DELETE /api/conversations/:id/messages/:message_id
-```
-
-**响应：**
-
-```json
-{
-  "code": 0,
-  "message": "deleted"
-}
-```
-
----
-
-### 3. 模型与工具
-
-#### 获取模型列表
-
-```
-GET /api/models
-```
-
-**响应：**
-
-```json
-{
-  "code": 0,
-  "data": [
-    {"id": "glm-5", "name": "GLM-5"},
-    {"id": "glm-5-turbo", "name": "GLM-5 Turbo"},
-    {"id": "glm-4.5", "name": "GLM-4.5"},
-    {"id": "glm-4.6", "name": "GLM-4.6"},
-    {"id": "glm-4.7", "name": "GLM-4.7"}
-  ]
-}
-```
-
-#### 获取工具列表
-
-```
-GET /api/tools
-```
-
-**响应：**
-
-```json
-{
-  "code": 0,
-  "data": {
-    "tools": [
-      {
-        "name": "get_weather",
-        "description": "获取指定城市的天气信息",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "city": {
-              "type": "string",
-              "description": "城市名称"
-            }
-          },
-          "required": ["city"]
-        }
-      }
-    ],
-    "total": 1
-  }
-}
-```
-
----
-
-### 4. 统计信息
-
-#### 获取 Token 使用统计
-
-```
-GET /api/stats/tokens?period=daily
-```
-
-**参数：**
-
-| 参数       | 类型     | 说明                                    |
-| -------- | ------ | ------------------------------------- |
-| `period` | string | 统计周期：`daily`（今日）、`weekly`（近7天）、`monthly`（近30天） |
-
-**响应（daily）：**
-
-```json
-{
-  "code": 0,
-  "data": {
-    "period": "daily",
-    "date": "2026-03-24",
-    "prompt_tokens": 1000,
-    "completion_tokens": 2000,
-    "total_tokens": 3000,
-    "by_model": {
-      "glm-5": {
-        "prompt": 500,
-        "completion": 1000,
-        "total": 1500
-      },
-      "glm-4": {
-        "prompt": 500,
-        "completion": 1000,
-        "total": 1500
-      }
-    }
-  }
-}
-```
-
-**响应（weekly/monthly）：**
-
-```json
-{
-  "code": 0,
-  "data": {
-    "period": "weekly",
-    "start_date": "2026-03-18",
-    "end_date": "2026-03-24",
-    "prompt_tokens": 7000,
-    "completion_tokens": 14000,
-    "total_tokens": 21000,
-    "daily": {
-      "2026-03-18": {"prompt": 1000, "completion": 2000, "total": 3000},
-      "2026-03-19": {"prompt": 1000, "completion": 2000, "total": 3000},
-      ...
-    }
-  }
-}
-```
-
----
-
-### 5. SSE 事件说明
-
-| 事件            | 说明                                       |
-| ------------- | ---------------------------------------- |
-| `thinking`    | 思维链增量内容（启用时）                             |
-| `message`     | 回复内容的增量片段                                |
-| `tool_calls`  | 工具调用信息，包含工具名称和参数                         |
-| `tool_result` | 工具执行结果，包含工具名称和返回内容                       |
-| `error`       | 错误信息                                     |
-| `done`        | 回复结束，携带完整 message_id 和 token 统计          |
-
-**tool_calls 事件数据格式：**
-
-```json
-{
-  "calls": [
-    {
-      "id": "call_001",
-      "type": "function",
-      "function": {
-        "name": "get_weather",
-        "arguments": "{\"city\": \"北京\"}"
-      }
-    }
-  ]
-}
-```
-
-**tool_result 事件数据格式：**
-
-```json
-{
-  "name": "get_weather",
-  "content": "{\"temperature\": 25, \"humidity\": 60}"
-}
-```
-
----
-
-### 6. 错误码
-
-| code  | 说明       |
-| ----- | -------- |
-| `0`   | 成功       |
-| `400` | 请求参数错误   |
-| `401` | 未认证      |
-| `403` | 无权限访问该资源 |
-| `404` | 资源不存在    |
-| `429` | 请求过于频繁   |
-| `500` | 上游模型服务错误 |
-| `503` | 服务暂时不可用  |
-
-**错误响应格式：**
-
+## 错误码
+
+| Code | 说明 |
+|------|------|
+| `0` | 成功 |
+| `400` | 请求参数错误 |
+| `404` | 资源不存在 |
+| `500` | 服务器错误 |
+
+错误响应：
 ```json
 {
   "code": 404,
@@ -521,177 +386,25 @@ GET /api/stats/tokens?period=daily
 
 ---
 
-## 数据模型
+## 配置文件
 
-### ER 关系
+配置文件：`config.yml`
 
+```yaml
+# 服务端口
+backend_port: 3000
+frontend_port: 4000
+
+# GLM API
+api_key: your-api-key
+api_url: https://open.bigmodel.cn/api/paas/v4/chat/completions
+
+# 数据库
+db_type: mysql  # mysql, sqlite, postgresql
+db_host: localhost
+db_port: 3306
+db_user: root
+db_password: ""
+db_name: nano_claw
+db_sqlite_file: app.db  # SQLite 时使用
 ```
-User  1 ── * Conversation  1 ── * Message  1 ── * ToolCall
-```
-
-### User（用户）
-
-| 字段         | 类型            | 说明                    |
-| ------------ | --------------- | ----------------------- |
-| `id`         | bigint          | 用户 ID（自增）           |
-| `username`   | string(50)      | 用户名（唯一）            |
-| `password`   | string(255)     | 密码（可为空，第三方登录）  |
-| `phone`      | string(20)      | 手机号                  |
-
-### Conversation（会话）
-
-| 字段                 | 类型            | 说明                    |
-| ------------------ | ------------- | --------------------- |
-| `id`               | string (UUID) | 会话 ID                 |
-| `user_id`          | bigint        | 所属用户 ID               |
-| `title`            | string        | 会话标题                  |
-| `model`            | string        | 使用的模型，默认 `glm-5`      |
-| `system_prompt`    | string        | 系统提示词                 |
-| `temperature`      | float         | 采样温度，默认 `1.0`         |
-| `max_tokens`       | integer       | 最大输出 token，默认 `65536` |
-| `thinking_enabled` | boolean       | 是否启用思维链，默认 `false`    |
-| `created_at`       | datetime      | 创建时间                  |
-| `updated_at`       | datetime      | 更新时间                  |
-
-### Message（消息）
-
-| 字段                 | 类型            | 说明                              |
-| ------------------ | ------------- | ------------------------------- |
-| `id`               | string (UUID) | 消息 ID                           |
-| `conversation_id`  | string        | 所属会话 ID                         |
-| `role`             | enum          | `user` / `assistant` / `system` / `tool` |
-| `content`          | LONGTEXT      | 消息内容                            |
-| `token_count`      | integer       | token 消耗数                       |
-| `thinking_content` | LONGTEXT      | 思维链内容（启用时）                      |
-| `created_at`       | datetime      | 创建时间                            |
-
-**说明**：工具调用信息存储在关联的 `ToolCall` 表中，通过 `message.tool_calls` 关系获取。
-
-### ToolCall（工具调用）
-
-| 字段              | 类型            | 说明                        |
-| ----------------- | --------------- | --------------------------- |
-| `id`              | bigint          | 调用记录 ID（自增）            |
-| `message_id`      | string(64)      | 关联的消息 ID                 |
-| `call_id`         | string(64)      | 工具调用 ID                   |
-| `call_index`      | integer         | 调用顺序（从 0 开始）           |
-| `tool_name`       | string(64)      | 工具名称                      |
-| `arguments`       | LONGTEXT        | 调用参数 JSON                 |
-| `result`          | LONGTEXT        | 执行结果 JSON                 |
-| `execution_time`  | float           | 执行时间（秒）                  |
-| `created_at`      | datetime        | 创建时间                      |
-
-### TokenUsage（Token 使用统计）
-
-| 字段                | 类型       | 说明                       |
-| ------------------- | ---------- | -------------------------- |
-| `id`                | bigint     | 记录 ID（自增）             |
-| `user_id`           | bigint     | 用户 ID                    |
-| `date`              | date       | 统计日期                   |
-| `model`             | string(64) | 模型名称                   |
-| `prompt_tokens`     | integer    | 输入 token 数              |
-| `completion_tokens` | integer    | 输出 token 数              |
-| `total_tokens`      | integer    | 总 token 数                |
-| `created_at`        | datetime   | 创建时间                   |
-
-#### 消息类型说明
-
-**1. 用户消息 (role=user)**
-```json
-{
-  "id": "msg_001",
-  "conversation_id": "conv_abc123",
-  "role": "user",
-  "content": "北京今天天气怎么样？",
-  "token_count": 0,
-  "created_at": "2026-03-24T10:00:00Z"
-}
-```
-
-**2. 助手消息 - 普通回复 (role=assistant)**
-```json
-{
-  "id": "msg_002",
-  "conversation_id": "conv_abc123",
-  "role": "assistant",
-  "content": "北京今天天气晴朗...",
-  "token_count": 50,
-  "thinking_content": "用户想了解天气...",
-  "created_at": "2026-03-24T10:00:01Z"
-}
-```
-
-**3. 助手消息 - 含工具调用 (role=assistant, with tool_calls)**
-
-工具调用记录存储在独立的 `tool_calls` 表中，API 响应时会自动关联并返回：
-
-```json
-{
-  "id": "msg_003",
-  "conversation_id": "conv_abc123",
-  "role": "assistant",
-  "content": "北京今天天气晴朗，温度25°C，湿度60%",
-  "token_count": 80,
-  "thinking_content": "用户想知道北京天气，需要调用工具获取...",
-  "tool_calls": [
-    {
-      "id": "call_abc123",
-      "type": "function",
-      "function": {
-        "name": "get_weather",
-        "arguments": "{\"city\": \"北京\"}"
-      },
-      "result": "{\"temperature\": 25, \"humidity\": 60, \"description\": \"晴天\"}"
-    }
-  ],
-  "created_at": "2026-03-24T10:00:02Z"
-}
-```
-
-**4. 工具消息 (role=tool)**
-
-用于 API 调用时传递工具执行结果（不存储在数据库）：
-```json
-{
-  "role": "tool",
-  "tool_call_id": "call_abc123",
-  "name": "get_weather",
-  "content": "{\"temperature\": 25, \"humidity\": 60}"
-}
-```
-
-#### 工具调用流程示例
-
-```
-用户: "北京今天天气怎么样？"
-    ↓
-[msg_001] role=user, content="北京今天天气怎么样？"
-    ↓
-[AI 调用工具 get_weather]
-    ↓
-[msg_002] role=assistant, content="北京今天天气晴朗，温度25°C..."
-          tool_calls=[{get_weather, args:{"city":"北京"}, result="{...}"}]
-```
-
-**说明：**
-- 工具调用记录存储在独立的 `tool_calls` 表中，与 `messages` 表通过 `message_id` 关联
-- API 响应时自动查询并组装 `tool_calls` 数组
-- 工具调用包含完整的调用参数和执行结果
-- `call_index` 字段记录同一消息中多次工具调用的顺序
-- `execution_time` 字段记录工具执行耗时
-
----
-
-## 前端特性
-
-### 工具调用控制
-
-- 工具调用开关位于输入框右侧（扳手图标）
-- 状态存储在浏览器 localStorage（`tools_enabled`）
-- 默认开启，可通过请求参数 `tools_enabled` 控制每次请求
-
-### 消息渲染
-
-- 助手消息的 `tool_calls` 通过可折叠面板展示
-- 面板显示：思考过程 → 工具调用 → 工具结果
-- 每个子项可独立展开/折叠
