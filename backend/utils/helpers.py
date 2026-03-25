@@ -1,11 +1,13 @@
 """Common helper functions"""
 import json
-from datetime import datetime, date
+from datetime import date, datetime
+from typing import Any
+from flask import jsonify
 from backend import db
-from backend.models import Conversation, Message, User, TokenUsage
+from backend.models import Conversation, Message, TokenUsage, User
 
 
-def get_or_create_default_user():
+def get_or_create_default_user() -> User:
     """Get or create default user"""
     user = User.query.filter_by(username="default").first()
     if not user:
@@ -22,13 +24,11 @@ def ok(data=None, message=None):
         body["data"] = data
     if message is not None:
         body["message"] = message
-    from flask import jsonify
     return jsonify(body)
 
 
 def err(code, message):
     """Error response helper"""
-    from flask import jsonify
     return jsonify({"code": code, "message": message}), code
 
 
