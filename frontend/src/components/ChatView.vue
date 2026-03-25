@@ -35,14 +35,14 @@
             v-for="msg in messages"
             :key="msg.id"
             :role="msg.role"
-            :content="msg.content"
-            :thinking-content="msg.thinking_content"
+            :text="msg.text"
+            :thinking-content="msg.thinking"
             :tool-calls="msg.tool_calls"
             :process-steps="msg.process_steps"
-            :tool-name="msg.name"
             :token-count="msg.token_count"
             :created-at="msg.created_at"
             :deletable="msg.role === 'user'"
+            :attachments="msg.attachments"
             @delete="$emit('deleteMessage', msg.id)"
             @regenerate="$emit('regenerateMessage', msg.id)"
           />
@@ -72,7 +72,7 @@
         ref="inputRef"
         :disabled="streaming"
         :tools-enabled="toolsEnabled"
-        @send="$emit('sendMessage', $event)"
+        @send="handleSend"
         @toggle-tools="$emit('toggleTools', $event)"
       />
     </template>
@@ -99,7 +99,7 @@ const props = defineProps({
   toolsEnabled: { type: Boolean, default: true },
 })
 
-defineEmits(['sendMessage', 'deleteMessage', 'regenerateMessage', 'toggleSettings', 'loadMoreMessages', 'toggleTools'])
+const emit = defineEmits(['sendMessage', 'deleteMessage', 'regenerateMessage', 'toggleSettings', 'loadMoreMessages', 'toggleTools'])
 
 const scrollContainer = ref(null)
 const inputRef = ref(null)
@@ -108,6 +108,10 @@ const renderedStreamContent = computed(() => {
   if (!props.streamingContent) return ''
   return renderMarkdown(props.streamingContent)
 })
+
+function handleSend(data) {
+  emit('sendMessage', data)
+}
 
 function scrollToBottom(smooth = true) {
   nextTick(() => {
@@ -255,7 +259,7 @@ defineExpose({ scrollToBottom })
 }
 
 .messages-container {
-  flex: 1 1 auto;          /* 弹性高度，自动填充 */
+  flex: 1 1 auto;
   overflow-y: auto;
   padding: 16px 0;
   width: 100%;
@@ -270,6 +274,10 @@ defineExpose({ scrollToBottom })
 .messages-container::-webkit-scrollbar-thumb {
   background: var(--scrollbar-thumb);
   border-radius: 3px;
+}
+
+.messages-container::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
 }
 
 .load-more-top {
@@ -377,15 +385,6 @@ defineExpose({ scrollToBottom })
   border-top: 1px solid var(--border-light);
   font-size: 12px;
   color: var(--text-tertiary);
-}
-
-.spinner {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
 }
 
 .streaming-content :deep(p) {

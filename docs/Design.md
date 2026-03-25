@@ -109,20 +109,6 @@ classDiagram
         +String role
         +LongText content
         +Integer token_count
-        +LongText thinking_content
-        +DateTime created_at
-        +relationship tool_calls
-    }
-
-    class ToolCall {
-        +Integer id
-        +String message_id
-        +String call_id
-        +Integer call_index
-        +String tool_name
-        +LongText arguments
-        +LongText result
-        +Float execution_time
         +DateTime created_at
     }
 
@@ -139,8 +125,40 @@ classDiagram
 
     User "1" --> "*" Conversation : 拥有
     Conversation "1" --> "*" Message : 包含
-    Message "1" --> "*" ToolCall : 触发
     User "1" --> "*" TokenUsage : 消耗
+```
+
+### Message Content JSON 结构
+
+`content` 字段统一使用 JSON 格式存储：
+
+**User 消息：**
+```json
+{
+  "text": "用户输入的文本内容",
+  "attachments": [
+    {"name": "utils.py", "extension": "py", "content": "def hello()..."}
+  ]
+}
+```
+
+**Assistant 消息：**
+```json
+{
+  "text": "AI 回复的文本内容",
+  "thinking": "思考过程（可选）",
+  "tool_calls": [
+    {
+      "id": "call_xxx",
+      "name": "read_file",
+      "arguments": "{\"path\": \"...\"}",
+      "result": "{\"content\": \"...\"}",
+      "success": true,
+      "skipped": false,
+      "execution_time": 0.5
+    }
+  ]
+}
 ```
 
 ### 服务层
@@ -155,10 +173,9 @@ classDiagram
         +Integer MAX_ITERATIONS
         +sync_response(conv, tools_enabled) Response
         +stream_response(conv, tools_enabled) Response
-        -_save_tool_calls(msg_id, calls, results) void
+        -_build_tool_calls_json(calls, results) list
         -_message_to_dict(msg) dict
         -_process_tool_calls_delta(delta, list) list
-        -_emit_process_step(event, data) void
     }
 
     class GLMClient {
@@ -351,23 +368,8 @@ iteration 2:
 | `id` | String(64) | UUID 主键 |
 | `conversation_id` | String(64) | 外键关联 Conversation |
 | `role` | String(16) | user/assistant/system/tool |
-| `content` | LongText | 消息内容 |
+| `content` | LongText | JSON 格式内容（见上方结构说明） |
 | `token_count` | Integer | Token 数量 |
-| `thinking_content` | LongText | 思维链内容 |
-| `created_at` | DateTime | 创建时间 |
-
-### ToolCall（工具调用）
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `id` | Integer | 自增主键 |
-| `message_id` | String(64) | 外键关联 Message |
-| `call_id` | String(64) | LLM 返回的工具调用 ID |
-| `call_index` | Integer | 消息内的调用顺序 |
-| `tool_name` | String(64) | 工具名称 |
-| `arguments` | LongText | JSON 参数 |
-| `result` | LongText | JSON 结果 |
-| `execution_time` | Float | 执行时间（秒） |
 | `created_at` | DateTime | 创建时间 |
 
 ### TokenUsage（Token 使用统计）

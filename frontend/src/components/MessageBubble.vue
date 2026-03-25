@@ -3,6 +3,13 @@
     <div v-if="role === 'user'" class="avatar">user</div>
     <div v-else class="avatar">claw</div>
     <div class="message-container">
+      <!-- 附件列表 -->
+      <div v-if="attachments && attachments.length > 0" class="attachments-list">
+        <div v-for="(file, index) in attachments" :key="index" class="attachment-item">
+          <span class="attachment-icon">{{ file.extension }}</span>
+          <span class="attachment-name">{{ file.name }}</span>
+        </div>
+      </div>
       <div class="message-body">
         <ProcessBlock
           v-if="thinkingContent || (toolCalls && toolCalls.length > 0) || (processSteps && processSteps.length > 0)"
@@ -49,7 +56,8 @@ import ProcessBlock from './ProcessBlock.vue'
 
 const props = defineProps({
   role: { type: String, required: true },
-  content: { type: String, default: '' },
+  text: { type: String, default: '' },
+  content: { type: String, default: '' },  // Keep for backward compatibility
   thinkingContent: { type: String, default: '' },
   toolCalls: { type: Array, default: () => [] },
   processSteps: { type: Array, default: () => [] },
@@ -57,13 +65,16 @@ const props = defineProps({
   tokenCount: { type: Number, default: 0 },
   createdAt: { type: String, default: '' },
   deletable: { type: Boolean, default: false },
+  attachments: { type: Array, default: () => [] },
 })
 
 defineEmits(['delete', 'regenerate'])
 
 const renderedContent = computed(() => {
-  if (!props.content) return ''
-  return renderMarkdown(props.content)
+  // Use 'text' field (new format), fallback to 'content' (old format/assistant messages)
+  const displayContent = props.text || props.content || ''
+  if (!displayContent) return ''
+  return renderMarkdown(displayContent)
 })
 
 function formatTime(iso) {
@@ -106,6 +117,40 @@ function copyContent() {
   align-items: flex-start;
   flex: 1 1 auto;
   min-width: 0;
+}
+
+.attachments-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+  width: 100%;
+}
+
+.attachment-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--bg-code);
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.attachment-icon {
+  background: rgba(139, 92, 246, 0.15);
+  color: #8b5cf6;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.attachment-name {
+  color: var(--text-primary);
+  font-weight: 500;
 }
 
 .message-bubble.assistant .message-body {

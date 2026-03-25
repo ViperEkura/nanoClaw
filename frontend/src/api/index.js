@@ -95,11 +95,11 @@ export const messageApi = {
     return request(`/conversations/${convId}/messages?${params}`)
   },
 
-  send(convId, content, { stream = true, toolsEnabled = true, onThinkingStart, onThinking, onMessage, onToolCalls, onToolResult, onProcessStep, onDone, onError } = {}) {
+  send(convId, data, { stream = true, toolsEnabled = true, onThinkingStart, onThinking, onMessage, onToolCalls, onToolResult, onProcessStep, onDone, onError } = {}) {
     if (!stream) {
       return request(`/conversations/${convId}/messages`, {
         method: 'POST',
-        body: { content, stream: false, tools_enabled: toolsEnabled },
+        body: { text: data.text, attachments: data.attachments, stream: false, tools_enabled: toolsEnabled },
       })
     }
 
@@ -110,7 +110,7 @@ export const messageApi = {
         const res = await fetch(`${BASE}/conversations/${convId}/messages`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content, stream: true, tools_enabled: toolsEnabled }),
+          body: JSON.stringify({ text: data.text, attachments: data.attachments, stream: true, tools_enabled: toolsEnabled }),
           signal: controller.signal,
         })
 

@@ -47,38 +47,31 @@ def to_dict(inst, **extra):
 
 
 def message_to_dict(msg: Message) -> dict:
-    """Convert message to dict with tool calls"""
-    result = to_dict(msg, thinking_content=msg.thinking_content or None)
-    
-    # Add tool calls if any
-    tool_calls = msg.tool_calls.all() if msg.tool_calls else []
-    if tool_calls:
-        result["tool_calls"] = []
-        for tc in tool_calls:
-            # Parse result to extract success/skipped status
-            success = True
-            skipped = False
-            if tc.result:
-                try:
-                    result_data = json.loads(tc.result)
-                    success = result_data.get("success", True)
-                    skipped = result_data.get("skipped", False)
-                except:
-                    pass
-            
-            result["tool_calls"].append({
-                "id": tc.call_id,
-                "type": "function",
-                "function": {
-                    "name": tc.tool_name,
-                    "arguments": tc.arguments,
-                },
-                "result": tc.result,
-                "success": success,
-                "skipped": skipped,
-                "execution_time": tc.execution_time,
-            })
-    
+    """Convert message to dict, parsing JSON content"""
+    result = to_dict(msg)
+
+    # Parse content JSON
+    if msg.content:
+        try:
+            content_data = json.loads(msg.content)
+            if isinstance(content_data, dict):
+                # Extract all fields from JSON
+                result["text"] = content_data.get("text", "")
+                if content_data.get("attachments"):
+                    result["attachments"] = content_data["attachments"]
+                if content_data.get("thinking"):
+                    result["thinking"] = content_data["thinking"]
+                if content_data.get("tool_calls"):
+                    result["tool_calls"] = content_data["tool_calls"]
+            else:
+                # Fallback: plain text
+                result["text"] = msg.content
+        except (json.JSONDecodeError, TypeError):
+            result["text"] = msg.content
+
+    if "text" not in result:
+        result["text"] = ""
+
     return result
 
 
@@ -113,5 +106,29 @@ def build_glm_messages(conv):
     # Query messages directly to avoid detached instance warning
     messages = Message.query.filter_by(conversation_id=conv.id).order_by(Message.created_at.asc()).all()
     for m in messages:
-        msgs.append({"role": m.role, "content": m.content})
+        # Build full content from JSON structure
+        full_content = m.content
+        try:
+            content_data = json.loads(m.content)
+            if isinstance(content_data, dict):
+                text = content_data.get("text", "")
+                attachments = content_data.get("attachments", [])
+                
+                # Build full content with attachments
+                parts = []
+                if text:
+                    parts.append(text)
+                
+                for att in attachments:
+                    filename = att.get("name", "")
+                    file_content = att.get("content", "")
+                    if filename and file_content:
+                        parts.append(f"```{filename}\n{file_content}\n```")
+                
+                full_content = "\n\n".join(parts) if parts else ""
+        except (json.JSONDecodeError, TypeError):
+            # Plain text, use as-is
+            pass
+        
+        msgs.append({"role": m.role, "content": full_content})
     return msgs

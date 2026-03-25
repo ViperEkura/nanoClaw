@@ -186,19 +186,21 @@ function loadMoreMessages() {
 }
 
 // -- Send message (streaming) --
-async function sendMessage(content) {
+async function sendMessage(data) {
   if (!currentConvId.value || streaming.value) return
 
   const convId = currentConvId.value  // 保存当前对话ID
+  const text = data.text || ''
+  const attachments = data.attachments || null
 
   // Add user message optimistically
   const userMsg = {
     id: 'temp_' + Date.now(),
     conversation_id: convId,
     role: 'user',
-    content,
+    text,
+    attachments: attachments ? attachments.map(a => ({ name: a.name, extension: a.extension })) : null,
     token_count: 0,
-    thinking_content: null,
     created_at: new Date().toISOString(),
   }
   messages.value.push(userMsg)
@@ -209,7 +211,7 @@ async function sendMessage(content) {
   streamToolCalls.value = []
   streamProcessSteps.value = []
 
-  currentStreamPromise = messageApi.send(convId, content, {
+  currentStreamPromise = messageApi.send(convId, { text, attachments }, {
     stream: true,
     toolsEnabled: toolsEnabled.value,
     onThinkingStart() {
@@ -288,11 +290,11 @@ async function sendMessage(content) {
           id: data.message_id,
           conversation_id: convId,
           role: 'assistant',
-          content: streamContent.value,
-          token_count: data.token_count,
-          thinking_content: streamThinking.value || null,
+          text: streamContent.value,
+          thinking: streamThinking.value || null,
           tool_calls: streamToolCalls.value.length > 0 ? streamToolCalls.value : null,
           process_steps: streamProcessSteps.value.filter(Boolean),
+          token_count: data.token_count,
           created_at: new Date().toISOString(),
         })
         streamContent.value = ''
@@ -426,11 +428,11 @@ async function regenerateMessage(msgId) {
           id: data.message_id,
           conversation_id: convId,
           role: 'assistant',
-          content: streamContent.value,
-          token_count: data.token_count,
-          thinking_content: streamThinking.value || null,
+          text: streamContent.value,
+          thinking: streamThinking.value || null,
           tool_calls: streamToolCalls.value.length > 0 ? streamToolCalls.value : null,
           process_steps: streamProcessSteps.value.filter(Boolean),
+          token_count: data.token_count,
           created_at: new Date().toISOString(),
         })
         streamContent.value = ''

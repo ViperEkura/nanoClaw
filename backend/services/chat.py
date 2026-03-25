@@ -3,7 +3,7 @@ import json
 import uuid
 from flask import current_app, Response
 from backend import db
-from backend.models import Conversation, Message, ToolCall
+from backend.models import Conversation, Message
 from backend.tools import registry, ToolExecutor
 from backend.utils.helpers import (
     get_or_create_default_user,
@@ -61,19 +61,24 @@ class ChatService:
                 prompt_tokens = usage.get("prompt_tokens", 0)
                 completion_tokens = usage.get("completion_tokens", 0)
 
+                # Build content JSON
+                content_json = {
+                    "text": message.get("content", ""),
+                }
+                if message.get("reasoning_content"):
+                    content_json["thinking"] = message["reasoning_content"]
+                if all_tool_calls:
+                    content_json["tool_calls"] = self._build_tool_calls_json(all_tool_calls, all_tool_results)
+
                 # Create message
                 msg = Message(
                     id=str(uuid.uuid4()),
                     conversation_id=conv.id,
                     role="assistant",
-                    content=message.get("content", ""),
+                    content=json.dumps(content_json, ensure_ascii=False),
                     token_count=completion_tokens,
-                    thinking_content=message.get("reasoning_content", ""),
                 )
                 db.session.add(msg)
-
-                # Create tool call records
-                self._save_tool_calls(msg.id, all_tool_calls, all_tool_results)
                 db.session.commit()
 
                 user = get_or_create_default_user()
@@ -86,8 +91,15 @@ class ChatService:
                         conversation_id=conv.id, role="user"
                     ).order_by(Message.created_at.asc()).first()
                     if user_msg and user_msg.content:
-                        suggested_title = user_msg.content.strip()[:30]
-                        if not suggested_title:
+                        # Parse content JSON to get text
+                        try:
+                            content_data = json.loads(user_msg.content)
+                            title_text = content_data.get("text", "")[:30]
+                        except (json.JSONDecodeError, TypeError):
+                            title_text = user_msg.content.strip()[:30]
+                        if title_text:
+                            suggested_title = title_text
+                        else:
                             suggested_title = "新对话"
                         conv.title = suggested_title
                         db.session.commit()
@@ -254,18 +266,23 @@ class ChatService:
 
                 suggested_title = None
                 with app.app_context():
+                    # Build content JSON
+                    content_json = {
+                        "text": full_content,
+                    }
+                    if full_thinking:
+                        content_json["thinking"] = full_thinking
+                    if all_tool_calls:
+                        content_json["tool_calls"] = self._build_tool_calls_json(all_tool_calls, all_tool_results)
+
                     msg = Message(
                         id=msg_id,
                         conversation_id=conv_id,
                         role="assistant",
-                        content=full_content,
+                        content=json.dumps(content_json, ensure_ascii=False),
                         token_count=token_count,
-                        thinking_content=full_thinking,
                     )
                     db.session.add(msg)
-
-                    # Create tool call records
-                    self._save_tool_calls(msg_id, all_tool_calls, all_tool_results)
                     db.session.commit()
 
                     user = get_or_create_default_user()
@@ -279,16 +296,22 @@ class ChatService:
                             conversation_id=conv_id, role="user"
                         ).order_by(Message.created_at.asc()).first()
                         if user_msg and user_msg.content:
-                            # Use first 30 chars of user message as title
-                            suggested_title = user_msg.content.strip()[:30]
-                            if not suggested_title:
+                            # Parse content JSON to get text
+                            try:
+                                content_data = json.loads(user_msg.content)
+                                title_text = content_data.get("text", "")[:30]
+                            except (json.JSONDecodeError, TypeError):
+                                title_text = user_msg.content.strip()[:30]
+                            if title_text:
+                                suggested_title = title_text
+                            else:
                                 suggested_title = "新对话"
                             # Refresh conv to avoid stale state
                             db.session.refresh(conv)
                             conv.title = suggested_title
                             db.session.commit()
-                    else:
-                        suggested_title = None
+                        else:
+                            suggested_title = None
 
                 yield f"event: done\ndata: {json.dumps({'message_id': msg_id, 'token_count': token_count, 'suggested_title': suggested_title}, ensure_ascii=False)}\n\n"
                 return
@@ -306,64 +329,60 @@ class ChatService:
             }
         )
     
-    def _save_tool_calls(self, message_id: str, tool_calls: list, tool_results: list) -> None:
-        """Save tool calls to database"""
+    def _build_tool_calls_json(self, tool_calls: list, tool_results: list) -> list:
+        """Build tool calls JSON structure"""
+        result = []
         for i, tc in enumerate(tool_calls):
             result_content = tool_results[i]["content"] if i < len(tool_results) else None
-            
-            # Parse result to extract execution_time if present
+
+            # Parse result to extract success/skipped status
+            success = True
+            skipped = False
             execution_time = 0
             if result_content:
                 try:
                     result_data = json.loads(result_content)
+                    success = result_data.get("success", True)
+                    skipped = result_data.get("skipped", False)
                     execution_time = result_data.get("execution_time", 0)
                 except:
                     pass
-            
-            tool_call = ToolCall(
-                message_id=message_id,
-                call_id=tc.get("id", ""),
-                call_index=i,
-                tool_name=tc["function"]["name"],
-                arguments=tc["function"]["arguments"],
-                result=result_content,
-                execution_time=execution_time,
-            )
-            db.session.add(tool_call)
-    
+
+            result.append({
+                "id": tc.get("id", ""),
+                "name": tc["function"]["name"],
+                "arguments": tc["function"]["arguments"],
+                "result": result_content,
+                "success": success,
+                "skipped": skipped,
+                "execution_time": execution_time,
+            })
+        return result
+
     def _message_to_dict(self, msg: Message) -> dict:
-        """Convert message to dict with tool calls"""
-        result = to_dict(msg, thinking_content=msg.thinking_content or None)
-        
-        # Add tool calls if any
-        tool_calls = msg.tool_calls.all() if msg.tool_calls else []
-        if tool_calls:
-            result["tool_calls"] = []
-            for tc in tool_calls:
-                # Parse result to extract success/skipped status
-                success = True
-                skipped = False
-                if tc.result:
-                    try:
-                        result_data = json.loads(tc.result)
-                        success = result_data.get("success", True)
-                        skipped = result_data.get("skipped", False)
-                    except:
-                        pass
-                
-                result["tool_calls"].append({
-                    "id": tc.call_id,
-                    "type": "function",
-                    "function": {
-                        "name": tc.tool_name,
-                        "arguments": tc.arguments,
-                    },
-                    "result": tc.result,
-                    "success": success,
-                    "skipped": skipped,
-                    "execution_time": tc.execution_time,
-                })
-        
+        """Convert message to dict, parsing JSON content"""
+        result = to_dict(msg)
+
+        # Parse content JSON
+        if msg.content:
+            try:
+                content_data = json.loads(msg.content)
+                if isinstance(content_data, dict):
+                    result["text"] = content_data.get("text", "")
+                    if content_data.get("attachments"):
+                        result["attachments"] = content_data["attachments"]
+                    if content_data.get("thinking"):
+                        result["thinking"] = content_data["thinking"]
+                    if content_data.get("tool_calls"):
+                        result["tool_calls"] = content_data["tool_calls"]
+                else:
+                    result["text"] = msg.content
+            except (json.JSONDecodeError, TypeError):
+                result["text"] = msg.content
+
+        if "text" not in result:
+            result["text"] = ""
+
         return result
     
     def _process_tool_calls_delta(self, delta: dict, tool_calls_list: list) -> list:

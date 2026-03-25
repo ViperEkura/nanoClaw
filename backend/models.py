@@ -66,35 +66,12 @@ class Message(db.Model):
     conversation_id = db.Column(db.String(64), db.ForeignKey("conversations.id"), 
                                 nullable=False, index=True)
     role = db.Column(db.String(16), nullable=False)  # user, assistant, system, tool
-    content = db.Column(LongText, default="")  # LongText for long conversations
+    # Unified JSON structure:
+    # User: {"text": "...", "attachments": [{"name": "a.py", "extension": "py", "content": "..."}]}
+    # Assistant: {"text": "...", "thinking": "...", "tool_calls": [{"id": "...", "name": "...", "arguments": "...", "result": "..."}]}
+    content = db.Column(LongText, default="")
     token_count = db.Column(db.Integer, default=0)
-    thinking_content = db.Column(LongText, default="")
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
-
-    # Tool call support - relation to ToolCall table
-    tool_calls = db.relationship("ToolCall", backref="message", lazy="dynamic",
-                                 cascade="all, delete-orphan",
-                                 order_by="ToolCall.call_index.asc()")
-
-
-class ToolCall(db.Model):
-    """Tool call record - separate table, follows database normalization"""
-    __tablename__ = "tool_calls"
-
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    message_id = db.Column(db.String(64), db.ForeignKey("messages.id"), 
-                           nullable=False, index=True)
-    call_id = db.Column(db.String(64), nullable=False)  # Tool call ID
-    call_index = db.Column(db.Integer, nullable=False, default=0)  # Call order
-    tool_name = db.Column(db.String(64), nullable=False)  # Tool name
-    arguments = db.Column(LongText, nullable=False)  # Call arguments JSON
-    result = db.Column(LongText)  # Execution result JSON
-    execution_time = db.Column(db.Float, default=0)  # Execution time (seconds)
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
-
-    __table_args__ = (
-        db.Index("ix_tool_calls_message_call", "message_id", "call_index"),
-    )
 
 
 class TokenUsage(db.Model):

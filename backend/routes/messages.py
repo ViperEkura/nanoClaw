@@ -1,4 +1,5 @@
 """Message API routes"""
+import json
 import uuid
 from datetime import datetime
 from flask import Blueprint, request
@@ -45,14 +46,26 @@ def message_list(conv_id):
     
     # POST - create message and get AI response
     d = request.json or {}
-    content = (d.get("content") or "").strip()
-    if not content:
-        return err(400, "content is required")
-    
-    user_msg = Message(id=str(uuid.uuid4()), conversation_id=conv_id, role="user", content=content)
+    text = (d.get("text") or "").strip()
+    attachments = d.get("attachments")  # [{"name": "a.py", "extension": "py", "content": "..."}]
+
+    if not text and not attachments:
+        return err(400, "text or attachments is required")
+
+    # Build content JSON structure
+    content_json = {"text": text}
+    if attachments:
+        content_json["attachments"] = attachments
+
+    user_msg = Message(
+        id=str(uuid.uuid4()),
+        conversation_id=conv_id,
+        role="user",
+        content=json.dumps(content_json, ensure_ascii=False),
+    )
     db.session.add(user_msg)
     db.session.commit()
-    
+
     tools_enabled = d.get("tools_enabled", True)
     
     if d.get("stream", False):
