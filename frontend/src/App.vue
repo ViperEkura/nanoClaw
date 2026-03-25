@@ -25,6 +25,7 @@
       :tools-enabled="toolsEnabled"
       @send-message="sendMessage"
       @delete-message="deleteMessage"
+      @regenerate-message="regenerateMessage"
       @toggle-settings="showSettings = true"
       @load-more-messages="loadMoreMessages"
       @toggle-tools="updateToolsEnabled"
@@ -357,6 +358,99 @@ async function deleteMessage(msgId) {
   } catch (e) {
     console.error('Failed to delete message:', e)
   }
+}
+
+// -- Regenerate message --
+async function regenerateMessage(msgId) {
+  if (!currentConvId.value || streaming.value) return
+
+  const convId = currentConvId.value
+
+  // 找到要重新生成的消息索引
+  const msgIndex = messages.value.findIndex(m => m.id === msgId)
+  if (msgIndex === -1) return
+
+  // 移除该消息及其后面的所有消息
+  messages.value = messages.value.slice(0, msgIndex)
+
+  streaming.value = true
+  streamContent.value = ''
+  streamThinking.value = ''
+  streamToolCalls.value = []
+  streamProcessSteps.value = []
+
+  currentStreamPromise = messageApi.regenerate(convId, msgId, {
+    toolsEnabled: toolsEnabled.value,
+    onThinkingStart() {
+      if (currentConvId.value === convId) {
+        streamThinking.value = ''
+      }
+    },
+    onThinking(text) {
+      if (currentConvId.value === convId) {
+        streamThinking.value += text
+      }
+    },
+    onMessage(text) {
+      if (currentConvId.value === convId) {
+        streamContent.value += text
+      }
+    },
+    onToolCalls(calls) {
+      if (currentConvId.value === convId) {
+        streamToolCalls.value.push(...calls.map(c => ({ ...c, result: null })))
+      }
+    },
+    onToolResult(result) {
+      if (currentConvId.value === convId) {
+        const call = streamToolCalls.value.find(c => c.id === result.id)
+        if (call) call.result = result.content
+      }
+    },
+    onProcessStep(step) {
+      const idx = step.index
+      if (currentConvId.value === convId) {
+        const newSteps = [...streamProcessSteps.value]
+        while (newSteps.length <= idx) {
+          newSteps.push(null)
+        }
+        newSteps[idx] = step
+        streamProcessSteps.value = newSteps
+      }
+    },
+    async onDone(data) {
+      if (currentConvId.value === convId) {
+        streaming.value = false
+        currentStreamPromise = null
+        messages.value.push({
+          id: data.message_id,
+          conversation_id: convId,
+          role: 'assistant',
+          content: streamContent.value,
+          token_count: data.token_count,
+          thinking_content: streamThinking.value || null,
+          tool_calls: streamToolCalls.value.length > 0 ? streamToolCalls.value : null,
+          process_steps: streamProcessSteps.value.filter(Boolean),
+          created_at: new Date().toISOString(),
+        })
+        streamContent.value = ''
+        streamThinking.value = ''
+        streamToolCalls.value = []
+        streamProcessSteps.value = []
+      }
+    },
+    onError(msg) {
+      if (currentConvId.value === convId) {
+        streaming.value = false
+        currentStreamPromise = null
+        streamContent.value = ''
+        streamThinking.value = ''
+        streamToolCalls.value = []
+        streamProcessSteps.value = []
+        console.error('Regenerate error:', msg)
+      }
+    },
+  })
 }
 
 // -- Delete conversation --

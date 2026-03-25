@@ -44,6 +44,7 @@
             :created-at="msg.created_at"
             :deletable="msg.role === 'user'"
             @delete="$emit('deleteMessage', msg.id)"
+            @regenerate="$emit('regenerateMessage', msg.id)"
           />
 
           <div v-if="streaming" class="message-bubble assistant streaming">
@@ -98,7 +99,7 @@ const props = defineProps({
   toolsEnabled: { type: Boolean, default: true },
 })
 
-defineEmits(['sendMessage', 'deleteMessage', 'toggleSettings', 'loadMoreMessages', 'toggleTools'])
+defineEmits(['sendMessage', 'deleteMessage', 'regenerateMessage', 'toggleSettings', 'loadMoreMessages', 'toggleTools'])
 
 const scrollContainer = ref(null)
 const inputRef = ref(null)
@@ -142,13 +143,12 @@ defineExpose({ scrollToBottom })
 
 <style scoped>
 .chat-view {
-  flex: 1;
+  flex: 1 1 auto;            /* 弹性宽度，自动填充剩余空间 */
   display: flex;
   flex-direction: column;
   height: 100vh;
   background: var(--bg-secondary);
-  min-width: 0;
-  max-width: 100%;
+  min-width: 300px;          /* 最小宽度保证可用性 */
   overflow: hidden;
   transition: background 0.2s;
 }
@@ -255,10 +255,12 @@ defineExpose({ scrollToBottom })
 }
 
 .messages-container {
-  flex: 1;
+  flex: 1 1 auto;          /* 弹性高度，自动填充 */
   overflow-y: auto;
-  padding: 0 24px;
+  padding: 16px 0;
   width: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .messages-container::-webkit-scrollbar {
@@ -292,8 +294,10 @@ defineExpose({ scrollToBottom })
 }
 
 .messages-list {
-  max-width: 800px;
-  margin: 0 auto;
+  flex: 0 1 auto;           /* 弹性宽度 */
+  width: 80%;
+  margin: 0 auto;           /* 居中显示 */
+  padding: 0 16px;          /* 左右内边距 */
 }
 
 .message-bubble {
@@ -301,6 +305,30 @@ defineExpose({ scrollToBottom })
   gap: 12px;
   padding: 0;
   margin-bottom: 16px;
+  width: 100%;
+}
+
+.message-bubble.assistant {
+  width: 100%;
+}
+
+.message-bubble.assistant.streaming {
+  width: 100%;
+}
+
+.message-bubble .message-container {
+  display: flex;
+  flex-direction: column;
+  max-width: 85%;
+  min-width: 200px;
+}
+
+.message-bubble.user .message-container {
+  align-items: flex-end;
+}
+
+.message-bubble.assistant .message-container {
+  align-items: flex-start;
 }
 
 .message-bubble .avatar {
@@ -327,6 +355,10 @@ defineExpose({ scrollToBottom })
   border-radius: 12px;
   background: var(--bg-primary);
   transition: background 0.2s, border-color 0.2s;
+}
+
+.message-bubble.streaming .message-body {
+  flex: 1;
 }
 
 .streaming-content {

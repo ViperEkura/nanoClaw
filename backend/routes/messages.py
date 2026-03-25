@@ -73,3 +73,33 @@ def delete_message(conv_id, msg_id):
     db.session.delete(msg)
     db.session.commit()
     return ok(message="deleted")
+
+
+@bp.route("/api/conversations/<conv_id>/regenerate/<msg_id>", methods=["POST"])
+def regenerate_message(conv_id, msg_id):
+    """Regenerate an assistant message"""
+    conv = db.session.get(Conversation, conv_id)
+    if not conv:
+        return err(404, "conversation not found")
+
+    # 获取要重新生成的消息
+    msg = db.session.get(Message, msg_id)
+    if not msg or msg.conversation_id != conv_id:
+        return err(404, "message not found")
+
+    if msg.role != "assistant":
+        return err(400, "can only regenerate assistant messages")
+
+    # 删除该消息及其后面的所有消息
+    Message.query.filter(
+        Message.conversation_id == conv_id,
+        Message.created_at >= msg.created_at
+    ).delete(synchronize_session=False)
+    db.session.commit()
+
+    # 获取工具启用状态
+    d = request.json or {}
+    tools_enabled = d.get("tools_enabled", True)
+
+    # 流式重新生成
+    return _chat_service.stream_response(conv, tools_enabled)

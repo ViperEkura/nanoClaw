@@ -2,21 +2,29 @@
   <div class="message-bubble" :class="[role]">
     <div v-if="role === 'user'" class="avatar">user</div>
     <div v-else class="avatar">claw</div>
-    <div class="message-body">
-      <ProcessBlock
-        v-if="thinkingContent || (toolCalls && toolCalls.length > 0) || (processSteps && processSteps.length > 0)"
-        :thinking-content="thinkingContent"
-        :tool-calls="toolCalls"
-        :process-steps="processSteps"
-      />
-      <div v-if="role === 'tool'" class="tool-result-content">
-        <div class="tool-badge">工具返回结果: {{ toolName }}</div>
-        <pre>{{ content }}</pre>
+    <div class="message-container">
+      <div class="message-body">
+        <ProcessBlock
+          v-if="thinkingContent || (toolCalls && toolCalls.length > 0) || (processSteps && processSteps.length > 0)"
+          :thinking-content="thinkingContent"
+          :tool-calls="toolCalls"
+          :process-steps="processSteps"
+        />
+        <div v-if="role === 'tool'" class="tool-result-content">
+          <div class="tool-badge">工具返回结果: {{ toolName }}</div>
+          <pre>{{ content }}</pre>
+        </div>
+        <div v-else class="message-content" v-html="renderedContent"></div>
       </div>
-      <div v-else class="message-content" v-html="renderedContent"></div>
       <div class="message-footer">
         <span class="token-count" v-if="tokenCount">{{ tokenCount }} tokens</span>
         <span class="message-time">{{ formatTime(createdAt) }}</span>
+        <button v-if="role === 'assistant'" class="btn-regenerate" @click="$emit('regenerate')" title="重新生成">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M1 4v6h6"/>
+            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+          </svg>
+        </button>
         <button v-if="role === 'assistant'" class="btn-copy" @click="copyContent" title="复制">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
@@ -51,7 +59,7 @@ const props = defineProps({
   deletable: { type: Boolean, default: false },
 })
 
-defineEmits(['delete'])
+defineEmits(['delete', 'regenerate'])
 
 const renderedContent = computed(() => {
   if (!props.content) return ''
@@ -74,10 +82,34 @@ function copyContent() {
   gap: 12px;
   padding: 0;
   margin-bottom: 16px;
+  width: 100%;
 }
 
 .message-bubble.user {
   flex-direction: row-reverse;
+}
+
+.message-container {
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+  width: 100%;
+}
+
+.message-bubble.user .message-container {
+  align-items: flex-end;
+  width: fit-content;
+  max-width: 85%;
+}
+
+.message-bubble.assistant .message-container {
+  align-items: flex-start;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.message-bubble.assistant .message-body {
+  width: 100%;
 }
 
 .avatar {
@@ -228,13 +260,8 @@ function copyContent() {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 8px;
-  opacity: 0;
-  transition: opacity 0.15s;
-}
-
-.message-bubble:hover .message-footer {
-  opacity: 1;
+  padding: 6px 0 0;
+  font-size: 12px;
 }
 
 .token-count,
@@ -243,6 +270,7 @@ function copyContent() {
   color: var(--text-tertiary);
 }
 
+.btn-regenerate,
 .btn-copy,
 .btn-delete-msg {
   background: none;
@@ -254,6 +282,11 @@ function copyContent() {
   transition: all 0.15s;
   display: flex;
   align-items: center;
+}
+
+.btn-regenerate:hover {
+  color: var(--success-color);
+  background: var(--success-bg);
 }
 
 .btn-copy:hover {

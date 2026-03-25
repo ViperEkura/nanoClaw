@@ -73,14 +73,16 @@ function onContextMenu(e, conv) {
 
 <style scoped>
 .sidebar {
-  width: 280px;
-  min-width: 280px;
+  flex: 0 1 auto;            /* 弹性宽度，可收缩 */
+  width: 260px;              /* 默认宽度 */
+  min-width: 180px;          /* 最小宽度 */
+  max-width: 320px;          /* 最大宽度 */
   background: var(--bg-primary);
   border-right: 1px solid var(--border-medium);
   display: flex;
   flex-direction: column;
   height: 100vh;
-  transition: background 0.2s, border-color 0.2s;
+  transition: all 0.2s;
 }
 
 .sidebar-header {
