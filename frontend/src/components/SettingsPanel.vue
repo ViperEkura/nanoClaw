@@ -1,5 +1,5 @@
 <template>
-  <Transition name="slide">
+  <Transition name="fade">
     <div v-if="visible" class="settings-overlay" @click.self="$emit('close')">
       <div class="settings-panel">
         <div class="settings-header">
@@ -96,10 +96,6 @@
             </button>
           </div>
         </div>
-
-        <div class="settings-stats">
-          <StatsPanel />
-        </div>
       </div>
     </div>
   </Transition>
@@ -109,7 +105,6 @@
 import { reactive, ref, watch, onMounted } from 'vue'
 import { modelApi, conversationApi } from '../api'
 import { useTheme } from '../composables/useTheme'
-import StatsPanel from './StatsPanel.vue'
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
@@ -142,25 +137,32 @@ async function loadModels() {
 function syncFormFromConversation() {
   if (props.conversation) {
     form.title = props.conversation.title || ''
-    form.model = props.conversation.model || ''
     form.system_prompt = props.conversation.system_prompt || ''
     form.temperature = props.conversation.temperature ?? 1.0
     form.max_tokens = props.conversation.max_tokens ?? 65536
     form.thinking_enabled = props.conversation.thinking_enabled ?? false
+    // model: 优先使用 conversation 的值，其次 models 列表第一个
+    if (props.conversation.model) {
+      form.model = props.conversation.model
+    } else if (models.value.length > 0) {
+      form.model = models.value[0].id
+    }
   }
 }
 
-// Sync form when panel opens
-watch(() => props.visible, (visible) => {
-  if (visible) {
+// Sync form when panel opens or conversation changes
+watch([() => props.visible, () => props.conversation, models], () => {
+  if (props.visible) {
     syncFormFromConversation()
   }
-})
+}, { deep: true })
 
 // Auto-save with debounce when form changes
+let saveTimer = null
 watch(form, () => {
   if (props.visible && props.conversation) {
-    saveChanges()
+    if (saveTimer) clearTimeout(saveTimer)
+    saveTimer = setTimeout(saveChanges, 500)
   }
 }, { deep: true })
 
@@ -184,19 +186,20 @@ onMounted(loadModels)
   background: var(--overlay-bg);
   z-index: 100;
   display: flex;
-  justify-content: flex-end;
-  transition: background 0.2s;
+  align-items: center;
+  justify-content: center;
 }
 
 .settings-panel {
-  width: 380px;
-  height: 100vh;
+  width: 90%;
+  max-width: 520px;
+  max-height: 85vh;
   background: var(--bg-primary);
-  border-left: 1px solid var(--border-light);
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
-  transition: background 0.2s, border-color 0.2s;
+  overflow: hidden;
 }
 
 .settings-header {
@@ -231,6 +234,7 @@ onMounted(loadModels)
 .settings-body {
   flex: 1;
   padding: 24px;
+  overflow-y: auto;
 }
 
 .form-group {
@@ -372,31 +376,5 @@ onMounted(loadModels)
   height: 1px;
   background: var(--border-light);
   margin: 24px 0;
-}
-
-.settings-stats {
-  padding: 16px 24px 24px;
-  border-top: 1px solid var(--border-light);
-  background: var(--bg-secondary);
-}
-
-.slide-enter-active,
-.slide-leave-active {
-  transition: transform 0.25s ease;
-}
-
-.slide-enter-active .settings-panel,
-.slide-leave-active .settings-panel {
-  transition: transform 0.25s ease;
-}
-
-.slide-enter-from,
-.slide-leave-to {
-  opacity: 0;
-}
-
-.slide-enter-from .settings-panel,
-.slide-leave-to .settings-panel {
-  transform: translateX(100%);
 }
 </style>

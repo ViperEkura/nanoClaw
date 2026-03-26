@@ -202,17 +202,6 @@ export const projectApi = {
     })
   },
 
-  get(projectId) {
-    return request(`/projects/${projectId}`)
-  },
-
-  update(projectId, data) {
-    return request(`/projects/${projectId}`, {
-      method: 'PUT',
-      body: data,
-    })
-  },
-
   delete(projectId) {
     return request(`/projects/${projectId}`, { method: 'DELETE' })
   },
@@ -222,10 +211,5 @@ export const projectApi = {
       method: 'POST',
       body: data,
     })
-  },
-
-  listFiles(projectId, path = '') {
-    const params = path ? `?path=${encodeURIComponent(path)}` : ''
-    return request(`/projects/${projectId}/files${params}`)
   },
 }

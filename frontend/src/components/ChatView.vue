@@ -10,10 +10,17 @@
       <div class="chat-header">
         <div class="chat-title-area">
           <h2 class="chat-title">{{ conversation.title || '新对话' }}</h2>
-          <span class="model-badge">{{ conversation.model }}</span>
+          <span class="model-badge">{{ formatModelName(conversation.model) }}</span>
           <span v-if="conversation.thinking_enabled" class="thinking-badge">思考</span>
         </div>
         <div class="chat-actions">
+          <button class="btn-icon" @click="$emit('toggleStats')" title="使用统计">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 20V10"/>
+              <path d="M12 20V4"/>
+              <path d="M6 20v-6"/>
+            </svg>
+          </button>
           <button class="btn-icon" @click="$emit('toggleSettings')" title="设置">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="3"></circle>
@@ -23,7 +30,7 @@
         </div>
       </div>
 
-      <div ref="scrollContainer" class="messages-container" @scroll="onScroll">
+      <div ref="scrollContainer" class="messages-container">
         <div v-if="hasMoreMessages" class="load-more-top">
           <button @click="$emit('loadMoreMessages')" :disabled="loadingMore">
             {{ loadingMore ? '加载中...' : '加载更早的消息' }}
@@ -54,15 +61,9 @@
                 :thinking-content="streamingThinking"
                 :tool-calls="streamingToolCalls"
                 :process-steps="streamingProcessSteps"
+                :streaming-content="streamingContent"
                 :streaming="streaming"
               />
-              <div class="md-content streaming-content" v-html="renderedStreamContent || '<span class=\'placeholder\'>...</span>'"></div>
-              <div class="streaming-indicator">
-                <svg class="spinner" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
-                </svg>
-                <span>正在生成...</span>
-              </div>
             </div>
           </div>
         </div>
@@ -80,11 +81,11 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, watch, nextTick, onMounted } from 'vue'
 import MessageBubble from './MessageBubble.vue'
 import MessageInput from './MessageInput.vue'
 import ProcessBlock from './ProcessBlock.vue'
-import { renderMarkdown } from '../utils/markdown'
+import { modelApi } from '../api'
 
 const props = defineProps({
   conversation: { type: Object, default: null },
@@ -99,14 +100,27 @@ const props = defineProps({
   toolsEnabled: { type: Boolean, default: true },
 })
 
-const emit = defineEmits(['sendMessage', 'deleteMessage', 'regenerateMessage', 'toggleSettings', 'loadMoreMessages', 'toggleTools'])
+const emit = defineEmits(['sendMessage', 'deleteMessage', 'regenerateMessage', 'toggleSettings', 'toggleStats', 'loadMoreMessages', 'toggleTools'])
 
 const scrollContainer = ref(null)
 const inputRef = ref(null)
+const modelNameMap = ref({})
 
-const renderedStreamContent = computed(() => {
-  if (!props.streamingContent) return ''
-  return renderMarkdown(props.streamingContent)
+function formatModelName(modelId) {
+  return modelNameMap.value[modelId] || modelId
+}
+
+onMounted(async () => {
+  try {
+    const res = await modelApi.getCached()
+    const map = {}
+    for (const m of res.data) {
+      if (m.id && m.name) map[m.id] = m.name
+    }
+    modelNameMap.value = map
+  } catch (e) {
+    console.warn('Failed to load model names:', e)
+  }
 })
 
 function handleSend(data) {
@@ -120,12 +134,6 @@ function scrollToBottom(smooth = true) {
       el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'instant' })
     }
   })
-}
-
-function onScroll(e) {
-  if (e.target.scrollTop < 50 && props.hasMoreMessages && !props.loadingMore) {
-    // emit loadMore if needed
-  }
 }
 
 watch(() => props.messages.length, () => {
@@ -147,14 +155,13 @@ defineExpose({ scrollToBottom })
 
 <style scoped>
 .chat-view {
-  flex: 1 1 auto;            /* 弹性宽度，自动填充剩余空间 */
+  flex: 1 1 0;
   display: flex;
   flex-direction: column;
   height: 100vh;
   background: var(--bg-secondary);
-  min-width: 300px;          /* 最小宽度保证可用性 */
+  min-width: 0;
   overflow: hidden;
-  transition: background 0.2s;
 }
 
 .welcome {
@@ -170,7 +177,6 @@ defineExpose({ scrollToBottom })
   width: 64px;
   height: 64px;
   border-radius: 16px;
-  background: none;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -216,22 +222,30 @@ defineExpose({ scrollToBottom })
   text-overflow: ellipsis;
 }
 
-.model-badge {
+.badge {
   font-size: 11px;
   padding: 2px 8px;
   border-radius: 10px;
-  background: var(--accent-primary-light);
-  color: var(--accent-primary);
   flex-shrink: 0;
 }
 
+.model-badge {
+  background: var(--accent-primary-medium);
+  color: var(--accent-primary);
+  font-size: 13px;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-weight: 500;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
 .thinking-badge {
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 10px;
   background: var(--success-bg);
   color: var(--success-color);
-  flex-shrink: 0;
 }
 
 .chat-actions {
@@ -302,25 +316,15 @@ defineExpose({ scrollToBottom })
 }
 
 .messages-list {
-  flex: 0 1 auto;           /* 弹性宽度 */
   width: 80%;
-  margin: 0 auto;           /* 居中显示 */
-  padding: 0 16px;          /* 左右内边距 */
+  margin: 0 auto;
+  padding: 0 16px;
 }
 
 .message-bubble {
   display: flex;
   gap: 12px;
-  padding: 0;
   margin-bottom: 16px;
-  width: 100%;
-}
-
-.message-bubble.assistant {
-  width: 100%;
-}
-
-.message-bubble.assistant.streaming {
   width: 100%;
 }
 
@@ -363,28 +367,6 @@ defineExpose({ scrollToBottom })
   border-radius: 12px;
   background: var(--bg-primary);
   transition: background 0.2s, border-color 0.2s;
-}
-
-.message-bubble.streaming .message-body {
-  flex: 1;
-}
-
-.streaming-content {
-}
-
-.streaming-indicator {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border-light);
-  font-size: 12px;
-  color: var(--text-tertiary);
-}
-
-.streaming-content :deep(.placeholder) {
-  color: var(--text-tertiary);
 }
 
 </style>

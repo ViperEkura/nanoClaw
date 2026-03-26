@@ -402,7 +402,7 @@ def process_tool_calls(self, tool_calls, context=None):
 | `message` | 回复内容的增量片段 |
 | `tool_calls` | 工具调用信息 |
 | `tool_result` | 工具执行结果 |
-| `process_step` | 处理步骤（按顺序：thinking/tool_call/tool_result），支持交替显示 |
+| `process_step` | 处理步骤（按顺序：thinking/text/tool_call/tool_result），支持穿插显示 |
 | `error` | 错误信息 |
 | `done` | 回复结束，携带 message_id 和 token_count |
 
@@ -412,11 +412,14 @@ def process_tool_calls(self, tool_calls, context=None):
 // 思考过程
 {"index": 0, "type": "thinking", "content": "完整思考内容..."}
 
+// 回复文本（可穿插在任意步骤之间）
+{"index": 1, "type": "text", "content": "回复文本内容..."}
+
 // 工具调用
-{"index": 1, "type": "tool_call", "id": "call_abc123", "name": "web_search", "arguments": "{\"query\": \"...\"}"}
+{"index": 2, "type": "tool_call", "id": "call_abc123", "name": "web_search", "arguments": "{\"query\": \"...\"}"}
 
 // 工具返回
-{"index": 2, "type": "tool_result", "id": "call_abc123", "name": "web_search", "content": "{\"success\": true, ...}", "skipped": false}
+{"index": 3, "type": "tool_result", "id": "call_abc123", "name": "web_search", "content": "{\"success\": true, ...}", "skipped": false}
 ```
 
 字段说明：

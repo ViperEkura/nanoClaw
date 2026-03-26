@@ -1,4 +1,119 @@
-/* Markdown content shared styles */
+/* ============ Global Reset & Base ============ */
+:root {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8fafc;
+  --bg-tertiary: #f0f4f8;
+  --bg-hover: rgba(37, 99, 235, 0.06);
+  --bg-active: rgba(37, 99, 235, 0.12);
+  --bg-input: #f8fafc;
+  --bg-code: #f1f5f9;
+  --bg-thinking: #f1f5f9;
+
+  --text-primary: #1e293b;
+  --text-secondary: #64748b;
+  --text-tertiary: #94a3b8;
+
+  --border-light: rgba(0, 0, 0, 0.06);
+  --border-medium: rgba(0, 0, 0, 0.08);
+  --border-input: rgba(0, 0, 0, 0.08);
+
+  --accent-primary: #2563eb;
+  --accent-primary-hover: #3b82f6;
+  --accent-primary-light: rgba(37, 99, 235, 0.08);
+  --accent-primary-medium: rgba(37, 99, 235, 0.15);
+
+  --success-color: #059669;
+  --success-bg: rgba(16, 185, 129, 0.1);
+  --danger-color: #ef4444;
+  --danger-bg: rgba(239, 68, 68, 0.08);
+
+  --scrollbar-thumb: rgba(0, 0, 0, 0.08);
+  --scrollbar-thumb-sidebar: rgba(0, 0, 0, 0.1);
+
+  --overlay-bg: rgba(0, 0, 0, 0.3);
+  --avatar-gradient: linear-gradient(135deg, #3b82f6, #60a5fa);
+}
+
+[data-theme="dark"] {
+  --bg-primary: #1a1a1a;
+  --bg-secondary: #141414;
+  --bg-tertiary: #0a0a0a;
+  --bg-hover: rgba(255, 255, 255, 0.08);
+  --bg-active: rgba(255, 255, 255, 0.12);
+  --bg-input: #141414;
+  --bg-code: #141414;
+  --bg-thinking: #141414;
+
+  --text-primary: #f0f0f0;
+  --text-secondary: #a0a0a0;
+  --text-tertiary: #606060;
+
+  --border-light: rgba(255, 255, 255, 0.08);
+  --border-medium: rgba(255, 255, 255, 0.12);
+  --border-input: rgba(255, 255, 255, 0.1);
+
+  --accent-primary: #3b82f6;
+  --accent-primary-hover: #60a5fa;
+  --accent-primary-light: rgba(59, 130, 246, 0.15);
+  --accent-primary-medium: rgba(59, 130, 246, 0.25);
+
+  --success-color: #34d399;
+  --success-bg: rgba(52, 211, 153, 0.15);
+  --danger-color: #f87171;
+  --danger-bg: rgba(248, 113, 113, 0.15);
+
+  --scrollbar-thumb: rgba(255, 255, 255, 0.1);
+  --scrollbar-thumb-sidebar: rgba(255, 255, 255, 0.15);
+
+  --overlay-bg: rgba(0, 0, 0, 0.6);
+  --avatar-gradient: linear-gradient(135deg, #3b82f6, #60a5fa);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC', sans-serif;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  transition: background 0.2s, color 0.2s;
+}
+
+#app {
+  height: 100%;
+}
+
+/* ============ Transitions ============ */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+/* ============ Animations ============ */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+/* ============ Markdown content shared styles ============ */
 .md-content {
   font-size: 15px;
   line-height: 1.7;
@@ -6,32 +121,126 @@
   word-break: break-word;
 }
 
-.md-content :deep(p) {
+.md-content p {
   margin: 0 0 8px;
 }
 
-.md-content :deep(p:last-child) {
+.md-content p:last-child {
   margin-bottom: 0;
 }
 
-.md-content :deep(pre) {
+.md-content hr {
+  border: none;
+  border-top: 1px solid var(--border-light);
+  margin: 16px 0;
+}
+
+.md-content pre {
   background: var(--bg-code);
   border: 1px solid var(--border-light);
   border-radius: 8px;
-  padding: 16px;
+  padding: 12px;
   overflow-x: auto;
   margin: 8px 0;
   max-width: 100%;
-  position: relative;
 }
 
-.md-content :deep(pre code) {
+.md-content pre code {
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 13px;
   line-height: 1.5;
 }
 
-.md-content :deep(code) {
+/* 代码块滚动条 */
+.md-content pre::-webkit-scrollbar {
+  height: 6px;
+}
+
+.md-content pre::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.md-content pre::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 3px;
+}
+
+.md-content pre::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
+
+/* 代码块头部：语言标签 + 复制按钮 */
+.code-block {
+  background: var(--bg-code);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  margin: 8px 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.code-block pre {
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.code-block pre code {
+  display: block;
+  padding: 12px 12px 12px 16px;
+  overflow-x: auto;
+}
+
+.code-block pre code::-webkit-scrollbar {
+  height: 6px;
+}
+
+.code-block pre code::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.code-block pre code::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 3px;
+}
+
+.code-block pre code::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
+
+.code-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px 6px 16px;
+  background: var(--bg-code);
+}
+
+.code-lang {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.code-copy-btn {
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+
+.code-copy-btn:hover {
+  color: var(--accent-primary);
+  background: var(--accent-primary-light);
+}
+
+.md-content code {
   background: var(--accent-primary-light);
   color: var(--accent-primary);
   padding: 2px 6px;
@@ -40,43 +249,43 @@
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
 }
 
-.md-content :deep(pre code) {
+.md-content pre code {
   background: none;
   color: inherit;
   padding: 0;
 }
 
-.md-content :deep(ul),
-.md-content :deep(ol) {
+.md-content ul,
+.md-content ol {
   padding-left: 20px;
   margin: 8px 0;
 }
 
-.md-content :deep(blockquote) {
+.md-content blockquote {
   border-left: 3px solid rgba(59, 130, 246, 0.4);
   padding-left: 12px;
   color: var(--text-secondary);
   margin: 8px 0;
 }
 
-.md-content :deep(table) {
+.md-content table {
   border-collapse: collapse;
   margin: 8px 0;
   width: 100%;
 }
 
-.md-content :deep(th),
-.md-content :deep(td) {
+.md-content th,
+.md-content td {
   border: 1px solid var(--border-medium);
   padding: 8px 12px;
   text-align: left;
 }
 
-.md-content :deep(th) {
+.md-content th {
   background: var(--bg-code);
 }
 
-.md-content :deep(.math-block) {
+.md-content .math-block {
   display: block;
   text-align: center;
   padding: 12px 0;
@@ -84,26 +293,7 @@
   overflow-x: auto;
 }
 
-/* 共享滚动条样式 */
-.custom-scrollbar::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
-  border-radius: 3px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: var(--text-tertiary);
-}
-
-/* Textarea 滚动条 */
+/* ============ Scrollbar ============ */
 textarea::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -122,48 +312,63 @@ textarea::-webkit-scrollbar-thumb:hover {
   background: var(--text-tertiary);
 }
 
-/* Textarea resize 手柄修复 */
 textarea::-webkit-resizer {
   background: transparent;
 }
 
-/* Range 滑块样式 */
+/* ============ Range Slider ============ */
 input[type="range"] {
   width: 100%;
-  height: 6px;
+  height: 8px;
+  min-height: 8px;
   -webkit-appearance: none;
   appearance: none;
   background: var(--border-medium);
-  border-radius: 3px;
+  border-radius: 4px;
   outline: none;
   cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 4px;
 }
 
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   background: var(--accent-primary);
+  border: 3px solid var(--bg-primary);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
   cursor: pointer;
+  margin-top: -6px;
   transition: transform 0.15s;
 }
 
 input[type="range"]::-webkit-slider-thumb:hover {
-  transform: scale(1.1);
+  transform: scale(1.15);
+}
+
+input[type="range"]::-moz-range-track {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--border-medium);
 }
 
 input[type="range"]::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   background: var(--accent-primary);
+  border: 3px solid var(--bg-primary);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
   cursor: pointer;
-  border: none;
 }
 
-/* 按钮基础样式 */
+/* ============ Button Base ============ */
 .btn-icon {
   display: flex;
   align-items: center;
@@ -184,33 +389,4 @@ input[type="range"]::-moz-range-thumb {
 .btn-icon:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-/* 表单元素基础样式 */
-.form-input {
-  width: 100%;
-  padding: 10px 12px;
-  background: var(--bg-input);
-  border: 1px solid var(--border-input);
-  border-radius: 8px;
-  color: var(--text-primary);
-  font-size: 14px;
-  font-family: inherit;
-  outline: none;
-  transition: border-color 0.2s, background 0.2s;
-  box-sizing: border-box;
-}
-
-.form-input:focus {
-  border-color: var(--accent-primary);
-}
-
-/* 动画 */
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-.spinner {
-  animation: spin 1s linear infinite;
 }

@@ -1,127 +1,219 @@
 <template>
   <div class="stats-panel">
     <div class="stats-header">
-      <h4>Token 使用统计</h4>
-      <div class="period-tabs">
-        <button
-          v-for="p in periods"
-          :key="p.value"
-          :class="['tab', { active: period === p.value }]"
-          @click="changePeriod(p.value)"
-        >
-          {{ p.label }}
+      <div class="stats-title">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 20V10"/>
+          <path d="M12 20V4"/>
+          <path d="M6 20v-6"/>
+        </svg>
+        <h4>使用统计</h4>
+      </div>
+      <div class="header-actions">
+        <div class="period-tabs">
+          <button
+            v-for="p in periods"
+            :key="p.value"
+            :class="['tab', { active: period === p.value }]"
+            @click="changePeriod(p.value)"
+          >
+            {{ p.label }}
+          </button>
+        </div>
+        <button class="btn-close" @click="$emit('close')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
         </button>
       </div>
     </div>
 
-    <div v-if="loading" class="stats-loading">加载中...</div>
+    <div v-if="loading" class="stats-loading">
+      <svg class="spinner" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+      </svg>
+      加载中...
+    </div>
 
     <template v-else-if="stats">
+      <!-- 统计卡片 -->
       <div class="stats-summary">
         <div class="stat-card">
-          <div class="stat-label">输入 Token</div>
-          <div class="stat-value">{{ formatNumber(stats.prompt_tokens) }}</div>
+          <div class="stat-icon input-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+              <path d="M18.375 2.625a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4Z"/>
+            </svg>
+          </div>
+          <div class="stat-info">
+            <span class="stat-label">输入</span>
+            <span class="stat-value">{{ formatNumber(stats.prompt_tokens) }}</span>
+          </div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">输出 Token</div>
-          <div class="stat-value">{{ formatNumber(stats.completion_tokens) }}</div>
+          <div class="stat-icon output-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+            </svg>
+          </div>
+          <div class="stat-info">
+            <span class="stat-label">输出</span>
+            <span class="stat-value">{{ formatNumber(stats.completion_tokens) }}</span>
+          </div>
         </div>
-        <div class="stat-card highlight">
-          <div class="stat-label">总计</div>
-          <div class="stat-value">{{ formatNumber(stats.total_tokens) }}</div>
+        <div class="stat-card total">
+          <div class="stat-icon total-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+            </svg>
+          </div>
+          <div class="stat-info">
+            <span class="stat-label">总计</span>
+            <span class="stat-value">{{ formatNumber(stats.total_tokens) }}</span>
+          </div>
         </div>
       </div>
 
-      <div v-if="period !== 'daily' && stats.daily" class="stats-chart">
-        <div class="chart-title">每日使用趋势</div>
+      <!-- 趋势图 -->
+      <div v-if="period !== 'daily' && stats.daily && chartData.length > 0" class="stats-chart">
+        <div class="chart-title">每日趋势</div>
         <div class="chart-container">
           <svg class="line-chart" :viewBox="`0 0 ${chartWidth} ${chartHeight}`">
+            <defs>
+              <linearGradient id="areaGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" :stop-color="accentColor" stop-opacity="0.25"/>
+                <stop offset="100%" :stop-color="accentColor" stop-opacity="0.02"/>
+              </linearGradient>
+            </defs>
             <!-- 网格线 -->
-            <g class="grid-lines">
-              <line
-                v-for="i in 4"
-                :key="'grid-' + i"
-                :x1="padding"
-                :y1="padding + (chartHeight - 2 * padding) * (i - 1) / 4"
-                :x2="chartWidth - padding"
-                :y2="padding + (chartHeight - 2 * padding) * (i - 1) / 4"
-                stroke="var(--border-light)"
-                stroke-dasharray="4,4"
-              />
-            </g>
-            
-            <!-- 填充区域 -->
-            <path
-              :d="areaPath"
-              fill="url(#gradient)"
-              opacity="0.3"
+            <line
+              v-for="i in 4"
+              :key="'grid-' + i"
+              :x1="padding"
+              :y1="padding + (chartHeight - 2 * padding) * (i - 1) / 3"
+              :x2="chartWidth - padding"
+              :y2="padding + (chartHeight - 2 * padding) * (i - 1) / 3"
+              stroke="var(--border-light)"
+              stroke-dasharray="3,3"
             />
-            
+            <!-- Y轴标签 -->
+            <text
+              v-for="i in 4"
+              :key="'yl-' + i"
+              :x="padding - 4"
+              :y="padding + (chartHeight - 2 * padding) * (i - 1) / 3 + 3"
+              text-anchor="end"
+              class="y-label"
+            >{{ formatNumber(maxValue - (maxValue * (i - 1)) / 3) }}</text>
+            <!-- 填充区域 -->
+            <path :d="areaPath" fill="url(#areaGradient)"/>
             <!-- 折线 -->
             <path
               :d="linePath"
               fill="none"
-              stroke="var(--accent-primary)"
+              :stroke="accentColor"
               stroke-width="2"
               stroke-linecap="round"
               stroke-linejoin="round"
             />
-            
             <!-- 数据点 -->
-            <g class="data-points">
-              <circle
-                v-for="(point, idx) in chartPoints"
-                :key="idx"
-                :cx="point.x"
-                :cy="point.y"
-                r="4"
-                fill="var(--accent-primary)"
-                stroke="var(--bg-primary)"
-                stroke-width="2"
-                class="data-point"
-                @mouseenter="hoveredPoint = idx"
-                @mouseleave="hoveredPoint = null"
-              />
-            </g>
-            
-            <!-- 渐变定义 -->
-            <defs>
-              <linearGradient id="gradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stop-color="var(--accent-primary)" />
-                <stop offset="100%" stop-color="var(--accent-primary)" stop-opacity="0" />
-              </linearGradient>
-            </defs>
+            <circle
+              v-for="(point, idx) in chartPoints"
+              :key="idx"
+              :cx="point.x"
+              :cy="point.y"
+              r="3"
+              :fill="accentColor"
+              stroke="var(--bg-primary)"
+              stroke-width="2"
+              class="data-point"
+              @mouseenter="hoveredPoint = idx"
+              @mouseleave="hoveredPoint = null"
+            />
+            <!-- 竖线指示 -->
+            <line
+              v-if="hoveredPoint !== null && chartPoints[hoveredPoint]"
+              :x1="chartPoints[hoveredPoint].x"
+              :y1="padding"
+              :x2="chartPoints[hoveredPoint].x"
+              :y2="chartHeight - padding"
+              stroke="var(--border-medium)"
+              stroke-dasharray="3,3"
+            />
           </svg>
-          
+
           <!-- X轴标签 -->
           <div class="x-labels">
             <span
-              v-for="(data, date) in sortedDaily"
-              :key="date"
+              v-for="(point, idx) in chartPoints"
+              :key="idx"
               class="x-label"
+              :class="{ active: hoveredPoint === idx }"
             >
-              {{ formatDateLabel(date) }}
+              {{ formatDateLabel(point.date) }}
             </span>
           </div>
-          
+
           <!-- 悬浮提示 -->
+          <Transition name="fade">
+            <div
+              v-if="hoveredPoint !== null && chartPoints[hoveredPoint]"
+              class="tooltip"
+              :style="{
+                left: chartPoints[hoveredPoint].x + 'px',
+                top: (chartPoints[hoveredPoint].y - 52) + 'px'
+              }"
+            >
+              <div class="tooltip-date">{{ formatFullDate(chartPoints[hoveredPoint].date) }}</div>
+              <div class="tooltip-row">
+                <span class="tooltip-dot prompt"></span>
+                输入 {{ formatNumber(chartPoints[hoveredPoint].prompt) }}
+              </div>
+              <div class="tooltip-row">
+                <span class="tooltip-dot completion"></span>
+                输出 {{ formatNumber(chartPoints[hoveredPoint].completion) }}
+              </div>
+              <div class="tooltip-total">{{ formatNumber(chartPoints[hoveredPoint].value) }} tokens</div>
+            </div>
+          </Transition>
+        </div>
+      </div>
+
+      <!-- 按模型分布 -->
+      <div v-if="stats.by_model" class="stats-by-model">
+        <div class="model-title">模型分布</div>
+        <div class="model-list">
           <div
-            v-if="hoveredPoint !== null && chartPoints[hoveredPoint]"
-            class="tooltip"
-            :style="{ left: chartPoints[hoveredPoint].x + 'px', top: (chartPoints[hoveredPoint].y - 40) + 'px' }"
+            v-for="(data, model) in stats.by_model"
+            :key="model"
+            class="model-row"
           >
-            <div class="tooltip-date">{{ chartPoints[hoveredPoint].date }}</div>
-            <div class="tooltip-value">{{ formatNumber(chartPoints[hoveredPoint].value) }} tokens</div>
+            <div class="model-info">
+              <span class="model-name">{{ model }}</span>
+              <span class="model-value">{{ formatNumber(data.total) }} <span class="model-unit">tokens</span></span>
+            </div>
+            <div class="model-bar-bg">
+              <div
+                class="model-bar-fill"
+                :style="{ width: (data.total / maxModelTokens * 100) + '%' }"
+              ></div>
+            </div>
           </div>
         </div>
       </div>
 
-      <div v-if="period === 'daily' && stats.by_model" class="stats-by-model">
-        <div class="model-title">按模型分布</div>
-        <div v-for="(data, model) in stats.by_model" :key="model" class="model-row">
-          <span class="model-name">{{ model }}</span>
-          <span class="model-value">{{ formatNumber(data.total) }}</span>
-        </div>
+      <!-- 空状态 -->
+      <div v-if="!stats.total_tokens" class="stats-empty">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M18 20V10"/>
+          <path d="M12 20V4"/>
+          <path d="M6 20v-6"/>
+        </svg>
+        <span>暂无使用数据</span>
       </div>
     </template>
   </div>
@@ -130,6 +222,11 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { statsApi } from '../api'
+import { useTheme } from '../composables/useTheme'
+
+const emit = defineEmits(['close'])
+
+const { isDark } = useTheme()
 
 const periods = [
   { value: 'daily', label: '今日' },
@@ -142,9 +239,11 @@ const stats = ref(null)
 const loading = ref(false)
 const hoveredPoint = ref(null)
 
+const accentColor = computed(() => isDark.value ? '#60a5fa' : '#2563eb')
+
 const chartWidth = 320
-const chartHeight = 160
-const padding = 20
+const chartHeight = 140
+const padding = 32
 
 const sortedDaily = computed(() => {
   if (!stats.value?.daily) return {}
@@ -158,8 +257,8 @@ const chartData = computed(() => {
   return Object.entries(data).map(([date, val]) => ({
     date,
     value: val.total,
-    prompt: val.prompt,
-    completion: val.completion,
+    prompt: val.prompt || 0,
+    completion: val.completion || 0,
   }))
 })
 
@@ -168,18 +267,27 @@ const maxValue = computed(() => {
   return Math.max(100, ...chartData.value.map(d => d.value))
 })
 
+const maxModelTokens = computed(() => {
+  if (!stats.value?.by_model) return 1
+  return Math.max(1, ...Object.values(stats.value.by_model).map(d => d.total))
+})
+
 const chartPoints = computed(() => {
   const data = chartData.value
   if (data.length === 0) return []
-  
+
   const xRange = chartWidth - 2 * padding
   const yRange = chartHeight - 2 * padding
-  
+
   return data.map((d, i) => ({
-    x: padding + (i / Math.max(1, data.length - 1)) * xRange,
+    x: data.length === 1
+      ? chartWidth / 2
+      : padding + (i / Math.max(1, data.length - 1)) * xRange,
     y: chartHeight - padding - (d.value / maxValue.value) * yRange,
     date: d.date,
     value: d.value,
+    prompt: d.prompt,
+    completion: d.completion,
   }))
 })
 
@@ -192,16 +300,13 @@ const linePath = computed(() => {
 const areaPath = computed(() => {
   const points = chartPoints.value
   if (points.length === 0) return ''
-  
-  const xRange = chartWidth - 2 * padding
-  const startX = padding
-  const endX = chartWidth - padding
+
   const baseY = chartHeight - padding
-  
-  let path = `M ${startX} ${baseY} `
+
+  let path = `M ${points[0].x} ${baseY} `
   path += points.map(p => `L ${p.x} ${p.y}`).join(' ')
-  path += ` L ${endX} ${baseY} Z`
-  
+  path += ` L ${points[points.length - 1].x} ${baseY} Z`
+
   return path
 })
 
@@ -210,7 +315,13 @@ function formatDateLabel(dateStr) {
   return `${d.getMonth() + 1}/${d.getDate()}`
 }
 
+function formatFullDate(dateStr) {
+  const d = new Date(dateStr)
+  return `${d.getMonth() + 1}月${d.getDate()}日`
+}
+
 function formatNumber(num) {
+  if (!num) return '0'
   if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M'
   if (num >= 1000) return (num / 1000).toFixed(1) + 'K'
   return num.toString()
@@ -230,6 +341,7 @@ async function loadStats() {
 
 function changePeriod(p) {
   period.value = p
+  hoveredPoint.value = null
   loadStats()
 }
 
@@ -238,25 +350,60 @@ onMounted(loadStats)
 
 <style scoped>
 .stats-panel {
-  padding: 16px 0;
+  padding: 0;
 }
 
 .stats-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 
-.stats-header h4 {
-  margin: 0;
-  font-size: 14px;
+.stats-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   color: var(--text-primary);
+}
+
+.stats-title svg {
+  color: var(--text-tertiary);
+}
+
+.stats-title h4 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn-close {
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-close:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
 }
 
 .period-tabs {
   display: flex;
-  gap: 4px;
+  gap: 2px;
   background: var(--bg-input);
   padding: 3px;
   border-radius: 8px;
@@ -266,79 +413,140 @@ onMounted(loadStats)
   padding: 4px 12px;
   border: none;
   background: none;
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
   font-size: 12px;
   cursor: pointer;
   border-radius: 6px;
-  transition: all 0.15s;
+  transition: all 0.2s;
+}
+
+.tab:hover {
+  color: var(--text-secondary);
 }
 
 .tab.active {
   background: var(--accent-primary);
   color: white;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.3);
 }
 
 .stats-loading {
-  text-align: center;
-  padding: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
   color: var(--text-tertiary);
+  font-size: 13px;
 }
 
+/* 统计卡片 */
 .stats-summary {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
+  gap: 10px;
   margin-bottom: 16px;
 }
 
 .stat-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   background: var(--bg-input);
-  border-radius: 8px;
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
   padding: 12px;
-  text-align: center;
+  transition: border-color 0.2s;
 }
 
-.stat-card.highlight {
+.stat-card:hover {
+  border-color: var(--border-medium);
+}
+
+.stat-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.input-icon {
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+}
+
+.output-icon {
+  background: rgba(168, 85, 247, 0.1);
+  color: #a855f7;
+}
+
+.total-icon {
+  background: rgba(34, 197, 94, 0.1);
+  color: #22c55e;
+}
+
+.stat-card.total {
   background: var(--accent-primary-light);
+  border-color: rgba(37, 99, 235, 0.15);
+}
+
+.stat-card.total .total-icon {
+  background: rgba(37, 99, 235, 0.15);
+  color: var(--accent-primary);
+}
+
+.stat-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .stat-label {
   font-size: 11px;
   color: var(--text-tertiary);
-  margin-bottom: 4px;
+  font-weight: 500;
 }
 
 .stat-value {
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
+  line-height: 1.3;
 }
 
-.stat-card.highlight .stat-value {
-  color: var(--accent-primary);
-}
-
+/* 趋势图 */
 .stats-chart {
-  margin-top: 16px;
+  margin-bottom: 16px;
 }
 
 .chart-title,
 .model-title {
   font-size: 12px;
   color: var(--text-secondary);
-  margin-bottom: 12px;
+  font-weight: 500;
+  margin-bottom: 10px;
 }
 
 .chart-container {
   background: var(--bg-input);
-  border-radius: 8px;
-  padding: 16px;
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  padding: 12px 8px 8px 8px;
   position: relative;
+  overflow: hidden;
 }
 
 .line-chart {
   width: 100%;
-  height: 160px;
+  height: 140px;
+}
+
+.y-label {
+  fill: var(--text-tertiary);
+  font-size: 9px;
 }
 
 .data-point {
@@ -347,65 +555,149 @@ onMounted(loadStats)
 }
 
 .data-point:hover {
-  r: 6;
+  r: 5;
 }
 
 .x-labels {
   display: flex;
   justify-content: space-between;
-  margin-top: 8px;
-  padding: 0 20px;
+  margin-top: 6px;
+  padding: 0 28px 0 32px;
 }
 
 .x-label {
   font-size: 10px;
   color: var(--text-tertiary);
+  transition: color 0.15s;
 }
 
+.x-label.active {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* 提示框 */
 .tooltip {
   position: absolute;
   background: var(--bg-primary);
-  color: var(--text-primary);
-  padding: 6px 10px;
-  border-radius: 6px;
+  border: 1px solid var(--border-medium);
+  padding: 8px 10px;
+  border-radius: 8px;
   font-size: 11px;
   pointer-events: none;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
   transform: translateX(-50%);
   z-index: 10;
+  min-width: 120px;
 }
 
 .tooltip-date {
   color: var(--text-tertiary);
   font-size: 10px;
+  margin-bottom: 4px;
 }
 
-.tooltip-value {
+.tooltip-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.tooltip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.tooltip-dot.prompt {
+  background: #3b82f6;
+}
+
+.tooltip-dot.completion {
+  background: #a855f7;
+}
+
+.tooltip-total {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border-light);
   font-weight: 600;
-  color: var(--accent-primary);
+  color: var(--text-primary);
+  font-size: 12px;
 }
 
+/* 模型分布 */
 .stats-by-model {
-  margin-top: 16px;
+  margin-bottom: 4px;
+}
+
+.model-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .model-row {
   display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.model-info {
+  display: flex;
   justify-content: space-between;
-  padding: 8px 12px;
-  background: var(--bg-input);
-  border-radius: 6px;
-  margin-bottom: 6px;
+  align-items: baseline;
 }
 
 .model-name {
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--text-primary);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 60%;
 }
 
 .model-value {
   font-size: 12px;
-  font-weight: 500;
-  color: var(--text-primary);
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.model-unit {
+  font-weight: 400;
+  color: var(--text-tertiary);
+}
+
+.model-bar-bg {
+  width: 100%;
+  height: 6px;
+  background: var(--bg-tertiary);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.model-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-primary), #a855f7);
+  border-radius: 3px;
+  transition: width 0.5s ease;
+  min-width: 4px;
+}
+
+/* 空状态 */
+.stats-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 24px;
+  color: var(--text-tertiary);
+  font-size: 13px;
 }
 </style>

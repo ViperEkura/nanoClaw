@@ -27,7 +27,7 @@
         <input
           ref="fileInputRef"
           type="file"
-          accept=".txt,.md,.json,.xml,.html,.css,.js,.ts,.jsx,.tsx,.py,.java,.c,.cpp,.h,.hpp,.yaml,.yml,.toml,.ini,.csv,.sql,.sh,.bat,.log,.vue,.svelte,.go,.rs,.rb,.php,.swift,.kt,.scala,.lua,.r,.dart,.scala"
+          accept=".txt,.md,.json,.xml,.html,.css,.js,.ts,.jsx,.tsx,.py,.java,.c,.cpp,.h,.hpp,.yaml,.yml,.toml,.ini,.csv,.sql,.sh,.bat,.log,.vue,.svelte,.go,.rs,.rb,.php,.swift,.kt,.scala,.lua,.r,.dart"
           @change="handleFileUpload"
           style="display: none"
         />

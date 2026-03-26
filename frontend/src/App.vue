@@ -14,7 +14,6 @@
     />
 
     <ChatView
-      ref="chatViewRef"
       :conversation="currentConv"
       :messages="messages"
       :streaming="streaming"
@@ -29,16 +28,26 @@
       @delete-message="deleteMessage"
       @regenerate-message="regenerateMessage"
       @toggle-settings="showSettings = true"
+      @toggle-stats="showStats = true"
       @load-more-messages="loadMoreMessages"
       @toggle-tools="updateToolsEnabled"
     />
 
     <SettingsPanel
+      v-if="showSettings"
       :visible="showSettings"
       :conversation="currentConv"
       @close="showSettings = false"
       @save="saveSettings"
     />
+
+    <Transition name="fade">
+      <div v-if="showStats" class="modal-overlay" @click.self="showStats = false">
+        <div class="modal-content">
+          <StatsPanel @close="showStats = false" />
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -47,9 +56,8 @@ import { ref, computed, onMounted } from 'vue'
 import Sidebar from './components/Sidebar.vue'
 import ChatView from './components/ChatView.vue'
 import SettingsPanel from './components/SettingsPanel.vue'
+import StatsPanel from './components/StatsPanel.vue'
 import { conversationApi, messageApi } from './api'
-
-const chatViewRef = ref(null)
 
 // -- Conversations state --
 const conversations = ref([])
@@ -71,6 +79,15 @@ const streamThinking = ref('')
 const streamToolCalls = ref([])
 const streamProcessSteps = ref([])
 
+function resetStreamState() {
+  streaming.value = false
+  streamContent.value = ''
+  streamThinking.value = ''
+  streamToolCalls.value = []
+  streamProcessSteps.value = []
+  currentStreamPromise = null
+}
+
 // 保存每个对话的流式状态
 const streamStates = new Map()
 
@@ -79,6 +96,7 @@ let currentStreamPromise = null
 
 // -- UI state --
 const showSettings = ref(false)
+const showStats = ref(false)
 const toolsEnabled = ref(localStorage.getItem('tools_enabled') !== 'false') // 默认开启
 const currentProject = ref(null) // Current selected project
 
@@ -267,21 +285,15 @@ function createStreamCallbacks(convId, { updateConvList = true } = {}) {
           token_count: data.token_count,
           created_at: new Date().toISOString(),
         })
-        streamContent.value = ''
-        streamThinking.value = ''
-        streamToolCalls.value = []
-        streamProcessSteps.value = []
+        resetStreamState()
 
         if (updateConvList) {
           const idx = conversations.value.findIndex(c => c.id === convId)
-          if (idx > 0) {
-            const [conv] = conversations.value.splice(idx, 1)
+          if (idx >= 0) {
+            const conv = idx > 0 ? conversations.value.splice(idx, 1)[0] : conversations.value[0]
             conv.message_count = (conv.message_count || 0) + 2
             if (data.suggested_title) conv.title = data.suggested_title
-            conversations.value.unshift(conv)
-          } else if (idx === 0) {
-            conversations.value[0].message_count = (conversations.value[0].message_count || 0) + 2
-            if (data.suggested_title) conversations.value[0].title = data.suggested_title
+            if (idx > 0) conversations.value.unshift(conv)
           }
         }
       } else {
@@ -301,12 +313,7 @@ function createStreamCallbacks(convId, { updateConvList = true } = {}) {
     onError(msg) {
       streamStates.delete(convId)
       if (currentConvId.value === convId) {
-        streaming.value = false
-        currentStreamPromise = null
-        streamContent.value = ''
-        streamThinking.value = ''
-        streamToolCalls.value = []
-        streamProcessSteps.value = []
+        resetStreamState()
         console.error('Stream error:', msg)
       }
     },
@@ -428,105 +435,29 @@ onMounted(() => {
 </script>
 
 <style>
-:root {
-  /* Light theme */
-  --bg-primary: #ffffff;
-  --bg-secondary: #f8fafc;
-  --bg-tertiary: #f0f4f8;
-  --bg-hover: rgba(37, 99, 235, 0.06);
-  --bg-active: rgba(37, 99, 235, 0.12);
-  --bg-input: #f8fafc;
-  --bg-code: #f1f5f9;
-  --bg-thinking: #f1f5f9;
-
-  --text-primary: #1e293b;
-  --text-secondary: #64748b;
-  --text-tertiary: #94a3b8;
-
-  --border-light: rgba(0, 0, 0, 0.06);
-  --border-medium: rgba(0, 0, 0, 0.08);
-  --border-input: rgba(0, 0, 0, 0.08);
-
-  --accent-primary: #2563eb;
-  --accent-primary-hover: #3b82f6;
-  --accent-primary-light: rgba(37, 99, 235, 0.08);
-  --accent-primary-medium: rgba(37, 99, 235, 0.15);
-
-  --success-color: #059669;
-  --success-bg: rgba(16, 185, 129, 0.1);
-  --danger-color: #ef4444;
-  --danger-bg: rgba(239, 68, 68, 0.08);
-
-  --scrollbar-thumb: rgba(0, 0, 0, 0.08);
-  --scrollbar-thumb-sidebar: rgba(0, 0, 0, 0.1);
-
-  --overlay-bg: rgba(0, 0, 0, 0.3);
-
-  --avatar-gradient: linear-gradient(135deg, #3b82f6, #60a5fa);
-}
-
-[data-theme="dark"] {
-  /* Dark theme - 保持与浅色模式相同的相对色差 */
-  --bg-primary: #1a1a1a;    /* 聊天框，最浅（对应浅色 #ffffff） */
-  --bg-secondary: #141414;  /* 侧边栏，中等（对应浅色 #f8fafc） */
-  --bg-tertiary: #0a0a0a;   /* 整体背景，最深（对应浅色 #f0f4f8） */
-  --bg-hover: rgba(255, 255, 255, 0.08);
-  --bg-active: rgba(255, 255, 255, 0.12);
-  --bg-input: #141414;
-  --bg-code: #141414;
-  --bg-thinking: #141414;
-
-  --text-primary: #f0f0f0;
-  --text-secondary: #a0a0a0;
-  --text-tertiary: #606060;
-
-  --border-light: rgba(255, 255, 255, 0.08);
-  --border-medium: rgba(255, 255, 255, 0.12);
-  --border-input: rgba(255, 255, 255, 0.1);
-
-  --accent-primary: #3b82f6;
-  --accent-primary-hover: #60a5fa;
-  --accent-primary-light: rgba(59, 130, 246, 0.15);
-  --accent-primary-medium: rgba(59, 130, 246, 0.25);
-
-  --success-color: #34d399;
-  --success-bg: rgba(52, 211, 153, 0.15);
-  --danger-color: #f87171;
-  --danger-bg: rgba(248, 113, 113, 0.15);
-
-  --scrollbar-thumb: rgba(255, 255, 255, 0.1);
-  --scrollbar-thumb-sidebar: rgba(255, 255, 255, 0.15);
-
-  --overlay-bg: rgba(0, 0, 0, 0.6);
-
-  --avatar-gradient: linear-gradient(135deg, #3b82f6, #60a5fa);
-}
-
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-html, body {
-  height: 100%;
-  overflow: hidden;
-}
-
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC', sans-serif;
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
-  -webkit-font-smoothing: antialiased;
-  transition: background 0.2s, color 0.2s;
-}
-
-#app {
-  height: 100%;
-}
-
 .app {
   display: flex;
   height: 100%;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.modal-content {
+  background: var(--bg-primary);
+  border-radius: 16px;
+  width: 90%;
+  max-width: 520px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  padding: 24px;
 }
 </style>

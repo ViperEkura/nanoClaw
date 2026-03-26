@@ -10,18 +10,23 @@
           <span class="attachment-name">{{ file.name }}</span>
         </div>
       </div>
-      <div class="message-body">
+      <div ref="messageRef" class="message-body">
+        <!-- 新格式: processSteps 包含所有步骤（含 text），统一通过 ProcessBlock 渲染 -->
         <ProcessBlock
-          v-if="thinkingContent || (toolCalls && toolCalls.length > 0) || (processSteps && processSteps.length > 0)"
+          v-if="processSteps && processSteps.length > 0"
+          :process-steps="processSteps"
           :thinking-content="thinkingContent"
           :tool-calls="toolCalls"
-          :process-steps="processSteps"
         />
-        <div v-if="role === 'tool'" class="tool-result-content">
-          <div class="tool-badge">工具返回结果: {{ toolName }}</div>
-          <pre>{{ content }}</pre>
-        </div>
-        <div v-else class="md-content message-content" v-html="renderedContent"></div>
+        <!-- 旧格式: 无 processSteps，分开渲染 ProcessBlock + 文本 -->
+        <template v-else>
+          <ProcessBlock
+            v-if="thinkingContent || (toolCalls && toolCalls.length > 0)"
+            :thinking-content="thinkingContent"
+            :tool-calls="toolCalls"
+          />
+          <div class="md-content message-content" v-html="renderedContent"></div>
+        </template>
       </div>
       <div class="message-footer">
         <span class="token-count" v-if="tokenCount">{{ tokenCount }} tokens</span>
@@ -50,18 +55,16 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
-import { renderMarkdown } from '../utils/markdown'
+import { computed, watch, onMounted, ref } from 'vue'
+import { renderMarkdown, enhanceCodeBlocks } from '../utils/markdown'
 import ProcessBlock from './ProcessBlock.vue'
 
 const props = defineProps({
   role: { type: String, required: true },
   text: { type: String, default: '' },
-  content: { type: String, default: '' },  // Keep for backward compatibility
   thinkingContent: { type: String, default: '' },
   toolCalls: { type: Array, default: () => [] },
   processSteps: { type: Array, default: () => [] },
-  toolName: { type: String, default: '' },
   tokenCount: { type: Number, default: 0 },
   createdAt: { type: String, default: '' },
   deletable: { type: Boolean, default: false },
@@ -70,11 +73,23 @@ const props = defineProps({
 
 defineEmits(['delete', 'regenerate'])
 
+const messageRef = ref(null)
+
 const renderedContent = computed(() => {
-  // Use 'text' field (new format), fallback to 'content' (old format/assistant messages)
-  const displayContent = props.text || props.content || ''
-  if (!displayContent) return ''
-  return renderMarkdown(displayContent)
+  if (!props.text) return ''
+  return renderMarkdown(props.text)
+})
+
+function enhanceCode() {
+  enhanceCodeBlocks(messageRef.value)
+}
+
+watch(renderedContent, () => {
+  enhanceCode()
+})
+
+onMounted(() => {
+  enhanceCode()
 })
 
 function formatTime(iso) {
@@ -83,7 +98,7 @@ function formatTime(iso) {
 }
 
 function copyContent() {
-  navigator.clipboard.writeText(props.content).catch(() => {})
+  navigator.clipboard.writeText(props.text || '').catch(() => {})
 }
 </script>
 
@@ -91,7 +106,6 @@ function copyContent() {
 .message-bubble {
   display: flex;
   gap: 12px;
-  padding: 0;
   margin-bottom: 16px;
   width: 100%;
 }
@@ -193,39 +207,6 @@ function copyContent() {
   border-radius: 12px;
   background: var(--bg-primary);
   transition: background 0.2s, border-color 0.2s;
-}
-
-.message-content {
-}
-
-.tool-result-content {
-  background: var(--bg-code);
-  border: 1px solid var(--border-light);
-  border-radius: 8px;
-  padding: 12px;
-  overflow: hidden;
-}
-
-.tool-badge {
-  font-size: 11px;
-  color: var(--success-color);
-  font-weight: 600;
-  margin-bottom: 8px;
-  padding: 2px 8px;
-  background: var(--success-bg);
-  border-radius: 4px;
-  display: inline-block;
-}
-
-.tool-result-content pre {
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--text-secondary);
-  margin: 0;
-  overflow-x: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
 }
 
 .message-footer {

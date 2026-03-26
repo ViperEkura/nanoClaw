@@ -127,6 +127,11 @@ class ChatService:
                         yield f"event: process_step\ndata: {json.dumps({'index': step_index, 'type': 'thinking', 'content': full_thinking}, ensure_ascii=False)}\n\n"
                         step_index += 1
                     
+                    # Send text as a step if exists (text before tool calls)
+                    if full_content:
+                        yield f"event: process_step\ndata: {json.dumps({'index': step_index, 'type': 'text', 'content': full_content}, ensure_ascii=False)}\n\n"
+                        step_index += 1
+                    
                     # Also send legacy tool_calls event for backward compatibility
                     yield f"event: tool_calls\ndata: {json.dumps({'calls': tool_calls_list}, ensure_ascii=False)}\n\n"
                     
@@ -167,6 +172,11 @@ class ChatService:
                 # Send thinking as a step if exists
                 if full_thinking:
                     yield f"event: process_step\ndata: {json.dumps({'index': step_index, 'type': 'thinking', 'content': full_thinking}, ensure_ascii=False)}\n\n"
+                    step_index += 1
+
+                # Send text as a step if exists
+                if full_content:
+                    yield f"event: process_step\ndata: {json.dumps({'index': step_index, 'type': 'text', 'content': full_content}, ensure_ascii=False)}\n\n"
                     step_index += 1
 
                 suggested_title = None

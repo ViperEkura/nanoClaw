@@ -88,7 +88,15 @@
           </div>
           <div class="form-group">
             <label>文件夹路径</label>
-            <input v-model="uploadData.folderPath" type="text" placeholder="输入文件夹绝对路径" />
+            <div class="input-with-action">
+              <input v-model="uploadData.folderPath" type="text" placeholder="输入文件夹绝对路径或点击右侧按钮选择" />
+              <button class="btn-browse" @click="selectFolder" type="button">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                </svg>
+                选择文件夹
+              </button>
+            </div>
           </div>
           <div class="form-group">
             <label>描述（可选）</label>
@@ -156,6 +164,26 @@ const uploadData = ref({
   folderPath: '',
   description: '',
 })
+
+async function selectFolder() {
+  try {
+    if ('showDirectoryPicker' in window) {
+      const dirHandle = await window.showDirectoryPicker()
+      // 将文件夹名称自动填入项目名（如未填写）
+      if (!uploadData.value.name.trim()) {
+        uploadData.value.name = dirHandle.name
+      }
+      // 提示用户手动确认服务器路径
+      if (!uploadData.value.folderPath.trim()) {
+        uploadData.value.folderPath = dirHandle.name
+      }
+    }
+  } catch (e) {
+    if (e.name !== 'AbortError') {
+      console.error('Failed to select folder:', e)
+    }
+  }
+}
 
 // 固定用户ID（实际应用中应从登录状态获取）
 const userId = 1
@@ -437,6 +465,39 @@ defineExpose({
   font-size: 13px;
   font-family: inherit;
   transition: border-color 0.2s;
+}
+
+.input-with-action {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.input-with-action input {
+  flex: 1;
+  min-width: 0;
+}
+
+.btn-browse {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-input);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.btn-browse:hover {
+  background: var(--bg-hover);
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
 }
 
 .form-group input:focus,

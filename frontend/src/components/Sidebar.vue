@@ -48,7 +48,6 @@
         class="conversation-item"
         :class="{ active: conv.id === currentId }"
         @click="$emit('select', conv.id)"
-        @contextmenu.prevent="onContextMenu($event, conv)"
       >
         <div class="conv-info">
           <div class="conv-title">{{ conv.title || '新对话' }}</div>
@@ -123,24 +122,20 @@ function onScroll(e) {
     emit('loadMore')
   }
 }
-
-function onContextMenu(e, conv) {
-  // right-click to delete
-}
 </script>
 
 <style scoped>
 .sidebar {
-  flex: 0 1 auto;            /* 弹性宽度，可收缩 */
-  width: 260px;              /* 默认宽度 */
-  min-width: 180px;          /* 最小宽度 */
-  max-width: 320px;          /* 最大宽度 */
+  width: 20%;
+  min-width: 220px;
+  max-width: 320px;
+  flex-shrink: 0;
   background: var(--bg-primary);
   border-right: 1px solid var(--border-medium);
   display: flex;
   flex-direction: column;
   height: 100vh;
-  transition: all 0.2s;
+  overflow: hidden;
 }
 
 .project-section {
