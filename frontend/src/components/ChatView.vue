@@ -73,7 +73,7 @@
         ref="inputRef"
         :disabled="streaming"
         :tools-enabled="toolsEnabled"
-        @send="handleSend"
+        @send="$emit('sendMessage', $event)"
         @toggle-tools="$emit('toggleTools', $event)"
       />
     </template>
@@ -123,10 +123,6 @@ onMounted(async () => {
   }
 })
 
-function handleSend(data) {
-  emit('sendMessage', data)
-}
-
 function scrollToBottom(smooth = true) {
   nextTick(() => {
     const el = scrollContainer.value
@@ -149,8 +145,6 @@ watch(() => props.conversation?.id, () => {
     nextTick(() => inputRef.value?.focus())
   }
 })
-
-defineExpose({ scrollToBottom })
 </script>
 
 <style scoped>
@@ -159,7 +153,10 @@ defineExpose({ scrollToBottom })
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: var(--bg-secondary);
+  background: color-mix(in srgb, var(--bg-secondary) 80%, transparent);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  border-left: 1px solid var(--border-light);
   min-width: 0;
   overflow: hidden;
 }
@@ -200,8 +197,9 @@ defineExpose({ scrollToBottom })
   justify-content: space-between;
   padding: 12px 24px;
   border-bottom: 1px solid var(--border-light);
-  background: var(--bg-primary);
-  backdrop-filter: blur(8px);
+  background: color-mix(in srgb, var(--bg-primary) 70%, transparent);
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
   transition: background 0.2s, border-color 0.2s;
 }
 
@@ -220,13 +218,6 @@ defineExpose({ scrollToBottom })
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.badge {
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  flex-shrink: 0;
 }
 
 .model-badge {
@@ -253,23 +244,9 @@ defineExpose({ scrollToBottom })
   gap: 4px;
 }
 
-.btn-icon {
+.chat-actions .btn-icon {
   width: 36px;
   height: 36px;
-  border-radius: 8px;
-  border: none;
-  background: none;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.15s;
-}
-
-.btn-icon:hover {
-  background: var(--bg-hover);
-  color: var(--accent-primary);
 }
 
 .messages-container {

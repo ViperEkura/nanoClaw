@@ -72,8 +72,9 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick, onMounted } from 'vue'
-import { renderMarkdown, enhanceCodeBlocks } from '../utils/markdown'
+import { ref, computed, watch } from 'vue'
+import { renderMarkdown } from '../utils/markdown'
+import { useCodeEnhancement } from '../composables/useCodeEnhancement'
 
 const props = defineProps({
   thinkingContent: { type: String, default: '' },
@@ -90,16 +91,7 @@ watch(() => props.streaming, (v) => {
   if (v) expandedKeys.value = {}
 })
 
-// 增强 processBlock 内代码块
 const processRef = ref(null)
-
-function enhanceCode() {
-  enhanceCodeBlocks(processRef.value)
-}
-
-onMounted(() => {
-  enhanceCode()
-})
 
 function toggleItem(key) {
   expandedKeys.value[key] = !expandedKeys.value[key]
@@ -230,9 +222,8 @@ const processItems = computed(() => {
   return items
 })
 
-watch(processItems, () => {
-  nextTick(() => enhanceCode())
-}, { deep: true })
+// 增强 processBlock 内代码块（必须在 processItems 定义之后）
+useCodeEnhancement(processRef, processItems, { deep: true })
 </script>
 
 <style scoped>

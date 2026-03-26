@@ -55,8 +55,10 @@
 </template>
 
 <script setup>
-import { computed, watch, onMounted, ref } from 'vue'
-import { renderMarkdown, enhanceCodeBlocks } from '../utils/markdown'
+import { computed, ref } from 'vue'
+import { renderMarkdown } from '../utils/markdown'
+import { formatTime } from '../utils/format'
+import { useCodeEnhancement } from '../composables/useCodeEnhancement'
 import ProcessBlock from './ProcessBlock.vue'
 
 const props = defineProps({
@@ -80,22 +82,7 @@ const renderedContent = computed(() => {
   return renderMarkdown(props.text)
 })
 
-function enhanceCode() {
-  enhanceCodeBlocks(messageRef.value)
-}
-
-watch(renderedContent, () => {
-  enhanceCode()
-})
-
-onMounted(() => {
-  enhanceCode()
-})
-
-function formatTime(iso) {
-  if (!iso) return ''
-  return new Date(iso).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-}
+useCodeEnhancement(messageRef, renderedContent)
 
 function copyContent() {
   navigator.clipboard.writeText(props.text || '').catch(() => {})

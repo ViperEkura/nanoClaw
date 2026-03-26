@@ -223,6 +223,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { statsApi } from '../api'
 import { useTheme } from '../composables/useTheme'
+import { formatNumber } from '../utils/format'
 
 const emit = defineEmits(['close'])
 
@@ -320,13 +321,6 @@ function formatFullDate(dateStr) {
   return `${d.getMonth() + 1}月${d.getDate()}日`
 }
 
-function formatNumber(num) {
-  if (!num) return '0'
-  if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M'
-  if (num >= 1000) return (num / 1000).toFixed(1) + 'K'
-  return num.toString()
-}
-
 async function loadStats() {
   loading.value = true
   try {
@@ -381,24 +375,6 @@ onMounted(loadStats)
   display: flex;
   align-items: center;
   gap: 12px;
-}
-
-.btn-close {
-  background: none;
-  border: none;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 6px;
-  transition: all 0.15s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.btn-close:hover {
-  color: var(--text-primary);
-  background: var(--bg-hover);
 }
 
 .period-tabs {

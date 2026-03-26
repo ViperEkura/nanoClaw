@@ -87,6 +87,7 @@
 
 <script setup>
 import { ref } from 'vue'
+import { formatTime } from '../utils/format'
 import ProjectManager from './ProjectManager.vue'
 
 const props = defineProps({
@@ -119,17 +120,6 @@ function onProjectDeleted(projectId) {
   }
 }
 
-function formatTime(iso) {
-  if (!iso) return ''
-  const d = new Date(iso)
-  const now = new Date()
-  const isToday = d.toDateString() === now.toDateString()
-  if (isToday) {
-    return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-  }
-  return d.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
-}
-
 function onScroll(e) {
   const el = e.target
   if (el.scrollTop + el.clientHeight >= el.scrollHeight - 50) {
@@ -144,7 +134,9 @@ function onScroll(e) {
   min-width: 220px;
   max-width: 320px;
   flex-shrink: 0;
-  background: var(--bg-primary);
+  background: color-mix(in srgb, var(--bg-primary) 75%, transparent);
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
   border-right: 1px solid var(--border-medium);
   display: flex;
   flex-direction: column;

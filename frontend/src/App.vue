@@ -27,19 +27,24 @@
       @send-message="sendMessage"
       @delete-message="deleteMessage"
       @regenerate-message="regenerateMessage"
-      @toggle-settings="showSettings = true"
-      @toggle-stats="showStats = true"
+      @toggle-settings="togglePanel('settings')"
+      @toggle-stats="togglePanel('stats')"
       @load-more-messages="loadMoreMessages"
       @toggle-tools="updateToolsEnabled"
     />
 
-    <SettingsPanel
-      v-if="showSettings"
-      :visible="showSettings"
-      :conversation="currentConv"
-      @close="showSettings = false"
-      @save="saveSettings"
-    />
+    <Transition name="fade">
+      <div v-if="showSettings" class="modal-overlay" @click.self="showSettings = false">
+        <div class="modal-content">
+          <SettingsPanel
+            :visible="showSettings"
+            :conversation="currentConv"
+            @close="showSettings = false"
+            @save="saveSettings"
+          />
+        </div>
+      </div>
+    </Transition>
 
     <Transition name="fade">
       <div v-if="showStats" class="modal-overlay" @click.self="showStats = false">
@@ -79,26 +84,58 @@ const streamThinking = ref('')
 const streamToolCalls = ref([])
 const streamProcessSteps = ref([])
 
+// 保存每个对话的流式状态
+const streamStates = new Map()
+
+// 重置当前流式状态（用于 sendMessage / regenerateMessage / onError）
 function resetStreamState() {
   streaming.value = false
   streamContent.value = ''
   streamThinking.value = ''
   streamToolCalls.value = []
   streamProcessSteps.value = []
-  currentStreamPromise = null
 }
 
-// 保存每个对话的流式状态
-const streamStates = new Map()
+// 初始化流式状态（用于 sendMessage / regenerateMessage 开始时）
+function initStreamState() {
+  streaming.value = true
+  streamContent.value = ''
+  streamThinking.value = ''
+  streamToolCalls.value = []
+  streamProcessSteps.value = []
+}
 
-// 保存当前流式请求引用
-let currentStreamPromise = null
+// 辅助：更新当前对话或缓存的流式字段
+// field: streamStates 中保存的字段名
+// ref: 当前激活对话对应的 Vue ref
+// valueOrUpdater: 静态值或 (current) => newValue
+function updateStreamField(convId, field, ref, valueOrUpdater) {
+  const isCurrent = currentConvId.value === convId
+  const current = isCurrent ? ref.value : (streamStates.get(convId) || {})[field]
+  const newVal = typeof valueOrUpdater === 'function' ? valueOrUpdater(current) : valueOrUpdater
+  if (isCurrent) {
+    ref.value = newVal
+  } else {
+    const saved = streamStates.get(convId) || {}
+    streamStates.set(convId, { ...saved, [field]: newVal })
+  }
+}
 
 // -- UI state --
 const showSettings = ref(false)
 const showStats = ref(false)
 const toolsEnabled = ref(localStorage.getItem('tools_enabled') !== 'false') // 默认开启
 const currentProject = ref(null) // Current selected project
+
+function togglePanel(panel) {
+  if (panel === 'settings') {
+    showSettings.value = !showSettings.value
+    if (showSettings.value) showStats.value = false
+  } else {
+    showStats.value = !showStats.value
+    if (showStats.value) showSettings.value = false
+  }
+}
 
 const currentConv = computed(() =>
   conversations.value.find(c => c.id === currentConvId.value) || null
@@ -171,11 +208,7 @@ async function selectConversation(id) {
     streamProcessSteps.value = savedState.streamProcessSteps
     messages.value = savedState.messages || []  // 恢复消息列表
   } else {
-    streaming.value = false
-    streamContent.value = ''
-    streamThinking.value = ''
-    streamToolCalls.value = []
-    streamProcessSteps.value = []
+    resetStreamState()
     messages.value = []
   }
 
@@ -214,70 +247,41 @@ function loadMoreMessages() {
 function createStreamCallbacks(convId, { updateConvList = true } = {}) {
   return {
     onThinkingStart() {
-      if (currentConvId.value === convId) {
-        streamThinking.value = ''
-      } else {
-        const saved = streamStates.get(convId) || {}
-        streamStates.set(convId, { ...saved, streamThinking: '' })
-      }
+      updateStreamField(convId, 'streamThinking', streamThinking, '')
     },
     onThinking(text) {
-      if (currentConvId.value === convId) {
-        streamThinking.value += text
-      } else {
-        const saved = streamStates.get(convId) || { streamThinking: '' }
-        streamStates.set(convId, { ...saved, streamThinking: (saved.streamThinking || '') + text })
-      }
+      updateStreamField(convId, 'streamThinking', streamThinking, prev => (prev || '') + text)
     },
     onMessage(text) {
-      if (currentConvId.value === convId) {
-        streamContent.value += text
-      } else {
-        const saved = streamStates.get(convId) || { streamContent: '' }
-        streamStates.set(convId, { ...saved, streamContent: (saved.streamContent || '') + text })
-      }
+      updateStreamField(convId, 'streamContent', streamContent, prev => (prev || '') + text)
     },
     onToolCalls(calls) {
-      if (currentConvId.value === convId) {
-        streamToolCalls.value.push(...calls.map(c => ({ ...c, result: null })))
-      } else {
-        const saved = streamStates.get(convId) || { streamToolCalls: [] }
-        const newCalls = [...(saved.streamToolCalls || []), ...calls.map(c => ({ ...c, result: null }))]
-        streamStates.set(convId, { ...saved, streamToolCalls: newCalls })
-      }
+      updateStreamField(convId, 'streamToolCalls', streamToolCalls, prev => [
+        ...(prev || []),
+        ...calls.map(c => ({ ...c, result: null })),
+      ])
     },
     onToolResult(result) {
-      if (currentConvId.value === convId) {
-        const call = streamToolCalls.value.find(c => c.id === result.id)
+      updateStreamField(convId, 'streamToolCalls', streamToolCalls, prev => {
+        const arr = prev ? [...prev] : []
+        const call = arr.find(c => c.id === result.id)
         if (call) call.result = result.content
-      } else {
-        const saved = streamStates.get(convId) || { streamToolCalls: [] }
-        const call = saved.streamToolCalls?.find(c => c.id === result.id)
-        if (call) call.result = result.content
-        streamStates.set(convId, { ...saved })
-      }
+        return arr
+      })
     },
     onProcessStep(step) {
-      const idx = step.index
-      if (currentConvId.value === convId) {
-        const newSteps = [...streamProcessSteps.value]
-        while (newSteps.length <= idx) newSteps.push(null)
-        newSteps[idx] = step
-        streamProcessSteps.value = newSteps
-      } else {
-        const saved = streamStates.get(convId) || { streamProcessSteps: [] }
-        const steps = [...(saved.streamProcessSteps || [])]
-        while (steps.length <= idx) steps.push(null)
-        steps[idx] = step
-        streamStates.set(convId, { ...saved, streamProcessSteps: steps })
-      }
+      updateStreamField(convId, 'streamProcessSteps', streamProcessSteps, prev => {
+        const steps = prev ? [...prev] : []
+        while (steps.length <= step.index) steps.push(null)
+        steps[step.index] = step
+        return steps
+      })
     },
     async onDone(data) {
       streamStates.delete(convId)
 
       if (currentConvId.value === convId) {
         streaming.value = false
-        currentStreamPromise = null
         messages.value.push({
           id: data.message_id,
           conversation_id: convId,
@@ -343,13 +347,9 @@ async function sendMessage(data) {
   }
   messages.value.push(userMsg)
 
-  streaming.value = true
-  streamContent.value = ''
-  streamThinking.value = ''
-  streamToolCalls.value = []
-  streamProcessSteps.value = []
+  initStreamState()
 
-  currentStreamPromise = messageApi.send(convId, { text, attachments, projectId: currentProject.value?.id }, {
+  messageApi.send(convId, { text, attachments, projectId: currentProject.value?.id }, {
     toolsEnabled: toolsEnabled.value,
     ...createStreamCallbacks(convId, { updateConvList: true }),
   })
@@ -376,13 +376,9 @@ async function regenerateMessage(msgId) {
 
   messages.value = messages.value.slice(0, msgIndex)
 
-  streaming.value = true
-  streamContent.value = ''
-  streamThinking.value = ''
-  streamToolCalls.value = []
-  streamProcessSteps.value = []
+  initStreamState()
 
-  currentStreamPromise = messageApi.regenerate(convId, msgId, {
+  messageApi.regenerate(convId, msgId, {
     toolsEnabled: toolsEnabled.value,
     projectId: currentProject.value?.id,
     ...createStreamCallbacks(convId, { updateConvList: false }),
@@ -447,24 +443,17 @@ onMounted(() => {
   height: 100%;
 }
 
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: var(--overlay-bg);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 200;
-}
-
 .modal-content {
-  background: var(--bg-primary);
   border-radius: 16px;
   width: 90%;
   max-width: 520px;
   max-height: 80vh;
   overflow-y: auto;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
   padding: 24px;
+  background: color-mix(in srgb, var(--bg-primary) 75%, transparent);
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+  border: 1px solid var(--border-medium);
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.2);
 }
 </style>

@@ -3,6 +3,15 @@ const BASE = '/api'
 // Cache for models list
 let modelsCache = null
 
+function buildQueryParams(params) {
+  const sp = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value != null && value !== '') sp.set(key, value)
+  }
+  const qs = sp.toString()
+  return qs ? `?${qs}` : ''
+}
+
 async function request(url, options = {}) {
   const res = await fetch(`${BASE}${url}`, {
     headers: { 'Content-Type': 'application/json' },
@@ -125,17 +134,13 @@ export const modelApi = {
 
 export const statsApi = {
   getTokens(period = 'daily') {
-    return request(`/stats/tokens?period=${period}`)
+    return request(`/stats/tokens${buildQueryParams({ period })}`)
   },
 }
 
 export const conversationApi = {
   list(cursor, limit = 20, projectId = null) {
-    const params = new URLSearchParams()
-    if (cursor) params.set('cursor', cursor)
-    if (limit) params.set('limit', limit)
-    if (projectId) params.set('project_id', projectId)
-    return request(`/conversations?${params}`)
+    return request(`/conversations${buildQueryParams({ cursor, limit, project_id: projectId })}`)
   },
 
   create(payload = {}) {
@@ -163,10 +168,7 @@ export const conversationApi = {
 
 export const messageApi = {
   list(convId, cursor, limit = 50) {
-    const params = new URLSearchParams()
-    if (cursor) params.set('cursor', cursor)
-    if (limit) params.set('limit', limit)
-    return request(`/conversations/${convId}/messages?${params}`)
+    return request(`/conversations/${convId}/messages${buildQueryParams({ cursor, limit })}`)
   },
 
   send(convId, data, callbacks) {
@@ -193,7 +195,7 @@ export const messageApi = {
 
 export const projectApi = {
   list(userId) {
-    return request(`/projects?user_id=${userId}`)
+    return request(`/projects${buildQueryParams({ user_id: userId })}`)
   },
 
   create(data) {

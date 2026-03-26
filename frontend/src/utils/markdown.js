@@ -101,18 +101,19 @@ export function enhanceCodeBlocks(container) {
     langSpan.className = 'code-lang'
     langSpan.textContent = lang
 
+const COPY_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>'
+const CHECK_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>'
+
     const copyBtn = document.createElement('button')
     copyBtn.className = 'code-copy-btn'
     copyBtn.title = '复制'
-    copyBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>'
-
-    const checkSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>'
+    copyBtn.innerHTML = COPY_SVG
 
     copyBtn.addEventListener('click', () => {
       const raw = code?.textContent || ''
       navigator.clipboard.writeText(raw).then(() => {
-        copyBtn.innerHTML = checkSvg
-        setTimeout(() => { copyBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>' }, 1500)
+        copyBtn.innerHTML = CHECK_SVG
+        setTimeout(() => { copyBtn.innerHTML = COPY_SVG }, 1500)
       }).catch(() => {
         const ta = document.createElement('textarea')
         ta.value = raw
@@ -122,8 +123,8 @@ export function enhanceCodeBlocks(container) {
         ta.select()
         document.execCommand('copy')
         document.body.removeChild(ta)
-        copyBtn.innerHTML = checkSvg
-        setTimeout(() => { copyBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>' }, 1500)
+        copyBtn.innerHTML = CHECK_SVG
+        setTimeout(() => { copyBtn.innerHTML = COPY_SVG }, 1500)
       })
     })
 
