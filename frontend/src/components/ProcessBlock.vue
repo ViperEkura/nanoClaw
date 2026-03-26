@@ -411,6 +411,7 @@ watch(() => props.streamingContent?.length, () => {
   line-height: 1.7;
   color: var(--text-primary);
   word-break: break-word;
+  contain: layout style;
 }
 
 .text-content :deep(.placeholder) {

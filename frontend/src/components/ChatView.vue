@@ -189,8 +189,13 @@ function scrollToBottom(smooth = true) {
   })
 }
 
+// 流式时使用 instant 滚动，避免 smooth 动画与内容增长互相打架造成抖动
 watch([() => props.messages.length, () => props.streamingContent], () => {
-  scrollToBottom()
+  nextTick(() => {
+    const el = scrollContainer.value
+    if (!el) return
+    el.scrollTo({ top: el.scrollHeight, behavior: props.streaming ? 'instant' : 'smooth' })
+  })
 })
 
 watch(() => props.conversation?.id, () => {
