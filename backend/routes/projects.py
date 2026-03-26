@@ -2,8 +2,7 @@
 import os
 import uuid
 import shutil
-from flask import Blueprint, request, jsonify
-from werkzeug.utils import secure_filename
+from flask import Blueprint, request
 
 from backend import db
 from backend.models import Project, User

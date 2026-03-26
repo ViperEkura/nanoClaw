@@ -1,9 +1,6 @@
 """Workspace path validation utilities"""
-import os
 import shutil
 from pathlib import Path
-from typing import Optional
-from flask import current_app
 
 from backend import load_config
 
@@ -137,8 +134,6 @@ def delete_project_directory(project_path: str) -> bool:
     return False
 
 
-
-
 def save_uploaded_files(files, project_dir: Path) -> dict:
     """
     Save uploaded files to project directory (for folder upload)
@@ -187,45 +182,3 @@ def save_uploaded_files(files, project_dir: Path) -> dict:
         "size": total_size
     }
 
-
-def copy_folder_to_project(source_path: str, project_dir: Path, project_name: str) -> dict:
-    """
-    Copy a folder to project directory (for folder upload)
-    
-    Args:
-        source_path: Source folder path
-        project_dir: Target project directory
-        project_name: Project name
-        
-    Returns:
-        Dict with copy statistics
-    """
-    source = Path(source_path)
-    
-    if not source.exists():
-        raise ValueError(f"Source path does not exist: {source_path}")
-    
-    if not source.is_dir():
-        raise ValueError(f"Source path is not a directory: {source_path}")
-    
-    # Security check: don't copy from sensitive system directories
-    sensitive_dirs = ["/etc", "/usr", "/bin", "/sbin", "/root", "/home"]
-    for sensitive in sensitive_dirs:
-        if str(source.resolve()).startswith(sensitive):
-            raise ValueError(f"Cannot copy from system directory: {sensitive}")
-    
-    # Copy directory
-    if project_dir.exists():
-        shutil.rmtree(project_dir)
-    
-    shutil.copytree(source, project_dir)
-    
-    # Count files
-    file_count = sum(1 for _ in project_dir.rglob("*") if _.is_file())
-    dir_count = sum(1 for _ in project_dir.rglob("*") if _.is_dir())
-    
-    return {
-        "files": file_count,
-        "directories": dir_count,
-        "size": sum(f.stat().st_size for f in project_dir.rglob("*") if f.is_file())
-    }

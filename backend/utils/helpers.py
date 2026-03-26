@@ -4,7 +4,7 @@ from datetime import date, datetime
 from typing import Any
 from flask import jsonify
 from backend import db
-from backend.models import Conversation, Message, TokenUsage, User
+from backend.models import Message, TokenUsage, User
 
 
 def get_or_create_default_user() -> User:

@@ -176,29 +176,5 @@ class ToolExecutor:
             }, ensure_ascii=False)
         }
 
-    def build_request(
-        self,
-        messages: List[dict],
-        model: str = "glm-5",
-        tools: Optional[List[dict]] = None,
-        **kwargs
-    ) -> dict:
-        """
-        Build API request body
 
-        Args:
-            messages: Message list
-            model: Model name
-            tools: Tool list (default: all tools in registry)
-            **kwargs: Other parameters (temperature, max_tokens, etc.)
 
-        Returns:
-            Request body dict
-        """
-        return {
-            "model": model,
-            "messages": messages,
-            "tools": tools or self.registry.list_all(),
-            "tool_choice": kwargs.get("tool_choice", "auto"),
-            **{k: v for k, v in kwargs.items() if k not in ["tool_choice"]}
-        }

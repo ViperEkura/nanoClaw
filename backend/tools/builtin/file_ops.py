@@ -1,8 +1,7 @@
 """File operation tools"""
-import os
 import json
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Tuple
 from backend.tools.factory import tool
 from backend import db
 from backend.models import Project

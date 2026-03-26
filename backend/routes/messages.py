@@ -1,11 +1,11 @@
 """Message API routes"""
 import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from flask import Blueprint, request
 from backend import db
 from backend.models import Conversation, Message
-from backend.utils.helpers import ok, err, to_dict, message_to_dict, get_or_create_default_user
+from backend.utils.helpers import ok, err, message_to_dict
 from backend.services.chat import ChatService
 
 
@@ -34,7 +34,7 @@ def message_list(conv_id):
         q = Message.query.filter_by(conversation_id=conv_id)
         if cursor:
             q = q.filter(Message.created_at < (
-                db.session.query(Message.created_at).filter_by(id=cursor).scalar() or datetime.utcnow))
+                db.session.query(Message.created_at).filter_by(id=cursor).scalar() or datetime.now(timezone.utc)))
         rows = q.order_by(Message.created_at.asc()).limit(limit + 1).all()
         
         items = [message_to_dict(r) for r in rows[:limit]]
@@ -48,7 +48,6 @@ def message_list(conv_id):
     d = request.json or {}
     text = (d.get("text") or "").strip()
     attachments = d.get("attachments")  # [{"name": "a.py", "extension": "py", "content": "..."}]
-    project_id = d.get("project_id")  # Get project_id from request
 
     if not text and not attachments:
         return err(400, "text or attachments is required")

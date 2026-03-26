@@ -7,13 +7,13 @@ from backend.routes.tools import bp as tools_bp
 from backend.routes.stats import bp as stats_bp
 from backend.routes.projects import bp as projects_bp
 from backend.services.glm_client import GLMClient
-from backend.config import API_URL, API_KEY
+from backend.config import MODEL_CONFIG
 
 
 def register_routes(app: Flask):
     """Register all route blueprints"""
-    # Initialize GLM client and chat service
-    glm_client = GLMClient(API_URL, API_KEY)
+    # Initialize GLM client with per-model config
+    glm_client = GLMClient(MODEL_CONFIG)
     init_chat_service(glm_client)
     
     # Register blueprints

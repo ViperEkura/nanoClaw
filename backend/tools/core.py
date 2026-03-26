@@ -1,5 +1,5 @@
 """Tool system core classes"""
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Callable, Any, Dict, List, Optional
 
 
@@ -69,14 +69,6 @@ class ToolRegistry:
         """List all tools in OpenAI format"""
         return [t.to_openai_format() for t in self._tools.values()]
 
-    def list_by_category(self, category: str) -> List[dict]:
-        """List tools by category"""
-        return [
-            t.to_openai_format()
-            for t in self._tools.values()
-            if t.category == category
-        ]
-
     def execute(self, name: str, arguments: dict) -> dict:
         """Execute a tool"""
         tool = self.get(name)
@@ -90,17 +82,6 @@ class ToolRegistry:
             return ToolResult.ok(result).to_dict()
         except Exception as e:
             return ToolResult.fail(str(e)).to_dict()
-
-    def remove(self, name: str) -> bool:
-        """Remove a tool"""
-        if name in self._tools:
-            del self._tools[name]
-            return True
-        return False
-
-    def has(self, name: str) -> bool:
-        """Check if tool exists"""
-        return name in self._tools
 
 
 # Global registry instance

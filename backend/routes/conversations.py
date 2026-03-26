@@ -1,6 +1,6 @@
 """Conversation API routes"""
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from flask import Blueprint, request
 from backend import db
 from backend.models import Conversation, Project
@@ -62,7 +62,7 @@ def conversation_list():
     
     if cursor:
         q = q.filter(Conversation.updated_at < (
-            db.session.query(Conversation.updated_at).filter_by(id=cursor).scalar() or datetime.utcnow))
+            db.session.query(Conversation.updated_at).filter_by(id=cursor).scalar() or datetime.now(timezone.utc)))
     rows = q.order_by(Conversation.updated_at.desc()).limit(limit + 1).all()
     
     items = [_conv_to_dict(r, message_count=r.messages.count()) for r in rows[:limit]]

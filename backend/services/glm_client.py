@@ -5,11 +5,20 @@ from typing import Optional, List
 
 class GLMClient:
     """GLM API client for chat completions"""
-    
-    def __init__(self, api_url: str, api_key: str):
-        self.api_url = api_url
-        self.api_key = api_key
-    
+
+    def __init__(self, model_config: dict):
+        """Initialize with per-model config lookup.
+
+        Args:
+            model_config: {model_id: {"api_url": ..., "api_key": ...}}
+        """
+        self.model_config = model_config
+
+    def _get_credentials(self, model: str):
+        """Get api_url and api_key for a model, with fallback."""
+        cfg = self.model_config.get(model, {})
+        return cfg.get("api_url", ""), cfg.get("api_key", "")
+
     def call(
         self,
         model: str,
@@ -22,6 +31,7 @@ class GLMClient:
         timeout: int = 120,
     ):
         """Call GLM API"""
+        api_url, api_key = self._get_credentials(model)
         body = {
             "model": model,
             "messages": messages,
@@ -35,12 +45,12 @@ class GLMClient:
             body["tool_choice"] = "auto"
         if stream:
             body["stream"] = True
-        
+
         return requests.post(
-            self.api_url,
+            api_url,
             headers={
                 "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.api_key}"
+                "Authorization": f"Bearer {api_key}"
             },
             json=body,
             stream=stream,

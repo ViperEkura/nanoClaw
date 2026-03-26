@@ -1,5 +1,5 @@
 """Tool helper services"""
-from typing import List, Dict, Optional, Any
+from typing import List
 from ddgs import DDGS
 import re
 
@@ -199,11 +199,6 @@ class ContentExtractor:
 
 class CalculatorService:
     """Safe calculation service"""
-
-    ALLOWED_OPS = {
-        "add", "sub", "mul", "truediv", "floordiv",
-        "mod", "pow", "neg", "abs"
-    }
 
     def evaluate(self, expression: str) -> dict:
         """
