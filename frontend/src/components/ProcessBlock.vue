@@ -158,10 +158,10 @@ const processItems = computed(() => {
       }
     }
 
-    // 流式中追加正在增长的文本（仅当最后步骤不是 text 类型时）
+    // 流式中追加正在增长的文本（仅当还没有 text 类型的步骤时）
     if (props.streaming && props.streamingContent) {
-      const lastStep = items[items.length - 1]
-      if (!lastStep || lastStep.type !== 'text') {
+      const hasTextStep = items.some(it => it.type === 'text')
+      if (!hasTextStep) {
         items.push({
           type: 'text',
           content: props.streamingContent,

@@ -2,26 +2,30 @@
   <Teleport to="body">
     <div v-if="messages.length > 0" class="bookmark-rail">
       <div
-        v-for="(msg, idx) in messages"
+        v-for="msg in userMessages"
         :key="msg.id"
         class="bookmark"
-        :class="{ active: activeId === msg.id, user: msg.role === 'user' }"
+        :class="{ active: activeId === msg.id }"
         @click="$emit('scrollTo', msg.id)"
       >
         <div class="bookmark-dot"></div>
-        <div class="bookmark-label">{{ msg.role === 'user' ? '用户' : 'Claw' }} · {{ preview(msg) }}</div>
+        <div class="bookmark-label">{{ preview(msg) }}</div>
       </div>
     </div>
   </Teleport>
 </template>
 
 <script setup>
-defineProps({
+import { computed } from 'vue'
+
+const props = defineProps({
   messages: { type: Array, required: true },
   activeId: { type: String, default: null },
 })
 
 defineEmits(['scrollTo'])
+
+const userMessages = computed(() => props.messages.filter(m => m.role === 'user'))
 
 function preview(msg) {
   if (!msg.text) return '...'
@@ -84,17 +88,13 @@ function preview(msg) {
 }
 
 .bookmark-dot {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
+  width: 5px;
+  height: 5px;
+  border-radius: 1.5px;
   flex-shrink: 0;
-  background: var(--text-tertiary);
+  background: #3b82f6;
   opacity: 0.35;
   transition: all 0.2s ease;
-}
-
-.bookmark.user .bookmark-dot {
-  background: #3b82f6;
 }
 
 .bookmark.active .bookmark-dot,

@@ -174,17 +174,8 @@ function scrollToMessage(msgId) {
     if (!scrollContainer.value) return
     const el = scrollContainer.value.querySelector(`[data-msg-id="${msgId}"]`)
     if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
       activeMessageId.value = msgId
-    }
-  })
-}
-
-function scrollToBottom(smooth = true) {
-  nextTick(() => {
-    const el = scrollContainer.value
-    if (el) {
-      el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'instant' })
     }
   })
 }

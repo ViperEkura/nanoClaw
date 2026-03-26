@@ -57,7 +57,7 @@
 </template>
 
 <script setup>
-import { ref, shallowRef, computed, onMounted, defineAsyncComponent, triggerRef } from 'vue'
+import { ref, shallowRef, computed, onMounted, defineAsyncComponent } from 'vue'
 import Sidebar from './components/Sidebar.vue'
 import ChatView from './components/ChatView.vue'
 
@@ -249,6 +249,7 @@ function createStreamCallbacks(convId, { updateConvList = true } = {}) {
   return {
     onThinkingStart() {
       updateStreamField(convId, 'streamThinking', streamThinking, '')
+      updateStreamField(convId, 'streamContent', streamContent, '')
     },
     onThinking(text) {
       updateStreamField(convId, 'streamThinking', streamThinking, prev => (prev || '') + text)
