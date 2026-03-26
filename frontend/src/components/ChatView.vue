@@ -8,82 +8,94 @@
 
     <template v-else>
       <div class="chat-header">
-        <div class="chat-title-area">
-          <h2 class="chat-title">{{ conversation.title || '新对话' }}</h2>
-          <span class="model-badge">{{ formatModelName(conversation.model) }}</span>
-          <span v-if="conversation.thinking_enabled" class="thinking-badge">思考</span>
-        </div>
-        <div class="chat-actions">
-          <button class="btn-icon" @click="$emit('toggleStats')" title="使用统计">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M18 20V10"/>
-              <path d="M12 20V4"/>
-              <path d="M6 20v-6"/>
-            </svg>
-          </button>
-          <button class="btn-icon" @click="$emit('toggleSettings')" title="设置">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="3"></circle>
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-            </svg>
-          </button>
-        </div>
-      </div>
-
-      <div ref="scrollContainer" class="messages-container">
-        <div v-if="hasMoreMessages" class="load-more-top">
-          <button @click="$emit('loadMoreMessages')" :disabled="loadingMore">
-            {{ loadingMore ? '加载中...' : '加载更早的消息' }}
-          </button>
+          <div class="chat-title-area">
+            <h2 class="chat-title">{{ conversation.title || '新对话' }}</h2>
+            <span class="model-badge">{{ formatModelName(conversation.model) }}</span>
+            <span v-if="conversation.thinking_enabled" class="thinking-badge">思考</span>
+          </div>
+          <div class="chat-actions">
+            <button class="btn-icon" @click="$emit('toggleStats')" title="使用统计">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 20V10"/>
+                <path d="M12 20V4"/>
+                <path d="M6 20v-6"/>
+              </svg>
+            </button>
+            <button class="btn-icon" @click="$emit('toggleSettings')" title="设置">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+              </svg>
+            </button>
+          </div>
         </div>
 
-        <div class="messages-list">
-          <MessageBubble
-            v-for="msg in messages"
-            :key="msg.id"
-            :role="msg.role"
-            :text="msg.text"
-            :thinking-content="msg.thinking"
-            :tool-calls="msg.tool_calls"
-            :process-steps="msg.process_steps"
-            :token-count="msg.token_count"
-            :created-at="msg.created_at"
-            :deletable="msg.role === 'user'"
-            :attachments="msg.attachments"
-            @delete="$emit('deleteMessage', msg.id)"
-            @regenerate="$emit('regenerateMessage', msg.id)"
-          />
+        <div ref="scrollContainer" class="messages-container">
+          <div v-if="hasMoreMessages" class="load-more-top">
+            <button @click="$emit('loadMoreMessages')" :disabled="loadingMore">
+              {{ loadingMore ? '加载中...' : '加载更早的消息' }}
+            </button>
+          </div>
 
-          <div v-if="streaming" class="message-bubble assistant streaming">
-            <div class="avatar">claw</div>
-            <div class="message-body">
-              <ProcessBlock
-                :thinking-content="streamingThinking"
-                :tool-calls="streamingToolCalls"
-                :process-steps="streamingProcessSteps"
-                :streaming-content="streamingContent"
-                :streaming="streaming"
+          <div class="messages-list">
+            <div
+              v-for="msg in messages"
+              :key="msg.id"
+              :data-msg-id="msg.id"
+            >
+              <MessageBubble
+                :role="msg.role"
+                :text="msg.text"
+                :thinking-content="msg.thinking"
+                :tool-calls="msg.tool_calls"
+                :process-steps="msg.process_steps"
+                :token-count="msg.token_count"
+                :created-at="msg.created_at"
+                :deletable="msg.role === 'user'"
+                :attachments="msg.attachments"
+                @delete="$emit('deleteMessage', msg.id)"
+                @regenerate="$emit('regenerateMessage', msg.id)"
               />
+            </div>
+
+            <div v-if="streaming" class="message-bubble assistant streaming">
+              <div class="avatar">claw</div>
+              <div class="message-body">
+                <ProcessBlock
+                  :thinking-content="streamingThinking"
+                  :tool-calls="streamingToolCalls"
+                  :process-steps="streamingProcessSteps"
+                  :streaming-content="streamingContent"
+                  :streaming="streaming"
+                />
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <MessageInput
-        ref="inputRef"
-        :disabled="streaming"
-        :tools-enabled="toolsEnabled"
-        @send="$emit('sendMessage', $event)"
-        @toggle-tools="$emit('toggleTools', $event)"
-      />
+        <MessageInput
+          ref="inputRef"
+          :disabled="streaming"
+          :tools-enabled="toolsEnabled"
+          @send="$emit('sendMessage', $event)"
+          @toggle-tools="$emit('toggleTools', $event)"
+        />
     </template>
+
+    <MessageNav
+      v-if="conversation"
+      :messages="messages"
+      :active-id="activeMessageId"
+      @scroll-to="scrollToMessage"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, watch, nextTick, onMounted } from 'vue'
+import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import MessageBubble from './MessageBubble.vue'
 import MessageInput from './MessageInput.vue'
+import MessageNav from './MessageNav.vue'
 import ProcessBlock from './ProcessBlock.vue'
 import { modelApi } from '../api'
 
@@ -105,6 +117,8 @@ const emit = defineEmits(['sendMessage', 'deleteMessage', 'regenerateMessage', '
 const scrollContainer = ref(null)
 const inputRef = ref(null)
 const modelNameMap = ref({})
+const activeMessageId = ref(null)
+let scrollObserver = null
 
 function formatModelName(modelId) {
   return modelNameMap.value[modelId] || modelId
@@ -121,7 +135,43 @@ onMounted(async () => {
   } catch (e) {
     console.warn('Failed to load model names:', e)
   }
+
+  if (scrollContainer.value) {
+    scrollObserver = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            activeMessageId.value = entry.target.dataset.msgId || null
+          }
+        }
+      },
+      { root: scrollContainer.value, threshold: 0.5 }
+    )
+  }
 })
+
+onUnmounted(() => {
+  scrollObserver?.disconnect()
+})
+
+watch(() => props.messages.length, () => {
+  nextTick(() => {
+    if (!scrollObserver || !scrollContainer.value) return
+    const wrappers = scrollContainer.value.querySelectorAll('[data-msg-id]')
+    wrappers.forEach(el => scrollObserver.observe(el))
+  })
+})
+
+function scrollToMessage(msgId) {
+  nextTick(() => {
+    if (!scrollContainer.value) return
+    const el = scrollContainer.value.querySelector(`[data-msg-id="${msgId}"]`)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      activeMessageId.value = msgId
+    }
+  })
+}
 
 function scrollToBottom(smooth = true) {
   nextTick(() => {
@@ -252,19 +302,12 @@ watch(() => props.conversation?.id, () => {
   width: 100%;
   display: flex;
   flex-direction: column;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
 .messages-container::-webkit-scrollbar {
-  width: 6px;
-}
-
-.messages-container::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
-  border-radius: 3px;
-}
-
-.messages-container::-webkit-scrollbar-thumb:hover {
-  background: var(--text-tertiary);
+  display: none;
 }
 
 .load-more-top {
