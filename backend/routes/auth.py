@@ -63,9 +63,13 @@ def _resolve_user():
     if cfg["mode"] == "single":
         user = User.query.filter_by(username="default").first()
         if not user:
-            user = User(username="default", role="admin")
-            db.session.add(user)
-            db.session.commit()
+            try:
+                user = User(username="default", role="admin")
+                db.session.add(user)
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+                user = User.query.filter_by(username="default").first()
         return user
 
     # Multi-user mode: validate JWT

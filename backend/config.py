@@ -4,8 +4,8 @@ from backend import load_config
 _cfg = load_config()
 
 # Global defaults
-DEFAULT_API_URL = _cfg.get("default_api_url", "")
-DEFAULT_API_KEY = _cfg.get("default_api_key", "")
+DEFAULT_API_URL = _cfg.get("api_url", "") or _cfg.get("default_api_url", "")
+DEFAULT_API_KEY = _cfg.get("api_key", "") or _cfg.get("default_api_key", "")
 
 # Model list (for /api/models endpoint)
 MODELS = _cfg.get("models", [])
