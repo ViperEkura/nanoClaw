@@ -92,8 +92,6 @@ function copyContent() {
 </script>
 
 <style scoped>
-/* .message-bubble, .avatar, .message-body now in global.css */
-
 .attachments-list {
   display: flex;
   flex-wrap: wrap;
@@ -115,8 +113,8 @@ function copyContent() {
 }
 
 .attachment-icon {
-  background: rgba(139, 92, 246, 0.15);
-  color: #8b5cf6;
+  background: var(--attachment-bg);
+  color: var(--attachment-color);
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 11px;

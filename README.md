@@ -10,6 +10,7 @@
 - 📁 **工作目录** - 项目级文件隔离，安全操作
 - 📊 **Token 统计** - 按日/周/月统计使用量
 - 🔄 **流式响应** - 实时 SSE 流式输出
+- 📝 **代码编辑器** - 基于 CodeMirror 6，支持 15+ 语言语法高亮和暗色主题
 - 💾 **多数据库** - 支持 MySQL、SQLite、PostgreSQL
 
 ## 快速开始
@@ -157,5 +158,5 @@ frontend/
 ## 技术栈
 
 - **后端**: Python 3.11+, Flask, SQLAlchemy
-- **前端**: Vue 3, Vite
+- **前端**: Vue 3, Vite, CodeMirror 6
 - **LLM**: 支持 GLM 等大语言模型

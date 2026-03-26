@@ -161,10 +161,6 @@ async function onClick() {
   text-overflow: ellipsis;
 }
 
-.tree-children {
-  /* no extra indent, tree-item handles it via tree-indent */
-}
-
 .tree-loading {
   padding: 4px 0 4px 40px;
   color: var(--text-tertiary);

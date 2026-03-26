@@ -260,12 +260,14 @@ watch(() => props.conversation?.id, () => {
 }
 
 .thinking-badge {
-  background: var(--success-bg);
-  color: var(--success-color);
+  background: rgba(245, 158, 11, 0.12);
+  color: #d97706;
 }
 
-
-
+[data-theme="dark"] .thinking-badge {
+  background: rgba(245, 158, 11, 0.18);
+  color: #fbbf24;
+}
 
 .messages-container {
   flex: 1 1 auto;
@@ -309,7 +311,7 @@ watch(() => props.conversation?.id, () => {
   padding: 0 16px;
 }
 
-/* .message-bubble, .avatar, .message-body now in global.css */
+
 
 
 

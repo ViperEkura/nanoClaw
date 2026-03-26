@@ -54,9 +54,9 @@
     <div v-if="activeFile" class="file-viewer">
       <div class="viewer-header">
         <div class="viewer-breadcrumb">
-          <span v-for="(seg, i) in activeFile.split('/')" :key="i" class="breadcrumb-seg">
+          <span v-for="(seg, i) in breadcrumbSegments" :key="i" class="breadcrumb-seg">
             {{ seg }}
-            <span v-if="i < activeFile.split('/').length - 1" class="breadcrumb-sep">/</span>
+            <span v-if="i < breadcrumbSegments.length - 1" class="breadcrumb-sep">/</span>
           </span>
         </div>
         <div class="viewer-actions">
@@ -93,17 +93,14 @@
         <span>{{ fileError }}</span>
       </div>
 
-      <!-- Text / code editor (default mode) -->
-      <div v-else-if="fileType !== 'image'" class="editor-container">
-        <div class="editor-highlight" aria-hidden="true" v-html="editorHighlighted"></div>
-        <textarea
-          ref="editorRef"
+      <!-- Text / code editor (all non-image files including .md) -->
+      <div v-else-if="fileType !== 'image'" class="code-pane">
+        <CodeEditor
           v-model="editContent"
-          class="file-editor"
-          spellcheck="false"
-          @keydown="onEditorKeydown"
-          @scroll="syncScroll"
-        ></textarea>
+          :filename="activeFile"
+          :dark="isDark"
+          @save="saveFile"
+        />
       </div>
 
       <!-- Image viewer -->
@@ -130,18 +127,18 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { projectApi } from '../api'
 import FileTreeItem from './FileTreeItem.vue'
-import { renderMarkdown } from '../utils/markdown'
+import CodeEditor from './CodeEditor.vue'
 import { normalizeFileTree } from '../utils/fileTree'
+import { useTheme } from '../composables/useTheme'
 
 const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg', 'ico'])
-
-// Treat all text/code files as markdown (code blocks in ``` get auto-highlighted)
-// For pure code files without markdown, wrap in code fence
 
 const props = defineProps({
   projectId: { type: String, required: true },
   projectName: { type: String, default: '' },
 })
+
+const { isDark } = useTheme()
 
 // -- Tree state --
 const treeItems = ref([])
@@ -153,13 +150,14 @@ const fileError = ref('')
 const loadingFile = ref(false)
 const editContent = ref('')
 const saving = ref(false)
-const editorRef = ref(null)
 const imageUrl = ref('')
 
-// -- File type detection --
-const isMarkdownFile = computed(() => {
-  return ['md', 'markdown', 'mdx'].includes(fileExt.value)
-})
+function releaseImageUrl() {
+  if (imageUrl.value) {
+    URL.revokeObjectURL(imageUrl.value)
+    imageUrl.value = ''
+  }
+}
 
 const fileExt = computed(() => {
   if (!activeFile.value) return ''
@@ -167,27 +165,15 @@ const fileExt = computed(() => {
   return parts.length > 1 ? parts.pop().toLowerCase() : ''
 })
 
+const breadcrumbSegments = computed(() => {
+  if (!activeFile.value) return []
+  return activeFile.value.split('/')
+})
+
 const fileType = computed(() => {
   if (IMAGE_EXTS.has(fileExt.value)) return 'image'
   return 'text'
 })
-
-// -- Content rendering --
-const editorHighlighted = computed(() => {
-  if (!editContent.value) return ''
-  if (isMarkdownFile.value) return renderMarkdown(editContent.value)
-  const lang = fileExt.value || ''
-  return renderMarkdown('```' + lang + '\n' + editContent.value + '\n```')
-})
-
-function syncScroll() {
-  const ta = editorRef.value
-  const pre = ta?.previousElementSibling
-  if (pre) {
-    pre.scrollTop = ta.scrollTop
-    pre.scrollLeft = ta.scrollLeft
-  }
-}
 
 async function loadTree(path = '') {
   loadingTree.value = true
@@ -205,7 +191,7 @@ async function openFile(filepath) {
   activeFile.value = filepath
   fileError.value = ''
   editContent.value = ''
-  imageUrl.value = ''
+  releaseImageUrl()
   loadingFile.value = true
 
   const ext = filepath.split('.').pop().toLowerCase()
@@ -281,13 +267,6 @@ async function createNewFolder() {
   }
 }
 
-function onEditorKeydown(e) {
-  if (e.key === 's' && (e.ctrlKey || e.metaKey)) {
-    e.preventDefault()
-    saveFile()
-  }
-}
-
 // Ctrl+S global shortcut
 function onGlobalKeydown(e) {
   if (e.key === 's' && (e.ctrlKey || e.metaKey) && activeFile.value) {
@@ -299,7 +278,7 @@ function onGlobalKeydown(e) {
 watch(() => props.projectId, () => {
   activeFile.value = null
   editContent.value = ''
-  imageUrl.value = ''
+  releaseImageUrl()
   loadTree()
 })
 
@@ -310,6 +289,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener('keydown', onGlobalKeydown)
+  releaseImageUrl()
 })
 </script>
 
@@ -459,6 +439,7 @@ onUnmounted(() => {
   display: flex;
   gap: 2px;
   flex-shrink: 0;
+  align-items: center;
 }
 
 .viewer-loading {
@@ -480,31 +461,6 @@ onUnmounted(() => {
   font-size: 13px;
 }
 
-
-
-
-.file-editor {
-  flex: 1;
-  resize: none;
-  border: none;
-  outline: none;
-  color: var(--text-primary);
-  background: var(--bg-code);
-  tab-size: 4;
-  white-space: pre;
-  overflow: auto;
-}
-
-.file-editor::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-.file-editor::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
-  border-radius: 3px;
-}
-
 .viewer-placeholder {
   flex: 1;
   display: flex;
@@ -516,58 +472,10 @@ onUnmounted(() => {
   font-size: 13px;
 }
 
-/* -- Editor (highlighted textarea overlay) -- */
-.editor-container {
+/* -- Code pane -- */
+.code-pane {
   flex: 1;
-  display: flex;
-  position: relative;
   overflow: hidden;
-}
-
-.editor-highlight {
-  position: absolute;
-  inset: 0;
-  margin: 0;
-  padding: 20px 24px;
-  overflow: auto;
-  pointer-events: none;
-  color: var(--text-primary);
-  background: transparent;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  font-size: 14px;
-  line-height: 1.7;
-  white-space: pre;
-  tab-size: 4;
-}
-
-/* Strip wrapper styles from markdown-rendered <pre><code> so text aligns with textarea */
-.editor-highlight :deep(pre),
-.editor-highlight :deep(code) {
-  margin: 0;
-  padding: 0;
-  background: transparent !important;
-  border: none;
-  border-radius: 0;
-  font-size: inherit;
-  font-family: inherit;
-  line-height: inherit;
-  white-space: inherit;
-  tab-size: inherit;
-  word-wrap: normal;
-}
-
-.editor-container .file-editor {
-  position: relative;
-  z-index: 1;
-  flex: 1;
-  border: none;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  font-size: 14px;
-  line-height: 1.7;
-  padding: 20px 24px;
-  color: transparent;
-  caret-color: var(--text-primary);
-  background: transparent;
 }
 
 /* -- Image viewer -- */

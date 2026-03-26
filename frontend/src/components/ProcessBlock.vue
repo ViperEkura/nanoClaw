@@ -236,7 +236,7 @@ watch(() => props.streamingContent?.length, () => {
   50% { opacity: 1; }
 }
 
-/* Thinking and tool call step headers */
+/* Step header (shared by thinking and tool_call) */
 .thinking .step-header,
 .tool_call .step-header {
   display: flex;
@@ -261,7 +261,7 @@ watch(() => props.streamingContent?.length, () => {
 }
 
 .tool_call .step-header svg:first-child {
-  color: #a855f7;
+  color: var(--tool-color);
 }
 
 .step-label {
@@ -317,7 +317,7 @@ watch(() => props.streamingContent?.length, () => {
 .loading-dots {
   font-size: 16px;
   font-weight: 700;
-  color: var(--accent-primary);
+  color: var(--tool-color);
   animation: pulse 1s ease-in-out infinite;
 }
 

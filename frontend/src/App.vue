@@ -83,12 +83,7 @@
       <div class="create-modal">
         <div class="modal-header">
           <h3>创建项目</h3>
-          <button class="btn-icon" @click="showCreateModal = false">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-          </button>
+          <CloseButton @click="showCreateModal = false" />
         </div>
         <div class="modal-body">
           <div class="form-group">
@@ -116,6 +111,7 @@ import { ref, shallowRef, computed, onMounted, defineAsyncComponent } from 'vue'
 import Sidebar from './components/Sidebar.vue'
 import ChatView from './components/ChatView.vue'
 import FileExplorer from './components/FileExplorer.vue'
+import CloseButton from './components/CloseButton.vue'
 
 const SettingsPanel = defineAsyncComponent(() => import('./components/SettingsPanel.vue'))
 const StatsPanel = defineAsyncComponent(() => import('./components/StatsPanel.vue'))
@@ -181,13 +177,10 @@ const newProjectDesc = ref('')
 const creatingProject = ref(false)
 
 function togglePanel(panel) {
-  if (panel === 'settings') {
-    showSettings.value = !showSettings.value
-    if (showSettings.value) showStats.value = false
-  } else {
-    showStats.value = !showStats.value
-    if (showStats.value) showSettings.value = false
-  }
+  const ref = panel === 'settings' ? showSettings : showStats
+  const other = panel === 'settings' ? showStats : showSettings
+  ref.value = !ref.value
+  if (ref.value) other.value = false
 }
 
 const currentConv = computed(() =>
@@ -629,31 +622,8 @@ onMounted(() => {
   font-size: 14px;
 }
 
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-}
+/* modal-overlay, modal-content, btn-icon, form-group, modal-footer, btn-secondary, btn-primary now in global.css */
 
-.modal-content {
-  border-radius: 16px;
-  width: 90%;
-  max-width: 520px;
-  max-height: 80vh;
-  overflow-y: auto;
-  padding: 24px;
-  background: color-mix(in srgb, var(--bg-primary) 75%, transparent);
-  backdrop-filter: blur(40px);
-  -webkit-backdrop-filter: blur(40px);
-  border: 1px solid var(--border-medium);
-  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.2);
-}
-
-/* -- Create project modal -- */
 .create-modal {
   background: var(--bg-primary);
   border: 1px solid var(--border-medium);
@@ -661,105 +631,5 @@ onMounted(() => {
   width: 90%;
   max-width: 440px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-}
-
-.btn-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: none;
-  background: none;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  border-radius: 6px;
-  transition: all 0.15s;
-}
-
-.btn-icon:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.form-group {
-  margin-bottom: 16px;
-}
-
-.form-group label {
-  display: block;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  margin-bottom: 6px;
-}
-
-.form-group input,
-.form-group textarea {
-  width: 100%;
-  padding: 8px 12px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-light);
-  border-radius: 8px;
-  color: var(--text-primary);
-  font-size: 14px;
-  outline: none;
-  box-sizing: border-box;
-  transition: border-color 0.2s;
-}
-
-.form-group input:focus,
-.form-group textarea:focus {
-  border-color: var(--accent-primary);
-}
-
-.form-group textarea {
-  resize: vertical;
-  min-height: 60px;
-  font-family: inherit;
-}
-
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 12px 20px;
-  border-top: 1px solid var(--border-light);
-}
-
-.btn-secondary {
-  padding: 8px 16px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-light);
-  border-radius: 8px;
-  color: var(--text-secondary);
-  font-size: 13px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-secondary:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.btn-primary {
-  padding: 8px 16px;
-  background: var(--accent-primary);
-  border: none;
-  border-radius: 8px;
-  color: #fff;
-  font-size: 13px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-primary:hover {
-  opacity: 0.9;
-}
-
-.btn-primary:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 </style>

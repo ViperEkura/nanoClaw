@@ -85,6 +85,8 @@ def delete_message(conv_id, msg_id):
     conv = _get_conv(conv_id)
     if not conv:
         return err(404, "conversation not found")
+    if msg_id.startswith("temp_"):
+        return ok(message="deleted")
     msg = db.session.get(Message, msg_id)
     if not msg or msg.conversation_id != conv_id:
         return err(404, "message not found")

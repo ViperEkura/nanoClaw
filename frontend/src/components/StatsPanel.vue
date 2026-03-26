@@ -217,13 +217,10 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { statsApi } from '../api'
-import { useTheme } from '../composables/useTheme'
 import { formatNumber } from '../utils/format'
 import CloseButton from './CloseButton.vue'
 
 defineEmits(['close'])
-
-const { isDark } = useTheme()
 
 const periods = [
   { value: 'daily', label: '今日' },
@@ -236,7 +233,9 @@ const stats = ref(null)
 const loading = ref(false)
 const hoveredPoint = ref(null)
 
-const accentColor = computed(() => isDark.value ? '#60a5fa' : '#2563eb')
+const accentColor = computed(() => {
+  return getComputedStyle(document.documentElement).getPropertyValue('--accent-primary').trim() || '#2563eb'
+})
 
 const chartWidth = 320
 const chartHeight = 140

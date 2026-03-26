@@ -306,8 +306,8 @@ textarea::placeholder {
   height: 36px;
   border-radius: 8px;
   border: none;
-  background: rgba(139, 92, 246, 0.12);
-  color: #8b5cf6;
+  background: var(--attachment-bg);
+  color: var(--attachment-color);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -322,23 +322,23 @@ textarea::placeholder {
 }
 
 .btn-tool.active {
-  background: var(--success-bg);
-  color: var(--success-color);
+  background: var(--tool-bg);
+  color: var(--tool-color);
 }
 
 .btn-tool.active:hover:not(:disabled) {
-  background: var(--success-color);
+  background: var(--tool-color);
   color: white;
 }
 
 .btn-upload:hover:not(:disabled) {
-  background: #8b5cf6;
+  background: var(--attachment-color);
   color: white;
   transform: translateY(-1px);
 }
 
 .btn-upload:active:not(:disabled) {
-  background: #7c3aed;
+  background: var(--attachment-color-hover);
   transform: translateY(0);
 }
 
