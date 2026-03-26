@@ -56,7 +56,7 @@
                 :process-steps="streamingProcessSteps"
                 :streaming="streaming"
               />
-              <div class="message-content streaming-content" v-html="renderedStreamContent || '<span class=\'placeholder\'>...</span>'"></div>
+              <div class="md-content streaming-content" v-html="renderedStreamContent || '<span class=\'placeholder\'>...</span>'"></div>
               <div class="streaming-indicator">
                 <svg class="spinner" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
@@ -370,10 +370,6 @@ defineExpose({ scrollToBottom })
 }
 
 .streaming-content {
-  font-size: 15px;
-  line-height: 1.7;
-  color: var(--text-primary);
-  word-break: break-word;
 }
 
 .streaming-indicator {
@@ -387,85 +383,8 @@ defineExpose({ scrollToBottom })
   color: var(--text-tertiary);
 }
 
-.streaming-content :deep(p) {
-  margin: 0 0 8px;
-}
-
-.streaming-content :deep(p:last-child) {
-  margin-bottom: 0;
-}
-
-.streaming-content :deep(pre) {
-  background: var(--bg-code);
-  border: 1px solid var(--border-light);
-  border-radius: 8px;
-  padding: 16px;
-  overflow-x: auto;
-  margin: 8px 0;
-  max-width: 100%;
-}
-
-.streaming-content :deep(pre code) {
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.streaming-content :deep(code) {
-  background: var(--accent-primary-light);
-  color: var(--accent-primary);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 13px;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-}
-
-.streaming-content :deep(pre code) {
-  background: none;
-  color: inherit;
-  padding: 0;
-}
-
-.streaming-content :deep(ul),
-.streaming-content :deep(ol) {
-  padding-left: 20px;
-  margin: 8px 0;
-}
-
-.streaming-content :deep(blockquote) {
-  border-left: 3px solid rgba(59, 130, 246, 0.4);
-  padding-left: 12px;
-  color: var(--text-secondary);
-  margin: 8px 0;
-}
-
-.streaming-content :deep(table) {
-  border-collapse: collapse;
-  margin: 8px 0;
-  width: 100%;
-}
-
-.streaming-content :deep(th),
-.streaming-content :deep(td) {
-  border: 1px solid var(--border-medium);
-  padding: 8px 12px;
-  text-align: left;
-}
-
-.streaming-content :deep(th) {
-  background: var(--bg-code);
-}
-
 .streaming-content :deep(.placeholder) {
   color: var(--text-tertiary);
 }
 
-.streaming-content :deep(.math-block),
-.message-content :deep(.math-block) {
-  display: block;
-  text-align: center;
-  padding: 12px 0;
-  margin: 8px 0;
-  overflow-x: auto;
-}
 </style>

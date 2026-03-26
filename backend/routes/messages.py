@@ -68,11 +68,9 @@ def message_list(conv_id):
     db.session.commit()
 
     tools_enabled = d.get("tools_enabled", True)
+    project_id = d.get("project_id")
     
-    if d.get("stream", False):
-        return _chat_service.stream_response(conv, tools_enabled, project_id)
-    
-    return _chat_service.sync_response(conv, tools_enabled, project_id)
+    return _chat_service.stream_response(conv, tools_enabled, project_id)
 
 
 @bp.route("/api/conversations/<conv_id>/messages/<msg_id>", methods=["DELETE"])

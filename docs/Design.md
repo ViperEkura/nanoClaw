@@ -194,10 +194,8 @@ classDiagram
         -GLMClient glm_client
         -ToolExecutor executor
         +Integer MAX_ITERATIONS
-        +sync_response(conv, tools_enabled, project_id) Response
         +stream_response(conv, tools_enabled, project_id) Response
         -_build_tool_calls_json(calls, results) list
-        -_message_to_dict(msg) dict
         -_process_tool_calls_delta(delta, list) list
     }
 
@@ -369,7 +367,7 @@ def process_tool_calls(self, tool_calls, context=None):
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | `GET` | `/api/conversations/:id/messages` | 获取消息列表（游标分页） |
-| `POST` | `/api/conversations/:id/messages` | 发送消息（支持 SSE 流式） |
+| `POST` | `/api/conversations/:id/messages` | 发送消息（SSE 流式） |
 | `DELETE` | `/api/conversations/:id/messages/:mid` | 删除消息 |
 | `POST` | `/api/conversations/:id/regenerate/:mid` | 重新生成消息 |
 

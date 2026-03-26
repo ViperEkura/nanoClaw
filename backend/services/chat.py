@@ -9,9 +9,6 @@ from backend.utils.helpers import (
     get_or_create_default_user,
     record_token_usage,
     build_messages,
-    ok,
-    err,
-    to_dict,
 )
 from backend.services.glm_client import GLMClient
 
@@ -26,114 +23,6 @@ class ChatService:
         self.executor = ToolExecutor(registry=registry)
 
 
-    def sync_response(self, conv: Conversation, tools_enabled: bool = True, project_id: str = None):
-        """Sync response with tool call support
-        
-        Args:
-            conv: Conversation object
-            tools_enabled: Whether to enable tools
-            project_id: Project ID for workspace isolation
-        """
-        tools = registry.list_all() if tools_enabled else None
-        messages = build_messages(conv, project_id)
-        
-        # Clear tool call history for new request
-        self.executor.clear_history()
-        
-        # Build context for tool execution
-        context = {"project_id": project_id} if project_id else None
-        
-        all_tool_calls = []
-        all_tool_results = []
-        
-        for _ in range(self.MAX_ITERATIONS):
-            try:
-                resp = self.glm_client.call(
-                    model=conv.model,
-                    messages=messages,
-                    max_tokens=conv.max_tokens,
-                    temperature=conv.temperature,
-                    thinking_enabled=conv.thinking_enabled,
-                    tools=tools,
-                )
-                resp.raise_for_status()
-                result = resp.json()
-            except Exception as e:
-                return err(500, f"upstream error: {e}")
-            
-            choice = result["choices"][0]
-            message = choice["message"]
-            
-            # No tool calls - return final result
-            if not message.get("tool_calls"):
-                usage = result.get("usage", {})
-                prompt_tokens = usage.get("prompt_tokens", 0)
-                completion_tokens = usage.get("completion_tokens", 0)
-
-                # Build content JSON
-                content_json = {
-                    "text": message.get("content", ""),
-                }
-                if message.get("reasoning_content"):
-                    content_json["thinking"] = message["reasoning_content"]
-                if all_tool_calls:
-                    content_json["tool_calls"] = self._build_tool_calls_json(all_tool_calls, all_tool_results)
-
-                # Create message
-                msg = Message(
-                    id=str(uuid.uuid4()),
-                    conversation_id=conv.id,
-                    role="assistant",
-                    content=json.dumps(content_json, ensure_ascii=False),
-                    token_count=completion_tokens,
-                )
-                db.session.add(msg)
-                db.session.commit()
-
-                user = get_or_create_default_user()
-                record_token_usage(user.id, conv.model, prompt_tokens, completion_tokens)
-
-                # Set title if needed (first message)
-                suggested_title = None
-                if not conv.title or conv.title == "新对话":
-                    user_msg = Message.query.filter_by(
-                        conversation_id=conv.id, role="user"
-                    ).order_by(Message.created_at.asc()).first()
-                    if user_msg and user_msg.content:
-                        # Parse content JSON to get text
-                        try:
-                            content_data = json.loads(user_msg.content)
-                            title_text = content_data.get("text", "")[:30]
-                        except (json.JSONDecodeError, TypeError):
-                            title_text = user_msg.content.strip()[:30]
-                        if title_text:
-                            suggested_title = title_text
-                        else:
-                            suggested_title = "新对话"
-                        conv.title = suggested_title
-                        db.session.commit()
-
-                return ok({
-                    "message": self._message_to_dict(msg),
-                    "usage": {
-                        "prompt_tokens": prompt_tokens,
-                        "completion_tokens": completion_tokens,
-                        "total_tokens": usage.get("total_tokens", 0)
-                    },
-                    "suggested_title": suggested_title,
-                })
-            
-            # Process tool calls
-            tool_calls = message["tool_calls"]
-            all_tool_calls.extend(tool_calls)
-            messages.append(message)
-            
-            tool_results = self.executor.process_tool_calls(tool_calls, context)
-            all_tool_results.extend(tool_results)
-            messages.extend(tool_results)
-        
-        return err(500, "exceeded maximum tool call iterations")
-    
     def stream_response(self, conv: Conversation, tools_enabled: bool = True, project_id: str = None):
         """Stream response with tool call support
         
@@ -379,32 +268,7 @@ class ChatService:
             })
         return result
 
-    def _message_to_dict(self, msg: Message) -> dict:
-        """Convert message to dict, parsing JSON content"""
-        result = to_dict(msg)
 
-        # Parse content JSON
-        if msg.content:
-            try:
-                content_data = json.loads(msg.content)
-                if isinstance(content_data, dict):
-                    result["text"] = content_data.get("text", "")
-                    if content_data.get("attachments"):
-                        result["attachments"] = content_data["attachments"]
-                    if content_data.get("thinking"):
-                        result["thinking"] = content_data["thinking"]
-                    if content_data.get("tool_calls"):
-                        result["tool_calls"] = content_data["tool_calls"]
-                else:
-                    result["text"] = msg.content
-            except (json.JSONDecodeError, TypeError):
-                result["text"] = msg.content
-
-        if "text" not in result:
-            result["text"] = ""
-
-        return result
-    
     def _process_tool_calls_delta(self, delta: dict, tool_calls_list: list) -> list:
         """Process tool calls from streaming delta"""
         tool_calls_delta = delta.get("tool_calls", [])

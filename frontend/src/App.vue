@@ -188,35 +188,9 @@ function loadMoreMessages() {
   if (hasMoreMessages.value) loadMessages(false)
 }
 
-// -- Send message (streaming) --
-async function sendMessage(data) {
-  if (!currentConvId.value || streaming.value) return
-
-  const convId = currentConvId.value  // 保存当前对话ID
-  const text = data.text || ''
-  const attachments = data.attachments || null
-
-  // Add user message optimistically
-  const userMsg = {
-    id: 'temp_' + Date.now(),
-    conversation_id: convId,
-    role: 'user',
-    text,
-    attachments: attachments ? attachments.map(a => ({ name: a.name, extension: a.extension })) : null,
-    token_count: 0,
-    created_at: new Date().toISOString(),
-  }
-  messages.value.push(userMsg)
-
-  streaming.value = true
-  streamContent.value = ''
-  streamThinking.value = ''
-  streamToolCalls.value = []
-  streamProcessSteps.value = []
-
-  currentStreamPromise = messageApi.send(convId, { text, attachments, projectId: currentProject.value?.id }, {
-    stream: true,
-    toolsEnabled: toolsEnabled.value,
+// -- Helpers: create stream callbacks for a conversation --
+function createStreamCallbacks(convId, { updateConvList = true } = {}) {
+  return {
     onThinkingStart() {
       if (currentConvId.value === convId) {
         streamThinking.value = ''
@@ -242,7 +216,6 @@ async function sendMessage(data) {
       }
     },
     onToolCalls(calls) {
-      console.log('🔧 Tool calls received:', calls)
       if (currentConvId.value === convId) {
         streamToolCalls.value.push(...calls.map(c => ({ ...c, result: null })))
       } else {
@@ -252,7 +225,6 @@ async function sendMessage(data) {
       }
     },
     onToolResult(result) {
-      console.log('✅ Tool result received:', result)
       if (currentConvId.value === convId) {
         const call = streamToolCalls.value.find(c => c.id === result.id)
         if (call) call.result = result.content
@@ -266,11 +238,8 @@ async function sendMessage(data) {
     onProcessStep(step) {
       const idx = step.index
       if (currentConvId.value === convId) {
-        // 创建新数组确保响应式更新
         const newSteps = [...streamProcessSteps.value]
-        while (newSteps.length <= idx) {
-          newSteps.push(null)
-        }
+        while (newSteps.length <= idx) newSteps.push(null)
         newSteps[idx] = step
         streamProcessSteps.value = newSteps
       } else {
@@ -282,13 +251,11 @@ async function sendMessage(data) {
       }
     },
     async onDone(data) {
-      // 清除保存的状态
       streamStates.delete(convId)
 
       if (currentConvId.value === convId) {
         streaming.value = false
         currentStreamPromise = null
-        // 添加助手消息（保留临时用户消息）
         messages.value.push({
           id: data.message_id,
           conversation_id: convId,
@@ -305,35 +272,27 @@ async function sendMessage(data) {
         streamToolCalls.value = []
         streamProcessSteps.value = []
 
-        // Update conversation in list (move to top)
-        const idx = conversations.value.findIndex(c => c.id === convId)
-        if (idx > 0) {
-          const [conv] = conversations.value.splice(idx, 1)
-          conv.message_count = (conv.message_count || 0) + 2
-          if (data.suggested_title) {
-            conv.title = data.suggested_title
-          }
-          conversations.value.unshift(conv)
-        } else if (idx === 0) {
-          conversations.value[0].message_count = (conversations.value[0].message_count || 0) + 2
-          if (data.suggested_title) {
-            conversations.value[0].title = data.suggested_title
+        if (updateConvList) {
+          const idx = conversations.value.findIndex(c => c.id === convId)
+          if (idx > 0) {
+            const [conv] = conversations.value.splice(idx, 1)
+            conv.message_count = (conv.message_count || 0) + 2
+            if (data.suggested_title) conv.title = data.suggested_title
+            conversations.value.unshift(conv)
+          } else if (idx === 0) {
+            conversations.value[0].message_count = (conversations.value[0].message_count || 0) + 2
+            if (data.suggested_title) conversations.value[0].title = data.suggested_title
           }
         }
       } else {
-        // 后台完成，重新加载该对话的消息
         try {
           const res = await messageApi.list(convId, null, 50)
-          // 更新对话列表中的消息计数和标题
           const idx = conversations.value.findIndex(c => c.id === convId)
           if (idx >= 0) {
             conversations.value[idx].message_count = res.data.items.length
-            // 从服务器获取最新标题
             if (res.data.items.length > 0) {
               const convRes = await conversationApi.get(convId)
-              if (convRes.data.title) {
-                conversations.value[idx].title = convRes.data.title
-              }
+              if (convRes.data.title) conversations.value[idx].title = convRes.data.title
             }
           }
         } catch (_) {}
@@ -351,6 +310,37 @@ async function sendMessage(data) {
         console.error('Stream error:', msg)
       }
     },
+  }
+}
+
+// -- Send message (streaming) --
+async function sendMessage(data) {
+  if (!currentConvId.value || streaming.value) return
+
+  const convId = currentConvId.value
+  const text = data.text || ''
+  const attachments = data.attachments || null
+
+  const userMsg = {
+    id: 'temp_' + Date.now(),
+    conversation_id: convId,
+    role: 'user',
+    text,
+    attachments: attachments ? attachments.map(a => ({ name: a.name, extension: a.extension })) : null,
+    token_count: 0,
+    created_at: new Date().toISOString(),
+  }
+  messages.value.push(userMsg)
+
+  streaming.value = true
+  streamContent.value = ''
+  streamThinking.value = ''
+  streamToolCalls.value = []
+  streamProcessSteps.value = []
+
+  currentStreamPromise = messageApi.send(convId, { text, attachments, projectId: currentProject.value?.id }, {
+    toolsEnabled: toolsEnabled.value,
+    ...createStreamCallbacks(convId, { updateConvList: true }),
   })
 }
 
@@ -370,12 +360,9 @@ async function regenerateMessage(msgId) {
   if (!currentConvId.value || streaming.value) return
 
   const convId = currentConvId.value
-
-  // 找到要重新生成的消息索引
   const msgIndex = messages.value.findIndex(m => m.id === msgId)
   if (msgIndex === -1) return
 
-  // 移除该消息及其后面的所有消息
   messages.value = messages.value.slice(0, msgIndex)
 
   streaming.value = true
@@ -387,75 +374,7 @@ async function regenerateMessage(msgId) {
   currentStreamPromise = messageApi.regenerate(convId, msgId, {
     toolsEnabled: toolsEnabled.value,
     projectId: currentProject.value?.id,
-    onThinkingStart() {
-      if (currentConvId.value === convId) {
-        streamThinking.value = ''
-      }
-    },
-    onThinking(text) {
-      if (currentConvId.value === convId) {
-        streamThinking.value += text
-      }
-    },
-    onMessage(text) {
-      if (currentConvId.value === convId) {
-        streamContent.value += text
-      }
-    },
-    onToolCalls(calls) {
-      if (currentConvId.value === convId) {
-        streamToolCalls.value.push(...calls.map(c => ({ ...c, result: null })))
-      }
-    },
-    onToolResult(result) {
-      if (currentConvId.value === convId) {
-        const call = streamToolCalls.value.find(c => c.id === result.id)
-        if (call) call.result = result.content
-      }
-    },
-    onProcessStep(step) {
-      const idx = step.index
-      if (currentConvId.value === convId) {
-        const newSteps = [...streamProcessSteps.value]
-        while (newSteps.length <= idx) {
-          newSteps.push(null)
-        }
-        newSteps[idx] = step
-        streamProcessSteps.value = newSteps
-      }
-    },
-    async onDone(data) {
-      if (currentConvId.value === convId) {
-        streaming.value = false
-        currentStreamPromise = null
-        messages.value.push({
-          id: data.message_id,
-          conversation_id: convId,
-          role: 'assistant',
-          text: streamContent.value,
-          thinking: streamThinking.value || null,
-          tool_calls: streamToolCalls.value.length > 0 ? streamToolCalls.value : null,
-          process_steps: streamProcessSteps.value.filter(Boolean),
-          token_count: data.token_count,
-          created_at: new Date().toISOString(),
-        })
-        streamContent.value = ''
-        streamThinking.value = ''
-        streamToolCalls.value = []
-        streamProcessSteps.value = []
-      }
-    },
-    onError(msg) {
-      if (currentConvId.value === convId) {
-        streaming.value = false
-        currentStreamPromise = null
-        streamContent.value = ''
-        streamThinking.value = ''
-        streamToolCalls.value = []
-        streamProcessSteps.value = []
-        console.error('Regenerate error:', msg)
-      }
-    },
+    ...createStreamCallbacks(convId, { updateConvList: false }),
   })
 }
 

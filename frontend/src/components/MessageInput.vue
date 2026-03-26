@@ -18,11 +18,10 @@
       <textarea
         ref="textareaRef"
         v-model="text"
-        placeholder="输入消息... (Shift+Enter 换行)"
+        :placeholder="disabled ? 'AI 正在回复中...' : '输入消息... (Shift+Enter 换行)'"
         rows="1"
         @input="autoResize"
         @keydown="onKeydown"
-        :disabled="disabled"
       ></textarea>
       <div class="input-footer">
         <input
@@ -272,10 +271,6 @@ textarea {
 
 textarea::placeholder {
   color: var(--text-tertiary);
-}
-
-textarea:disabled {
-  opacity: 0.5;
 }
 
 .input-footer {

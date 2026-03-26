@@ -21,7 +21,7 @@
           <div class="tool-badge">工具返回结果: {{ toolName }}</div>
           <pre>{{ content }}</pre>
         </div>
-        <div v-else class="message-content" v-html="renderedContent"></div>
+        <div v-else class="md-content message-content" v-html="renderedContent"></div>
       </div>
       <div class="message-footer">
         <span class="token-count" v-if="tokenCount">{{ tokenCount }} tokens</span>
@@ -196,10 +196,6 @@ function copyContent() {
 }
 
 .message-content {
-  font-size: 15px;
-  line-height: 1.7;
-  color: var(--text-primary);
-  word-break: break-word;
 }
 
 .tool-result-content {
@@ -230,75 +226,6 @@ function copyContent() {
   overflow-x: auto;
   white-space: pre-wrap;
   word-break: break-word;
-}
-
-.message-content :deep(p) {
-  margin: 0 0 8px;
-}
-
-.message-content :deep(p:last-child) {
-  margin-bottom: 0;
-}
-
-.message-content :deep(pre) {
-  background: var(--bg-code);
-  border: 1px solid var(--border-light);
-  border-radius: 8px;
-  padding: 16px;
-  overflow-x: auto;
-  margin: 8px 0;
-  position: relative;
-}
-
-.message-content :deep(pre code) {
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.message-content :deep(code) {
-  background: var(--accent-primary-light);
-  color: var(--accent-primary);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 13px;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-}
-
-.message-content :deep(pre code) {
-  background: none;
-  color: inherit;
-  padding: 0;
-}
-
-.message-content :deep(ul),
-.message-content :deep(ol) {
-  padding-left: 20px;
-  margin: 8px 0;
-}
-
-.message-content :deep(blockquote) {
-  border-left: 3px solid rgba(59, 130, 246, 0.4);
-  padding-left: 12px;
-  color: var(--text-secondary);
-  margin: 8px 0;
-}
-
-.message-content :deep(table) {
-  border-collapse: collapse;
-  margin: 8px 0;
-  width: 100%;
-}
-
-.message-content :deep(th),
-.message-content :deep(td) {
-  border: 1px solid var(--border-medium);
-  padding: 8px 12px;
-  text-align: left;
-}
-
-.message-content :deep(th) {
-  background: var(--bg-code);
 }
 
 .message-footer {
@@ -342,13 +269,5 @@ function copyContent() {
 .btn-delete-msg:hover {
   color: var(--danger-color);
   background: var(--danger-bg);
-}
-
-.message-content :deep(.math-block) {
-  display: block;
-  text-align: center;
-  padding: 12px 0;
-  margin: 8px 0;
-  overflow-x: auto;
 }
 </style>

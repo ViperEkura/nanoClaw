@@ -17,6 +17,8 @@
 ### 1. 安装依赖
 
 ```bash
+conda create -n claw python=3.12
+conda activate claw
 pip install -e .
 ```
 
@@ -50,19 +52,13 @@ db_type: sqlite
 db_sqlite_file: nano_claw.db
 ```
 
-### 3. 数据库迁移（首次运行或升级）
-
-```bash
-python -m backend.migrations.add_project_support
-```
-
-### 4. 启动后端
+### 3. 启动后端
 
 ```bash
 python -m backend.run
 ```
 
-### 5. 启动前端
+### 4. 启动前端
 
 ```bash
 cd frontend
@@ -124,7 +120,7 @@ frontend/
 | `POST` | `/api/conversations` | 创建会话 |
 | `GET` | `/api/conversations` | 会话列表 |
 | `GET` | `/api/conversations/:id/messages` | 消息列表 |
-| `POST` | `/api/conversations/:id/messages` | 发送消息（SSE） |
+| `POST` | `/api/conversations/:id/messages` | 发送消息（SSE 流式） |
 | `GET` | `/api/projects` | 项目列表 |
 | `POST` | `/api/projects` | 创建项目 |
 | `POST` | `/api/projects/upload` | 上传文件夹 |

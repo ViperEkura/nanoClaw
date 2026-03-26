@@ -1,20 +1,10 @@
 from backend import db
 from datetime import datetime, timezone
-from flask import current_app
 from sqlalchemy import Text
 from sqlalchemy.dialects.mysql import LONGTEXT as MYSQL_LONGTEXT
 
 
 
-def get_longtext_type():
-    """Get appropriate text type for long content based on database dialect."""
-    db_uri = current_app.config.get("SQLALCHEMY_DATABASE_URI", "")
-    if db_uri.startswith("mysql"):
-        return MYSQL_LONGTEXT
-    return Text  # SQLite and PostgreSQL use Text
-
-
-# For model definitions, we'll use a callable that returns the right type
 class LongText(db.TypeDecorator):
     """Cross-database LONGTEXT type that works with MySQL, SQLite, and PostgreSQL."""
     impl = Text
