@@ -73,6 +73,15 @@ def _build_period_result(stats, period, start_date, end_date, days):
         if d not in daily_data:
             daily_data[d] = {"prompt": 0, "completion": 0, "total": 0}
     
+    # Aggregate by model
+    by_model = {}
+    for s in stats:
+        if s.model not in by_model:
+            by_model[s.model] = {"prompt": 0, "completion": 0, "total": 0}
+        by_model[s.model]["prompt"] += s.prompt_tokens
+        by_model[s.model]["completion"] += s.completion_tokens
+        by_model[s.model]["total"] += s.total_tokens
+
     return {
         "period": period,
         "start_date": start_date.isoformat(),
@@ -80,5 +89,6 @@ def _build_period_result(stats, period, start_date, end_date, days):
         "prompt_tokens": sum(s.prompt_tokens for s in stats),
         "completion_tokens": sum(s.completion_tokens for s in stats),
         "total_tokens": sum(s.total_tokens for s in stats),
-        "daily": daily_data
+        "daily": daily_data,
+        "by_model": by_model,
     }

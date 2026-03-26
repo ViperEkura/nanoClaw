@@ -55,6 +55,8 @@ class ChatService:
             all_tool_results = []
             all_steps = []      # Collect all ordered steps for DB storage (thinking/text/tool_call/tool_result)
             step_index = 0  # Track global step index for ordering
+            total_completion_tokens = 0  # Accumulated across all iterations
+            total_prompt_tokens = 0      # Accumulated across all iterations
 
             for iteration in range(self.MAX_ITERATIONS):
                 full_content = ""
@@ -96,7 +98,17 @@ class ChatService:
                         except json.JSONDecodeError:
                             continue
 
-                        delta = chunk["choices"][0].get("delta", {})
+                        # Extract usage first (present in last chunk when stream_options is set)
+                        usage = chunk.get("usage", {})
+                        if usage:
+                            token_count = usage.get("completion_tokens", 0)
+                            prompt_tokens = usage.get("prompt_tokens", 0)
+
+                        choices = chunk.get("choices", [])
+                        if not choices:
+                            continue
+
+                        delta = choices[0].get("delta", {})
 
                         # Accumulate thinking content for this iteration
                         reasoning = delta.get("reasoning_content", "")
@@ -111,11 +123,6 @@ class ChatService:
 
                         # Accumulate tool calls from streaming deltas
                         tool_calls_list = self._process_tool_calls_delta(delta, tool_calls_list)
-
-                        usage = chunk.get("usage", {})
-                        if usage:
-                            token_count = usage.get("completion_tokens", 0)
-                            prompt_tokens = usage.get("prompt_tokens", 0)
 
                 except Exception as e:
                     yield f"event: error\ndata: {json.dumps({'content': str(e)}, ensure_ascii=False)}\n\n"
@@ -204,6 +211,8 @@ class ChatService:
                     })
                     messages.extend(tool_results)
                     all_tool_results.extend(tool_results)
+                    total_prompt_tokens += prompt_tokens
+                    total_completion_tokens += token_count
                     continue
 
                 # --- No tool calls: final iteration — emit remaining steps and save ---
@@ -230,6 +239,8 @@ class ChatService:
                     step_index += 1
 
                 suggested_title = None
+                total_prompt_tokens += prompt_tokens
+                total_completion_tokens += token_count
                 with app.app_context():
                     # Build content JSON with ordered steps array for DB storage.
                     # 'steps' is the single source of truth for rendering order.
@@ -246,17 +257,19 @@ class ChatService:
                         conversation_id=conv_id,
                         role="assistant",
                         content=json.dumps(content_json, ensure_ascii=False),
-                        token_count=token_count,
+                        token_count=total_completion_tokens,
                     )
                     db.session.add(msg)
                     db.session.commit()
 
-                    user = g.get("current_user")
-                    if user:
-                        record_token_usage(user.id, conv_model, prompt_tokens, token_count)
-
                     # Auto-generate title from first user message if needed
                     conv = db.session.get(Conversation, conv_id)
+
+                    # Record token usage (get user_id from conv, not g —
+                    # app.app_context() creates a new context where g.current_user is lost)
+                    if conv:
+                        record_token_usage(conv.user_id, conv_model, total_prompt_tokens, total_completion_tokens)
+
                     if conv and (not conv.title or conv.title == "新对话"):
                         user_msg = Message.query.filter_by(
                             conversation_id=conv_id, role="user"
@@ -277,7 +290,7 @@ class ChatService:
                         else:
                             suggested_title = None
 
-                yield f"event: done\ndata: {json.dumps({'message_id': msg_id, 'token_count': token_count, 'suggested_title': suggested_title}, ensure_ascii=False)}\n\n"
+                yield f"event: done\ndata: {json.dumps({'message_id': msg_id, 'token_count': total_completion_tokens, 'suggested_title': suggested_title}, ensure_ascii=False)}\n\n"
                 return
             
             yield f"event: error\ndata: {json.dumps({'content': 'exceeded maximum tool call iterations'}, ensure_ascii=False)}\n\n"

@@ -169,9 +169,10 @@ def update_project(project_id):
 @bp.route("/api/projects/<project_id>", methods=["DELETE"])
 def delete_project(project_id):
     """Delete a project"""
+    user = g.current_user
     project = Project.query.get(project_id)
     
-    if not project:
+    if not project or project.user_id != user.id:
         return err(404, "Project not found")
     
     # Delete project directory

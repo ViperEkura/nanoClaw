@@ -45,6 +45,7 @@ class GLMClient:
             body["tool_choice"] = "auto"
         if stream:
             body["stream"] = True
+            body["stream_options"] = {"include_usage": True}
 
         return requests.post(
             api_url,
