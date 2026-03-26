@@ -22,12 +22,13 @@ def _get_database_uri(cfg: dict) -> str:
 
     if db_type == "sqlite":
         # SQLite: sqlite:///path/to/database.db
-        db_file = cfg.get("db_sqlite_file", "app.db")
-        # Store in instance folder for better organization
-        instance_path = Path(__file__).parent.parent / "instance"
-        instance_path.mkdir(exist_ok=True)
-        db_path = instance_path / db_file
-        return f"sqlite:///{db_path}"
+        db_file = cfg.get("db_sqlite_file", "nano_claw.db")
+        # Store in workspace root directory (resolve relative to project root)
+        project_root = CONFIG_PATH.parent
+        workspace_root = project_root / cfg.get("workspace_root", "workspaces")
+        workspace_root.mkdir(parents=True, exist_ok=True)
+        db_path = workspace_root / db_file
+        return f"sqlite:///{db_path.resolve()}"
 
     elif db_type == "postgresql":
         # PostgreSQL: postgresql://user:password@host:port/database
