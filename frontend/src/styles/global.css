@@ -96,6 +96,20 @@ body {
   height: 100%;
 }
 
+/* ============ Main Panel (shared by ChatView, FileExplorer, etc.) ============ */
+.main-panel {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  min-width: 0;
+  background: color-mix(in srgb, var(--bg-secondary) 80%, transparent);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  border-left: 1px solid var(--border-light);
+}
+
 /* ============ Transitions ============ */
 .fade-enter-active,
 .fade-leave-active {
@@ -156,20 +170,24 @@ body {
 }
 
 /* 代码块滚动条 */
-.md-content pre::-webkit-scrollbar {
+.md-content pre::-webkit-scrollbar,
+.code-block pre code::-webkit-scrollbar {
   height: 6px;
 }
 
-.md-content pre::-webkit-scrollbar-track {
+.md-content pre::-webkit-scrollbar-track,
+.code-block pre code::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.md-content pre::-webkit-scrollbar-thumb {
+.md-content pre::-webkit-scrollbar-thumb,
+.code-block pre code::-webkit-scrollbar-thumb {
   background: var(--scrollbar-thumb);
   border-radius: 3px;
 }
 
-.md-content pre::-webkit-scrollbar-thumb:hover {
+.md-content pre::-webkit-scrollbar-thumb:hover,
+.code-block pre code::-webkit-scrollbar-thumb:hover {
   background: var(--text-tertiary);
 }
 
@@ -197,22 +215,7 @@ body {
   overflow-x: auto;
 }
 
-.code-block pre code::-webkit-scrollbar {
-  height: 6px;
-}
-
-.code-block pre code::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.code-block pre code::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
-  border-radius: 3px;
-}
-
-.code-block pre code::-webkit-scrollbar-thumb:hover {
-  background: var(--text-tertiary);
-}
+/* (merged above with .md-content pre selectors) */
 
 .code-header {
   display: flex;
@@ -681,11 +684,4 @@ input[type="range"]::-moz-range-thumb {
   background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a0a0a0' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
 }
 
-.form-row {
-  display: flex;
-  gap: 16px;
-}
 
-.form-row .form-group {
-  flex: 1;
-}

@@ -5,15 +5,39 @@
       :current-id="currentConvId"
       :loading="loadingConvs"
       :has-more="hasMoreConvs"
-      :current-project="currentProject"
       @select="selectConversation"
-      @create="createConversation"
       @delete="deleteConversation"
       @load-more="loadMoreConversations"
-      @select-project="selectProject"
+      @create-project="showCreateModal = true"
+      @browse-project="browseProject"
+      @create-in-project="createConversationInProject"
+      @toggle-settings="togglePanel('settings')"
+      @toggle-stats="togglePanel('stats')"
     />
 
+    <!-- File Explorer (replaces ChatView when active) -->
+    <div v-if="showFileExplorer" class="file-explorer-wrap main-panel">
+      <div class="explorer-topbar">
+        <div class="topbar-label">浏览文件</div>
+        <div v-if="currentProject" class="topbar-project-name">{{ currentProject.name }}</div>
+      </div>
+
+      <div v-if="currentProject" class="explorer-body">
+        <FileExplorer
+          :project-id="currentProject.id"
+          :project-name="currentProject.name"
+        />
+      </div>
+      <div v-else class="explorer-body explorer-empty">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" style="color: var(--text-tertiary); opacity: 0.5;">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+        </svg>
+        <p>当前对话未关联项目</p>
+      </div>
+    </div>
+
     <ChatView
+      v-else
       :conversation="currentConv"
       :messages="messages"
       :streaming="streaming"
@@ -53,6 +77,37 @@
         </div>
       </div>
     </Transition>
+
+    <!-- Create project modal -->
+    <div v-if="showCreateModal" class="modal-overlay" @click.self="showCreateModal = false">
+      <div class="create-modal">
+        <div class="modal-header">
+          <h3>创建项目</h3>
+          <button class="btn-icon" @click="showCreateModal = false">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>项目名称</label>
+            <input v-model="newProjectName" type="text" placeholder="输入项目名称" />
+          </div>
+          <div class="form-group">
+            <label>描述（可选）</label>
+            <textarea v-model="newProjectDesc" placeholder="输入项目描述" rows="3"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" @click="showCreateModal = false">取消</button>
+          <button class="btn-primary" @click="createProject" :disabled="!newProjectName.trim() || creatingProject">
+            {{ creatingProject ? '创建中...' : '创建' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -60,10 +115,11 @@
 import { ref, shallowRef, computed, onMounted, defineAsyncComponent } from 'vue'
 import Sidebar from './components/Sidebar.vue'
 import ChatView from './components/ChatView.vue'
+import FileExplorer from './components/FileExplorer.vue'
 
 const SettingsPanel = defineAsyncComponent(() => import('./components/SettingsPanel.vue'))
 const StatsPanel = defineAsyncComponent(() => import('./components/StatsPanel.vue'))
-import { conversationApi, messageApi } from './api'
+import { conversationApi, messageApi, projectApi } from './api'
 
 // -- Conversations state --
 const conversations = shallowRef([])
@@ -88,28 +144,14 @@ const streamProcessSteps = shallowRef([])
 // 保存每个对话的流式状态
 const streamStates = new Map()
 
-// 重置当前流式状态（用于 sendMessage / regenerateMessage / onError）
-function resetStreamState() {
-  streaming.value = false
+function setStreamState(isActive) {
+  streaming.value = isActive
   streamContent.value = ''
   streamThinking.value = ''
   streamToolCalls.value = []
   streamProcessSteps.value = []
 }
 
-// 初始化流式状态（用于 sendMessage / regenerateMessage 开始时）
-function initStreamState() {
-  streaming.value = true
-  streamContent.value = ''
-  streamThinking.value = ''
-  streamToolCalls.value = []
-  streamProcessSteps.value = []
-}
-
-// 辅助：更新当前对话或缓存的流式字段
-// field: streamStates 中保存的字段名
-// ref: 当前激活对话对应的 Vue ref
-// valueOrUpdater: 静态值或 (current) => newValue
 function updateStreamField(convId, field, ref, valueOrUpdater) {
   const isCurrent = currentConvId.value === convId
   const current = isCurrent ? ref.value : (streamStates.get(convId) || {})[field]
@@ -125,8 +167,13 @@ function updateStreamField(convId, field, ref, valueOrUpdater) {
 // -- UI state --
 const showSettings = ref(false)
 const showStats = ref(false)
-const toolsEnabled = ref(localStorage.getItem('tools_enabled') !== 'false') // 默认开启
-const currentProject = ref(null) // Current selected project
+const toolsEnabled = ref(localStorage.getItem('tools_enabled') !== 'false')
+const currentProject = ref(null)
+const showFileExplorer = ref(false)
+const showCreateModal = ref(false)
+const newProjectName = ref('')
+const newProjectDesc = ref('')
+const creatingProject = ref(false)
 
 function togglePanel(panel) {
   if (panel === 'settings') {
@@ -142,13 +189,12 @@ const currentConv = computed(() =>
   conversations.value.find(c => c.id === currentConvId.value) || null
 )
 
-// -- Load conversations --
+// -- Load conversations (all, no project filter) --
 async function loadConversations(reset = true) {
   if (loadingConvs.value) return
   loadingConvs.value = true
   try {
-    const projectId = currentProject.value?.id || null
-    const res = await conversationApi.list(reset ? null : nextConvCursor.value, 20, projectId)
+    const res = await conversationApi.list(reset ? null : nextConvCursor.value, 20)
     if (reset) {
       conversations.value = res.data.items
     } else {
@@ -167,12 +213,18 @@ function loadMoreConversations() {
   if (hasMoreConvs.value) loadConversations(false)
 }
 
-// -- Create conversation --
-async function createConversation() {
+// -- Create conversation in specific project --
+async function createConversationInProject(project) {
+  showFileExplorer.value = false
+  if (project.id) {
+    currentProject.value = { id: project.id, name: project.name }
+  } else {
+    currentProject.value = null
+  }
   try {
     const res = await conversationApi.create({
       title: '新对话',
-      project_id: currentProject.value?.id || null,
+      project_id: project.id || null,
     })
     conversations.value = [res.data, ...conversations.value]
     await selectConversation(res.data.id)
@@ -181,9 +233,22 @@ async function createConversation() {
   }
 }
 
-// -- Select conversation --
+
+// -- Select conversation (auto-set project context) --
 async function selectConversation(id) {
-  // 保存当前对话的流式状态和消息列表（如果有）
+  showFileExplorer.value = false
+
+  // Auto-set project context based on conversation
+  const conv = conversations.value.find(c => c.id === id)
+  if (conv?.project_id) {
+    if (!currentProject.value || currentProject.value.id !== conv.project_id) {
+      currentProject.value = { id: conv.project_id, name: conv.project_name || '' }
+    }
+  } else {
+    currentProject.value = null
+  }
+
+  // Save current streaming state
   if (currentConvId.value && streaming.value) {
     streamStates.set(currentConvId.value, {
       streaming: true,
@@ -191,7 +256,7 @@ async function selectConversation(id) {
       streamThinking: streamThinking.value,
       streamToolCalls: [...streamToolCalls.value],
       streamProcessSteps: [...streamProcessSteps.value],
-      messages: [...messages.value],  // 保存消息列表（包括临时用户消息）
+      messages: [...messages.value],
     })
   }
 
@@ -199,7 +264,7 @@ async function selectConversation(id) {
   nextMsgCursor.value = null
   hasMoreMessages.value = false
 
-  // 恢复新对话的流式状态
+  // Restore streaming state for new conversation
   const savedState = streamStates.get(id)
   if (savedState && savedState.streaming) {
     streaming.value = true
@@ -207,13 +272,12 @@ async function selectConversation(id) {
     streamThinking.value = savedState.streamThinking
     streamToolCalls.value = savedState.streamToolCalls
     streamProcessSteps.value = savedState.streamProcessSteps
-    messages.value = savedState.messages || []  // 恢复消息列表
+    messages.value = savedState.messages || []
   } else {
-    resetStreamState()
+    setStreamState(false)
     messages.value = []
   }
 
-  // 如果不是正在流式传输，从服务器加载消息
   if (!streaming.value) {
     await loadMessages(true)
   }
@@ -226,7 +290,6 @@ async function loadMessages(reset = true) {
   try {
     const res = await messageApi.list(currentConvId.value, reset ? null : nextMsgCursor.value)
     if (reset) {
-      // Filter out tool messages (they're merged into assistant messages)
       messages.value = res.data.items.filter(m => m.role !== 'tool')
     } else {
       messages.value = [...res.data.items.filter(m => m.role !== 'tool'), ...messages.value]
@@ -295,7 +358,7 @@ function createStreamCallbacks(convId, { updateConvList = true } = {}) {
           token_count: data.token_count,
           created_at: new Date().toISOString(),
         }]
-        resetStreamState()
+        setStreamState(false)
 
         if (updateConvList) {
           const idx = conversations.value.findIndex(c => c.id === convId)
@@ -329,7 +392,7 @@ function createStreamCallbacks(convId, { updateConvList = true } = {}) {
     onError(msg) {
       streamStates.delete(convId)
       if (currentConvId.value === convId) {
-        resetStreamState()
+        setStreamState(false)
         console.error('Stream error:', msg)
       }
     },
@@ -355,7 +418,7 @@ async function sendMessage(data) {
   }
   messages.value = [...messages.value, userMsg]
 
-  initStreamState()
+  setStreamState(true)
 
   messageApi.send(convId, { text, attachments, projectId: currentProject.value?.id }, {
     toolsEnabled: toolsEnabled.value,
@@ -384,7 +447,7 @@ async function regenerateMessage(msgId) {
 
   messages.value = messages.value.slice(0, msgIndex)
 
-  initStreamState()
+  setStreamState(true)
 
   messageApi.regenerate(convId, msgId, {
     toolsEnabled: toolsEnabled.value,
@@ -404,6 +467,7 @@ async function deleteConversation(id) {
         await selectConversation(currentConvId.value)
       } else {
         messages.value = []
+        currentProject.value = null
       }
     }
   } catch (e) {
@@ -418,7 +482,7 @@ async function saveSettings(data) {
     const res = await conversationApi.update(currentConvId.value, data)
     const idx = conversations.value.findIndex(c => c.id === currentConvId.value)
     if (idx !== -1) {
-    conversations.value = conversations.value.map((c, i) => i === idx ? { ...c, ...res.data } : c)
+      conversations.value = conversations.value.map((c, i) => i === idx ? { ...c, ...res.data } : c)
     }
   } catch (e) {
     console.error('Failed to save settings:', e)
@@ -431,12 +495,30 @@ function updateToolsEnabled(val) {
   localStorage.setItem('tools_enabled', String(val))
 }
 
-// -- Select project --
-function selectProject(project) {
+// -- Browse project files --
+function browseProject(project) {
   currentProject.value = project
-  // Reload conversations filtered by the selected project
-  nextConvCursor.value = null
-  loadConversations(true)
+  showFileExplorer.value = true
+}
+
+// -- Create project --
+async function createProject() {
+  if (!newProjectName.value.trim()) return
+  creatingProject.value = true
+  try {
+    await projectApi.create({
+      user_id: 1,
+      name: newProjectName.value.trim(),
+      description: newProjectDesc.value.trim(),
+    })
+    showCreateModal.value = false
+    newProjectName.value = ''
+    newProjectDesc.value = ''
+  } catch (e) {
+    console.error('Failed to create project:', e)
+  } finally {
+    creatingProject.value = false
+  }
 }
 
 // -- Init --
@@ -451,6 +533,65 @@ onMounted(() => {
   height: 100%;
 }
 
+.file-explorer-wrap {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.explorer-topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border-light);
+  flex-shrink: 0;
+}
+
+.topbar-label {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.topbar-project-name {
+  font-size: 13px;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+.explorer-body {
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+  display: flex;
+}
+
+.explorer-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--text-tertiary);
+  font-size: 14px;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
 .modal-content {
   border-radius: 16px;
   width: 90%;
@@ -463,5 +604,115 @@ onMounted(() => {
   -webkit-backdrop-filter: blur(40px);
   border: 1px solid var(--border-medium);
   box-shadow: 0 25px 60px rgba(0, 0, 0, 0.2);
+}
+
+/* -- Create project modal -- */
+.create-modal {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-medium);
+  border-radius: 12px;
+  width: 90%;
+  max-width: 440px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.15s;
+}
+
+.btn-icon:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.form-group input,
+.form-group textarea {
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 14px;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+
+.form-group input:focus,
+.form-group textarea:focus {
+  border-color: var(--accent-primary);
+}
+
+.form-group textarea {
+  resize: vertical;
+  min-height: 60px;
+  font-family: inherit;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border-light);
+}
+
+.btn-secondary {
+  padding: 8px 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-secondary:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.btn-primary {
+  padding: 8px 16px;
+  background: var(--accent-primary);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-primary:hover {
+  opacity: 0.9;
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

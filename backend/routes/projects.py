@@ -11,7 +11,8 @@ from backend.utils.workspace import (
     create_project_directory,
     delete_project_directory,
     get_project_path,
-    save_uploaded_files
+    save_uploaded_files,
+    validate_path_in_project,
 )
 
 bp = Blueprint("projects", __name__)
@@ -324,4 +325,203 @@ def list_project_files(project_id):
         "directories": directories,
         "total_files": len(files),
         "total_dirs": len(directories)
+    })
+
+
+# --- REST file operation endpoints ---
+
+MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB read limit
+TEXT_EXTENSIONS = {
+    ".py", ".js", ".ts", ".jsx", ".tsx", ".vue", ".html", ".css", ".scss", ".less",
+    ".json", ".yaml", ".yml", ".toml", ".xml", ".csv", ".md", ".txt", ".log",
+    ".sh", ".bash", ".zsh", ".bat", ".ps1", ".cmd",
+    ".c", ".h", ".cpp", ".hpp", ".java", ".go", ".rs", ".rb", ".php",
+    ".sql", ".r", ".swift", ".kt", ".dart", ".lua", ".pl", ".m",
+    ".ini", ".cfg", ".conf", ".env", ".gitignore", ".dockerignore",
+    ".dockerfile", ".makefile", ".cmake", ".gradle", ".properties",
+    ".proto", ".graphql", ".tf", ".hcl",
+}
+
+
+def _resolve_file_path(project_id, filepath):
+    """Resolve and validate a file path within a project directory."""
+    project = Project.query.get(project_id)
+    if not project:
+        return None, None, err(404, "Project not found")
+    project_dir = get_project_path(project.id, project.path)
+    try:
+        target = validate_path_in_project(filepath, project_dir)
+    except ValueError:
+        return None, None, err(403, "Invalid path: outside project directory")
+    return project_dir, target, None
+
+
+@bp.route("/api/projects/<project_id>/files/<path:filepath>", methods=["GET"])
+def read_project_file(project_id, filepath):
+    """Read a single file's content (text only)."""
+    project_dir, target, error = _resolve_file_path(project_id, filepath)
+    if error:
+        return error
+
+    if not target.exists():
+        return err(404, "File not found")
+    if not target.is_file():
+        return err(400, "Path is not a file")
+
+    if target.stat().st_size > MAX_FILE_SIZE:
+        return err(400, "File too large (max 5 MB)")
+
+    try:
+        content = target.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return err(400, "Binary file, cannot preview as text")
+
+    return ok({
+        "name": target.name,
+        "path": str(target.relative_to(project_dir)),
+        "size": target.stat().st_size,
+        "extension": target.suffix,
+        "content": content,
+    })
+
+
+@bp.route("/api/projects/<project_id>/files/<path:filepath>", methods=["PUT"])
+def write_project_file(project_id, filepath):
+    """Create or overwrite a file."""
+    data = request.get_json()
+    if not data or "content" not in data:
+        return err(400, "Missing 'content' in request body")
+
+    project_dir, target, error = _resolve_file_path(project_id, filepath)
+    if error:
+        return error
+
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(data["content"], encoding="utf-8")
+    except Exception as e:
+        return err(500, f"Failed to write file: {str(e)}")
+
+    return ok({
+        "name": target.name,
+        "path": str(target.relative_to(project_dir)),
+        "size": target.stat().st_size,
+    })
+
+
+@bp.route("/api/projects/<project_id>/files/<path:filepath>", methods=["DELETE"])
+def delete_project_file(project_id, filepath):
+    """Delete a file or empty directory."""
+    project_dir, target, error = _resolve_file_path(project_id, filepath)
+    if error:
+        return error
+
+    if not target.exists():
+        return err(404, "File not found")
+
+    try:
+        if target.is_dir():
+            shutil.rmtree(target)
+        else:
+            target.unlink()
+    except Exception as e:
+        return err(500, f"Failed to delete: {str(e)}")
+
+    return ok({"message": f"Deleted '{filepath}'"})
+
+
+@bp.route("/api/projects/<project_id>/files/mkdir", methods=["POST"])
+def create_project_directory_endpoint(project_id):
+    """Create a directory in the project."""
+    data = request.get_json()
+    if not data or "path" not in data:
+        return err(400, "Missing 'path' in request body")
+
+    project_dir, target, error = _resolve_file_path(project_id, data["path"])
+    if error:
+        return error
+
+    try:
+        target.mkdir(parents=True, exist_ok=True)
+    except FileExistsError:
+        return err(400, "Directory already exists")
+    except Exception as e:
+        return err(500, f"Failed to create directory: {str(e)}")
+
+    return ok({
+        "path": str(target.relative_to(project_dir)),
+    })
+
+
+@bp.route("/api/projects/<project_id>/search", methods=["POST"])
+def search_project_files(project_id):
+    """Search file contents (grep-like)."""
+    data = request.get_json()
+    if not data or "query" not in data:
+        return err(400, "Missing 'query' in request body")
+
+    query = data["query"]
+    subdir = data.get("path", "")
+    max_results = min(data.get("max_results", 50), 200)
+    case_sensitive = data.get("case_sensitive", False)
+
+    project = Project.query.get(project_id)
+    if not project:
+        return err(404, "Project not found")
+
+    project_dir = get_project_path(project.id, project.path)
+    target_dir = project_dir / subdir if subdir else project_dir
+
+    try:
+        target_dir = target_dir.resolve()
+        target_dir.relative_to(project_dir.resolve())
+    except ValueError:
+        return err(403, "Invalid path: outside project directory")
+
+    if not target_dir.exists():
+        return err(404, "Directory not found")
+
+    import re
+    flags = 0 if case_sensitive else re.IGNORECASE
+    try:
+        pattern = re.compile(re.escape(query), flags)
+    except re.error:
+        return err(400, "Invalid search pattern")
+
+    results = []
+    try:
+        for file_path in target_dir.rglob("*"):
+            if len(results) >= max_results:
+                break
+            if not file_path.is_file():
+                continue
+            if file_path.name.startswith("."):
+                continue
+            # Skip binary files by extension
+            if file_path.suffix.lower() not in TEXT_EXTENSIONS and file_path.suffix != "":
+                continue
+
+            try:
+                text = file_path.read_text(encoding="utf-8", errors="ignore")
+            except Exception:
+                continue
+
+            matches = []
+            for i, line in enumerate(text.splitlines(), 1):
+                if pattern.search(line):
+                    matches.append({"line": i, "content": line})
+                    if sum(len(m.get("content", "")) for m in matches) > 10000:
+                        break
+            if matches:
+                results.append({
+                    "path": str(file_path.relative_to(project_dir)),
+                    "matches": matches,
+                })
+    except Exception as e:
+        return err(500, f"Search failed: {str(e)}")
+
+    return ok({
+        "query": query,
+        "results": results,
+        "total_matches": len(results),
     })

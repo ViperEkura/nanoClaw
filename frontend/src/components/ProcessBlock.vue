@@ -212,7 +212,7 @@ const processItems = computed(() => {
 })
 
 // 增强 processBlock 内代码块
-const { enhance, debouncedEnhance } = useCodeEnhancement(processRef, processItems, { deep: true })
+const { debouncedEnhance } = useCodeEnhancement(processRef, processItems, { deep: true })
 
 // 流式时使用节流的代码块增强，减少 DOM 操作
 watch(() => props.streamingContent?.length, () => {

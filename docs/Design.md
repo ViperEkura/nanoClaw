@@ -200,8 +200,8 @@ classDiagram
     }
 
     class GLMClient {
-        -str api_url
-        -str api_key
+        -dict model_config
+        +_get_credentials(model) (api_url, api_key)
         +call(model, messages, kwargs) Response
     }
 
@@ -381,7 +381,12 @@ def process_tool_calls(self, tool_calls, context=None):
 | `PUT` | `/api/projects/:id` | 更新项目 |
 | `DELETE` | `/api/projects/:id` | 删除项目 |
 | `POST` | `/api/projects/upload` | 上传文件夹作为项目 |
-| `GET` | `/api/projects/:id/files` | 列出项目文件 |
+| `GET` | `/api/projects/:id/files` | 列出项目文件（支持 `?path=subdir` 子目录） |
+| `GET` | `/api/projects/:id/files/:filepath` | 读取文件内容（文本文件，最大 5 MB） |
+| `PUT` | `/api/projects/:id/files/:filepath` | 创建或覆盖文件（Body: `{"content": "..."}`) |
+| `DELETE` | `/api/projects/:id/files/:filepath` | 删除文件或目录 |
+| `POST` | `/api/projects/:id/files/mkdir` | 创建目录（Body: `{"path": "src/utils"}`) |
+| `POST` | `/api/projects/:id/search` | 搜索文件内容（Body: `{"query": "...", "path": "", "max_results": 50, "case_sensitive": false}`) |
 
 ### 其他
 
@@ -723,9 +728,23 @@ if name.startswith("file_") and context and "project_id" in context:
 backend_port: 3000
 frontend_port: 4000
 
-# LLM API
-api_key: your-api-key
-api_url: https://open.bigmodel.cn/api/paas/v4/chat/completions
+# LLM API（全局默认值，每个 model 可单独覆盖）
+default_api_key: your-api-key
+default_api_url: https://open.bigmodel.cn/api/paas/v4/chat/completions
+
+# 可用模型列表
+models:
+  - id: glm-5
+    name: GLM-5
+    # api_key: ...      # 可选，不指定则用 default_api_key
+    # api_url: ...      # 可选，不指定则用 default_api_url
+  - id: glm-5-turbo
+    name: GLM-5 Turbo
+    api_key: another-key       # 该模型使用独立凭证
+    api_url: https://other.api.com/chat/completions
+
+# 默认模型
+default_model: glm-5
 
 # 工作区根目录
 workspace_root: ./workspaces

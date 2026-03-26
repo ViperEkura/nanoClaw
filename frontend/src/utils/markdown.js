@@ -1,7 +1,7 @@
 import { marked } from 'marked'
 import { markedHighlight } from 'marked-highlight'
 import katex from 'katex'
-import hljs from 'highlight.js'
+import { highlightCode } from './highlight'
 
 function renderMath(text, displayMode) {
   try {
@@ -58,10 +58,7 @@ marked.use({
   ...markedHighlight({
     langPrefix: 'hljs language-',
     highlight(code, lang) {
-      if (lang && hljs.getLanguage(lang)) {
-        return hljs.highlight(code, { language: lang }).value
-      }
-      return hljs.highlightAuto(code).value
+      return highlightCode(code, lang)
     },
   }),
 })
@@ -111,10 +108,10 @@ export function enhanceCodeBlocks(container) {
 
     copyBtn.addEventListener('click', () => {
       const raw = code?.textContent || ''
-      navigator.clipboard.writeText(raw).then(() => {
-        copyBtn.innerHTML = CHECK_SVG
-        setTimeout(() => { copyBtn.innerHTML = COPY_SVG }, 1500)
-      }).catch(() => {
+      const copy = () => { copyBtn.innerHTML = CHECK_SVG; setTimeout(() => { copyBtn.innerHTML = COPY_SVG }, 1500) }
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(raw).then(copy)
+      } else {
         const ta = document.createElement('textarea')
         ta.value = raw
         ta.style.position = 'fixed'
@@ -123,9 +120,8 @@ export function enhanceCodeBlocks(container) {
         ta.select()
         document.execCommand('copy')
         document.body.removeChild(ta)
-        copyBtn.innerHTML = CHECK_SVG
-        setTimeout(() => { copyBtn.innerHTML = COPY_SVG }, 1500)
-      })
+        copy()
+      }
     })
 
     header.appendChild(langSpan)

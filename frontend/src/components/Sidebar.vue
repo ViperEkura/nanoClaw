@@ -1,124 +1,176 @@
 <template>
   <aside class="sidebar">
-    <!-- Project Selector -->
-    <div class="project-section">
-      <div class="project-selector" @click="showProjects = !showProjects">
-        <div class="project-current">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-          </svg>
-          <span>{{ currentProject?.name || '全部对话' }}</span>
-        </div>
-        <div class="project-selector-actions">
-          <button
-            v-if="currentProject"
-            class="btn-clear-project"
-            @click.stop="$emit('selectProject', null)"
-            title="显示全部对话"
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-          </button>
-          <svg 
-            width="16" 
-            height="16" 
-            viewBox="0 0 24 24" 
-            fill="none" 
-            stroke="currentColor" 
-            stroke-width="2"
-            :style="{ transform: showProjects ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }"
-          >
-            <polyline points="6 9 12 15 18 9"></polyline>
-          </svg>
-        </div>
-      </div>
-    </div>
-
-    <!-- Project Manager Panel -->
-    <div v-if="showProjects" class="project-panel">
-      <ProjectManager
-        ref="projectManagerRef"
-        :current-project="currentProject"
-        @select="selectProject"
-        @created="onProjectCreated"
-        @deleted="onProjectDeleted"
-      />
-    </div>
-
     <div class="sidebar-header">
-      <button class="btn-new" @click="$emit('create')">
+      <button class="btn-new-project" @click="$emit('createProject')">
         <span class="icon">+</span>
-        <span>新对话</span>
+        <span>新建项目</span>
       </button>
     </div>
 
     <div class="conversation-list" @scroll="onScroll">
-      <div
-        v-for="conv in conversations"
-        :key="conv.id"
-        class="conversation-item"
-        :class="{ active: conv.id === currentId }"
-        @click="$emit('select', conv.id)"
-      >
-        <div class="conv-info">
-          <div class="conv-title">{{ conv.title || '新对话' }}</div>
-          <div class="conv-meta">
-            <span>{{ conv.message_count || 0 }} 条消息 · {{ formatTime(conv.updated_at) }}</span>
-            <span v-if="!currentProject && conv.project_name" class="conv-project-badge">{{ conv.project_name }}</span>
+      <!-- Project groups -->
+      <div v-for="group in groupedData.groups" :key="group.id" class="project-group">
+        <div class="project-header" @click="toggleGroup(group.id)">
+          <svg class="chevron" :class="{ collapsed: !expandedGroups[group.id] }" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+          <span class="project-name">{{ group.name }}</span>
+          <span class="conv-count">{{ group.conversations.length }}</span>
+          <button
+            class="btn-group-action"
+            title="新建对话"
+            @click.stop="$emit('createInProject', { id: group.id, name: group.name })"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+          </button>
+          <button
+            class="btn-group-action"
+            title="浏览文件"
+            @click.stop="$emit('browseProject', { id: group.id, name: group.name })"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+            </svg>
+          </button>
+        </div>
+        <div v-show="expandedGroups[group.id]">
+          <div
+            v-for="conv in group.conversations"
+            :key="conv.id"
+            class="conversation-item"
+            :class="{ active: conv.id === currentId }"
+            @click="$emit('select', conv.id)"
+          >
+            <div class="conv-info">
+              <div class="conv-title">{{ conv.title || '新对话' }}</div>
+              <div class="conv-meta">
+                <span>{{ conv.message_count || 0 }} 条消息 · {{ formatTime(conv.updated_at) }}</span>
+              </div>
+            </div>
+            <button class="btn-delete" @click.stop="$emit('delete', conv.id)" title="删除">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              </svg>
+            </button>
           </div>
         </div>
-        <button class="btn-delete" @click.stop="$emit('delete', conv.id)" title="删除">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="3 6 5 6 21 6"></polyline>
-            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+      </div>
+
+      <!-- Standalone conversations -->
+      <div v-if="groupedData.standalone.length > 0" class="project-group">
+        <div class="project-header" @click="toggleGroup('__standalone__')">
+          <svg class="chevron" :class="{ collapsed: !expandedGroups['__standalone__'] }" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6 9 12 15 18 9"/>
           </svg>
-        </button>
+          <span class="conv-count">{{ groupedData.standalone.length }}</span>
+          <button
+            class="btn-group-action"
+            title="新建对话"
+            @click.stop="$emit('createInProject', { id: null, name: null })"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+          </button>
+          <span class="btn-placeholder"></span>
+        </div>
+        <div v-show="expandedGroups['__standalone__']">
+          <div
+            v-for="conv in groupedData.standalone"
+            :key="conv.id"
+            class="conversation-item"
+            :class="{ active: conv.id === currentId }"
+            @click="$emit('select', conv.id)"
+          >
+            <div class="conv-info">
+              <div class="conv-title">{{ conv.title || '新对话' }}</div>
+              <div class="conv-meta">
+                <span>{{ conv.message_count || 0 }} 条消息 · {{ formatTime(conv.updated_at) }}</span>
+              </div>
+            </div>
+            <button class="btn-delete" @click.stop="$emit('delete', conv.id)" title="删除">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
       </div>
 
       <div v-if="loading" class="loading-more">加载中...</div>
-      <div v-if="!loading && conversations.length === 0" class="empty-hint">
-        {{ currentProject ? '该项目暂无对话' : '暂无对话' }}
-      </div>
+      <div v-if="!loading && conversations.length === 0" class="empty-hint">暂无对话</div>
+    </div>
+
+    <div class="sidebar-footer">
+      <button class="btn-footer" title="使用统计" @click="$emit('toggleStats')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 20V10"/>
+          <path d="M12 20V4"/>
+          <path d="M6 20v-6"/>
+        </svg>
+      </button>
+      <button class="btn-footer" title="设置" @click="$emit('toggleSettings')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+      </button>
     </div>
   </aside>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { computed, reactive } from 'vue'
 import { formatTime } from '../utils/format'
-import ProjectManager from './ProjectManager.vue'
 
 const props = defineProps({
   conversations: { type: Array, required: true },
   currentId: { type: String, default: null },
   loading: { type: Boolean, default: false },
   hasMore: { type: Boolean, default: false },
-  currentProject: { type: Object, default: null },
 })
 
-const emit = defineEmits(['select', 'create', 'delete', 'loadMore', 'selectProject'])
+const emit = defineEmits(['select', 'delete', 'loadMore', 'createProject', 'browseProject', 'createInProject', 'toggleSettings', 'toggleStats'])
 
-const showProjects = ref(false)
-const projectManagerRef = ref(null)
+const expandedGroups = reactive({})
 
-function selectProject(project) {
-  emit('selectProject', project)
-  showProjects.value = false
-}
+const groupedData = computed(() => {
+  const groups = {}
+  const standalone = []
 
-function onProjectCreated(project) {
-  // Auto-select newly created project and refresh list
-  projectManagerRef.value?.loadProjects()
-  emit('selectProject', project)
-}
-
-function onProjectDeleted(projectId) {
-  // If deleted project is current, clear selection
-  if (props.currentProject?.id === projectId) {
-    emit('selectProject', null)
+  for (const conv of props.conversations) {
+    if (conv.project_id) {
+      if (!groups[conv.project_id]) {
+        groups[conv.project_id] = {
+          id: conv.project_id,
+          name: conv.project_name || '未知项目',
+          conversations: [],
+        }
+      }
+      groups[conv.project_id].conversations.push(conv)
+    } else {
+      standalone.push(conv)
+    }
   }
+
+  for (const id of Object.keys(groups)) {
+    if (!(id in expandedGroups)) expandedGroups[id] = true
+  }
+  if (standalone.length > 0 && !('__standalone__' in expandedGroups)) {
+    expandedGroups['__standalone__'] = true
+  }
+
+  return { groups: Object.values(groups), standalone }
+})
+
+function toggleGroup(id) {
+  expandedGroups[id] = !expandedGroups[id]
 }
 
 function onScroll(e) {
@@ -144,86 +196,15 @@ function onScroll(e) {
   overflow: hidden;
 }
 
-.project-section {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-light);
-}
-
-.project-selector {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 12px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-light);
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.project-selector:hover {
-  background: var(--bg-hover);
-  border-color: var(--accent-primary);
-}
-
-.project-current {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-primary);
-  min-width: 0;
-}
-
-.project-current span {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.project-selector-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.btn-clear-project {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  background: none;
-  border: none;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  border-radius: 4px;
-  transition: all 0.15s;
-}
-
-.btn-clear-project:hover {
-  color: var(--text-primary);
-  background: var(--bg-hover);
-}
-
-.project-panel {
-  max-height: 300px;
-  overflow-y: auto;
-  border-bottom: 1px solid var(--border-light);
-  background: var(--bg-secondary);
-}
-
 .sidebar-header {
   padding: 16px;
 }
 
-.btn-new {
+.btn-new-project {
   width: 100%;
   padding: 10px 16px;
   background: var(--accent-primary-light);
-  border: 1px dashed var(--accent-primary);
+  border: 1px solid var(--accent-primary);
   border-radius: 10px;
   color: var(--accent-primary);
   font-size: 14px;
@@ -234,20 +215,22 @@ function onScroll(e) {
   transition: all 0.2s;
 }
 
-.btn-new:hover {
+.btn-new-project:hover {
   background: var(--accent-primary-medium);
-  border-color: var(--accent-primary);
 }
 
-.btn-new .icon {
+.btn-new-project .icon {
   font-size: 18px;
   font-weight: 300;
 }
 
+
+
+
 .conversation-list {
   flex: 1;
   overflow-y: auto;
-  padding: 0 8px 16px;
+  padding: 0 16px 16px;
 }
 
 .conversation-list::-webkit-scrollbar {
@@ -259,10 +242,88 @@ function onScroll(e) {
   border-radius: 2px;
 }
 
+.project-group {
+  margin-bottom: 4px;
+}
+
+.project-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  cursor: pointer;
+  border-radius: 10px;
+  user-select: none;
+  transition: background 0.15s;
+}
+
+.project-header:hover {
+  background: var(--bg-hover);
+}
+
+.chevron {
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+  color: var(--text-secondary);
+}
+
+.chevron.collapsed {
+  transform: rotate(-90deg);
+}
+
+.project-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+.btn-placeholder { width: 24px; flex-shrink: 0; }
+
+.conv-count {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+  background: var(--bg-secondary);
+  padding: 1px 6px;
+  border-radius: 10px;
+  margin-left: auto;
+}
+
+.btn-group-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border-radius: 4px;
+  flex-shrink: 0;
+  transition: all 0.15s;
+  opacity: 0.5;
+}
+
+.project-header:hover .btn-group-action {
+  opacity: 1;
+}
+
+.btn-group-action:hover {
+  color: var(--accent-primary);
+  background: var(--accent-primary-light);
+  opacity: 1;
+}
+
 .conversation-item {
   display: flex;
   align-items: center;
-  padding: 10px 12px;
+  padding: 8px 12px 8px 36px;
   border-radius: 8px;
   cursor: pointer;
   transition: background 0.15s;
@@ -283,7 +344,7 @@ function onScroll(e) {
 }
 
 .conv-title {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
@@ -291,20 +352,12 @@ function onScroll(e) {
 }
 
 .conv-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-tertiary);
   margin-top: 2px;
-}
-
-.conv-project-badge {
-  font-size: 11px;
-  color: var(--accent-primary);
-  opacity: 0.8;
-  flex-shrink: 0;
-  margin-left: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .btn-delete {
@@ -334,5 +387,34 @@ function onScroll(e) {
   color: var(--text-tertiary);
   font-size: 13px;
   padding: 20px;
+}
+
+.sidebar-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-light);
+  flex-shrink: 0;
+}
+
+.btn-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border-radius: 8px;
+  transition: all 0.15s;
+}
+
+.btn-footer:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 </style>

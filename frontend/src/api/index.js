@@ -233,4 +233,44 @@ export const projectApi = {
       return json
     })
   },
+
+  listFiles(projectId, path = '') {
+    return request(`/projects/${projectId}/files${buildQueryParams({ path })}`)
+  },
+
+  readFile(projectId, filepath) {
+    return request(`/projects/${projectId}/files/${filepath}`)
+  },
+
+  readFileRaw(projectId, filepath) {
+    return fetch(`${BASE}/projects/${projectId}/files/${filepath}`).then(res => {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      return res
+    })
+  },
+
+  writeFile(projectId, filepath, content) {
+    return request(`/projects/${projectId}/files/${filepath}`, {
+      method: 'PUT',
+      body: { content },
+    })
+  },
+
+  deleteFile(projectId, filepath) {
+    return request(`/projects/${projectId}/files/${filepath}`, { method: 'DELETE' })
+  },
+
+  mkdir(projectId, dirPath) {
+    return request(`/projects/${projectId}/files/mkdir`, {
+      method: 'POST',
+      body: { path: dirPath },
+    })
+  },
+
+  search(projectId, query, options = {}) {
+    return request(`/projects/${projectId}/search`, {
+      method: 'POST',
+      body: { query, ...options },
+    })
+  },
 }
