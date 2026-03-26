@@ -2,12 +2,11 @@
 import json
 import uuid
 from datetime import datetime, timezone
-from flask import Blueprint, request
+from flask import Blueprint, request, g
 from backend import db
 from backend.models import Conversation, Message
 from backend.utils.helpers import ok, err, message_to_dict
 from backend.services.chat import ChatService
-
 
 bp = Blueprint("messages", __name__)
 
@@ -21,13 +20,21 @@ def init_chat_service(glm_client):
     _chat_service = ChatService(glm_client)
 
 
+def _get_conv(conv_id):
+    """Get conversation with ownership check."""
+    conv = db.session.get(Conversation, conv_id)
+    if not conv or conv.user_id != g.current_user.id:
+        return None
+    return conv
+
+
 @bp.route("/api/conversations/<conv_id>/messages", methods=["GET", "POST"])
 def message_list(conv_id):
     """List or create messages"""
-    conv = db.session.get(Conversation, conv_id)
+    conv = _get_conv(conv_id)
     if not conv:
         return err(404, "conversation not found")
-    
+
     if request.method == "GET":
         cursor = request.args.get("cursor")
         limit = min(int(request.args.get("limit", 50)), 100)
@@ -36,14 +43,14 @@ def message_list(conv_id):
             q = q.filter(Message.created_at < (
                 db.session.query(Message.created_at).filter_by(id=cursor).scalar() or datetime.now(timezone.utc)))
         rows = q.order_by(Message.created_at.asc()).limit(limit + 1).all()
-        
+
         items = [message_to_dict(r) for r in rows[:limit]]
         return ok({
             "items": items,
             "next_cursor": items[-1]["id"] if len(rows) > limit else None,
             "has_more": len(rows) > limit,
         })
-    
+
     # POST - create message and get AI response
     d = request.json or {}
     text = (d.get("text") or "").strip()
@@ -68,14 +75,14 @@ def message_list(conv_id):
 
     tools_enabled = d.get("tools_enabled", True)
     project_id = d.get("project_id") or conv.project_id
-    
+
     return _chat_service.stream_response(conv, tools_enabled, project_id)
 
 
 @bp.route("/api/conversations/<conv_id>/messages/<msg_id>", methods=["DELETE"])
 def delete_message(conv_id, msg_id):
     """Delete a message"""
-    conv = db.session.get(Conversation, conv_id)
+    conv = _get_conv(conv_id)
     if not conv:
         return err(404, "conversation not found")
     msg = db.session.get(Message, msg_id)
@@ -89,7 +96,7 @@ def delete_message(conv_id, msg_id):
 @bp.route("/api/conversations/<conv_id>/regenerate/<msg_id>", methods=["POST"])
 def regenerate_message(conv_id, msg_id):
     """Regenerate an assistant message"""
-    conv = db.session.get(Conversation, conv_id)
+    conv = _get_conv(conv_id)
     if not conv:
         return err(404, "conversation not found")
 

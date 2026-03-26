@@ -15,6 +15,7 @@ dependencies = [
     "beautifulsoup4>=4.12",
     "httpx>=0.25",
     "lxml>=5.0",
+    "PyJWT>=2.8",
 ]
 
 [build-system]

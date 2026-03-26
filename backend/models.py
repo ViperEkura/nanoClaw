@@ -21,12 +21,49 @@ class User(db.Model):
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     username = db.Column(db.String(50), unique=True, nullable=False)
-    password = db.Column(db.String(255), nullable=True)  # Allow NULL for third-party login
-    phone = db.Column(db.String(20))
+    password_hash = db.Column(db.String(255), nullable=True)  # NULL for API-key-only auth
+    email = db.Column(db.String(120), unique=True, nullable=True)
+    avatar = db.Column(db.String(512), nullable=True)
+    role = db.Column(db.String(20), nullable=False, default="user")  # user, admin
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    last_login_at = db.Column(db.DateTime, nullable=True)
 
     conversations = db.relationship("Conversation", backref="user", lazy="dynamic",
                                     cascade="all, delete-orphan",
                                     order_by="Conversation.updated_at.desc()")
+    projects = db.relationship("Project", backref="user", lazy="dynamic",
+                               cascade="all, delete-orphan")
+
+    @property
+    def password(self):
+        raise AttributeError("password is not readable")
+
+    @password.setter
+    def password(self, plain):
+        if plain:
+            from werkzeug.security import generate_password_hash
+            self.password_hash = generate_password_hash(plain)
+        else:
+            self.password_hash = None
+
+    def check_password(self, plain):
+        if not self.password_hash:
+            return False
+        from werkzeug.security import check_password_hash
+        return check_password_hash(self.password_hash, plain)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "username": self.username,
+            "email": self.email,
+            "avatar": self.avatar,
+            "role": self.role,
+            "is_active": self.is_active,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "last_login_at": self.last_login_at.isoformat() if self.last_login_at else None,
+        }
 
 
 class Conversation(db.Model):

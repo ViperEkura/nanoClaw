@@ -1,12 +1,11 @@
 """Chat completion service"""
 import json
 import uuid
-from flask import current_app, Response
+from flask import current_app, g, Response
 from backend import db
 from backend.models import Conversation, Message
 from backend.tools import registry, ToolExecutor
 from backend.utils.helpers import (
-    get_or_create_default_user,
     record_token_usage,
     build_messages,
 )
@@ -205,8 +204,9 @@ class ChatService:
                     db.session.add(msg)
                     db.session.commit()
 
-                    user = get_or_create_default_user()
-                    record_token_usage(user.id, conv_model, prompt_tokens, token_count)
+                    user = g.get("current_user")
+                    if user:
+                        record_token_usage(user.id, conv_model, prompt_tokens, token_count)
 
                     # Check if we need to set title (first message in conversation)
                     conv = db.session.get(Conversation, conv_id)

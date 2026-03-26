@@ -42,6 +42,7 @@ backend/
 │
 ├── routes/              # API 路由
 │   ├── __init__.py
+│   ├── auth.py          # 认证（登录/注册/JWT）
 │   ├── conversations.py # 会话 CRUD
 │   ├── messages.py      # 消息 CRUD + 聊天
 │   ├── models.py        # 模型列表
@@ -89,10 +90,18 @@ classDiagram
     class User {
         +Integer id
         +String username
-        +String password
-        +String phone
+        +String password_hash
+        +String email
+        +String avatar
+        +String role
+        +Boolean is_active
+        +DateTime created_at
+        +DateTime last_login_at
         +relationship conversations
         +relationship projects
+        +to_dict() dict
+        +check_password(str) bool
+        +password(str)$  # property setter, 自动 hash
     }
 
     class Project {
@@ -352,6 +361,16 @@ def process_tool_calls(self, tool_calls, context=None):
 
 ## API 总览
 
+### 认证
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET` | `/api/auth/mode` | 获取当前认证模式（公开端点） |
+| `POST` | `/api/auth/login` | 用户登录，返回 JWT token |
+| `POST` | `/api/auth/register` | 用户注册（仅多用户模式可用） |
+| `GET` | `/api/auth/profile` | 获取当前用户信息 |
+| `PATCH` | `/api/auth/profile` | 更新当前用户信息 |
+
 ### 会话管理
 
 | 方法 | 路径 | 说明 |
@@ -441,12 +460,19 @@ def process_tool_calls(self, tool_calls, context=None):
 
 ### User（用户）
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `id` | Integer | 自增主键 |
-| `username` | String(50) | 用户名（唯一） |
-| `password` | String(255) | 密码（可为空，支持第三方登录） |
-| `phone` | String(20) | 手机号 |
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `id` | Integer | - | 自增主键 |
+| `username` | String(50) | - | 用户名（唯一） |
+| `password_hash` | String(255) | null | 密码哈希（可为空，支持 API-key-only 认证） |
+| `email` | String(120) | null | 邮箱（唯一） |
+| `avatar` | String(512) | null | 头像 URL |
+| `role` | String(20) | "user" | 角色：`user` / `admin` |
+| `is_active` | Boolean | true | 是否激活 |
+| `created_at` | DateTime | now | 创建时间 |
+| `last_login_at` | DateTime | null | 最后登录时间 |
+
+`password` 通过 property setter 自动调用 `werkzeug` 的 `generate_password_hash` 存储，通过 `check_password()` 方法验证。
 
 ### Project（项目）
 
@@ -527,13 +553,66 @@ GET /api/conversations?limit=20&cursor=conv_abc123
 
 ---
 
-## 错误码
+## 认证机制
+
+### 概述
+
+系统支持**单用户模式**和**多用户模式**，通过 `config.yml` 中的 `auth_mode` 切换。
+
+### 单用户模式（`auth_mode: single`，默认）
+
+- **无需登录**，前端不需要传 token
+- 后端自动创建一个 `username="default"`、`role="admin"` 的用户
+- 每次请求通过 `before_request` 钩子自动将 `g.current_user` 设为该默认用户
+- 所有路由从 `g.current_user` 获取当前用户，无需前端传递 `user_id`
+
+### 多用户模式（`auth_mode: multi`）
+
+- 除公开端点外，所有请求必须在 `Authorization` 头中携带 JWT token
+- 用户通过 `/api/auth/register` 注册、`/api/auth/login` 登录获取 token
+- Token 有效期 7 天，过期需重新登录
+- 用户只能访问自己的数据（对话、项目、统计等）
+
+### 认证流程
+
+```
+单用户模式：
+  请求 → before_request → 查找/创建 default 用户 → g.current_user → 路由处理
+
+多用户模式：
+  请求 → before_request → 提取 Authorization header → 验证 JWT → 查找用户 → g.current_user → 路由处理
+                                                                    ↓ 失败
+                                                                返回 401
+```
+
+### 公开端点（无需认证）
+
+| 端点 | 说明 |
+|------|------|
+| `POST /api/auth/login` | 登录 |
+| `POST /api/auth/register` | 注册 |
+| `GET /api/models` | 模型列表 |
+| `GET /api/tools` | 工具列表 |
+
+### 前端适配
+
+前端 API 层（`frontend/src/api/index.js`）已预留 token 管理：
+- `getToken()` / `setToken(token)` / `clearToken()`
+- 所有请求自动附带 `Authorization: Bearer <token>`（token 为空时不发送）
+- 收到 401 时自动清除 token
+
+切换到多用户模式时，只需补充登录/注册页面 UI。
+
+---
 
 | Code | 说明 |
 |------|------|
 | `0` | 成功 |
 | `400` | 请求参数错误 |
+| `401` | 未认证（多用户模式下缺少或无效 token） |
+| `403` | 禁止访问（账户禁用、单用户模式下注册等） |
 | `404` | 资源不存在 |
+| `409` | 资源冲突（用户名/邮箱已存在） |
 | `500` | 服务器错误 |
 
 错误响应：
@@ -748,6 +827,11 @@ default_model: glm-5
 
 # 工作区根目录
 workspace_root: ./workspaces
+
+# 认证模式：single（单用户，无需登录） / multi（多用户，需要 JWT）
+auth_mode: single
+# JWT 密钥（仅多用户模式使用，生产环境请替换为随机值）
+jwt_secret: nano-claw-default-secret-change-in-production
 
 # 数据库
 db_type: mysql  # mysql, sqlite, postgresql

@@ -1,9 +1,9 @@
 """Token statistics API routes"""
 from datetime import date, timedelta
-from flask import Blueprint, request
+from flask import Blueprint, request, g
 from sqlalchemy import func
 from backend.models import TokenUsage
-from backend.utils.helpers import ok, err, get_or_create_default_user
+from backend.utils.helpers import ok, err
 
 bp = Blueprint("stats", __name__)
 
@@ -11,7 +11,7 @@ bp = Blueprint("stats", __name__)
 @bp.route("/api/stats/tokens", methods=["GET"])
 def token_stats():
     """Get token usage statistics"""
-    user = get_or_create_default_user()
+    user = g.current_user
     period = request.args.get("period", "daily")
     
     today = date.today()

@@ -31,14 +31,16 @@ pip install -e .
 backend_port: 3000
 frontend_port: 4000
 
-# LLM API
-api_key: {{your-api-key}}
-api_url: https://open.bigmodel.cn/api/paas/v4/chat/completions
+# LLM API (global defaults, can be overridden per model)
+default_api_key: {{your-api-key}}
+default_api_url: https://open.bigmodel.cn/api/paas/v4/chat/completions
 
-# Available models
+# Available models (each model can optionally specify its own api_key and api_url)
 models:
   - id: glm-5
     name: GLM-5
+    # api_key: xxx       # Optional, falls back to default_api_key
+    # api_url: xxx       # Optional, falls back to default_api_url
   - id: glm-4-plus
     name: GLM-4 Plus
 
@@ -46,6 +48,14 @@ default_model: glm-5
 
 # Workspace root directory
 workspace_root: ./workspaces
+
+# Authentication
+# "single": Single-user mode - no login required, auto-creates default user
+# "multi": Multi-user mode - requires JWT, users must register/login
+auth_mode: single
+
+# JWT secret (only used in multi-user mode, change for production!)
+jwt_secret: nano-claw-default-secret-change-in-production
 
 # Database Configuration
 db_type: sqlite
@@ -72,6 +82,7 @@ npm run dev
 backend/
 ├── models.py        # SQLAlchemy 数据模型
 ├── routes/          # API 路由
+│   ├── auth.py      # 认证（登录/注册/JWT）
 │   ├── conversations.py
 │   ├── messages.py
 │   ├── projects.py  # 项目管理
@@ -117,7 +128,8 @@ frontend/
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `POST` | `/api/conversations` | 创建会话 |
+| `POST` | `/api/auth/login` | 用户登录 |
+| `POST` | `/api/auth/register` | 用户注册 |
 | `GET` | `/api/conversations` | 会话列表 |
 | `GET` | `/api/conversations/:id/messages` | 消息列表 |
 | `POST` | `/api/conversations/:id/messages` | 发送消息（SSE 流式） |

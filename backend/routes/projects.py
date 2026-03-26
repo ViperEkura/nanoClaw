@@ -2,10 +2,10 @@
 import os
 import uuid
 import shutil
-from flask import Blueprint, request
+from flask import Blueprint, request, g
 
 from backend import db
-from backend.models import Project, User
+from backend.models import Project
 from backend.utils.helpers import ok, err
 from backend.utils.workspace import (
     create_project_directory,
@@ -20,13 +20,9 @@ bp = Blueprint("projects", __name__)
 
 @bp.route("/api/projects", methods=["GET"])
 def list_projects():
-    """List all projects for a user"""
-    user_id = request.args.get("user_id", type=int)
-    
-    if not user_id:
-        return err(400, "Missing user_id parameter")
-    
-    projects = Project.query.filter_by(user_id=user_id).order_by(Project.updated_at.desc()).all()
+    """List all projects for current user"""
+    user = g.current_user
+    projects = Project.query.filter_by(user_id=user.id).order_by(Project.updated_at.desc()).all()
     
     return ok({
         "projects": [
@@ -48,49 +44,41 @@ def list_projects():
 @bp.route("/api/projects", methods=["POST"])
 def create_project():
     """Create a new project"""
+    user = g.current_user
     data = request.get_json()
-    
+
     if not data:
         return err(400, "No data provided")
-    
-    user_id = data.get("user_id")
+
     name = data.get("name", "").strip()
     description = data.get("description", "")
-    
-    if not user_id:
-        return err(400, "Missing user_id")
-    
+
     if not name:
         return err(400, "Project name is required")
-    
-    # Check if user exists
-    user = User.query.get(user_id)
-    if not user:
-        return err(404, "User not found")
-    
+
     # Check if project name already exists for this user
-    existing = Project.query.filter_by(user_id=user_id, name=name).first()
+    existing = Project.query.filter_by(user_id=user.id, name=name).first()
     if existing:
         return err(400, f"Project '{name}' already exists")
-    
+
     # Create project directory
     try:
-        relative_path, absolute_path = create_project_directory(name, user_id)
+        relative_path, absolute_path = create_project_directory(name, user.id)
     except Exception as e:
         return err(500, f"Failed to create project directory: {str(e)}")
-    
+
     # Create project record
     project = Project(
         id=str(uuid.uuid4()),
-        user_id=user_id,
+        user_id=user.id,
         name=name,
         path=relative_path,
         description=description
     )
-    
+
     db.session.add(project)
     db.session.commit()
-    
+
     return ok({
         "id": project.id,
         "name": project.name,
@@ -202,14 +190,11 @@ def delete_project(project_id):
 @bp.route("/api/projects/upload", methods=["POST"])
 def upload_project_folder():
     """Upload a folder as a new project via file upload"""
-    user_id = request.form.get("user_id", type=int)
+    user = g.current_user
     project_name = request.form.get("name", "").strip()
     description = request.form.get("description", "")
 
     files = request.files.getlist("files")
-
-    if not user_id:
-        return err(400, "Missing user_id")
 
     if not files:
         return err(400, "No files uploaded")
@@ -218,19 +203,14 @@ def upload_project_folder():
         # Use first file's top-level folder name
         project_name = files[0].filename.split("/")[0] if files[0].filename else "untitled"
 
-    # Check if user exists
-    user = User.query.get(user_id)
-    if not user:
-        return err(404, "User not found")
-
     # Check if project name already exists
-    existing = Project.query.filter_by(user_id=user_id, name=project_name).first()
+    existing = Project.query.filter_by(user_id=user.id, name=project_name).first()
     if existing:
         return err(400, f"Project '{project_name}' already exists")
 
     # Create project directory first
     try:
-        relative_path, absolute_path = create_project_directory(project_name, user_id)
+        relative_path, absolute_path = create_project_directory(project_name, user.id)
     except Exception as e:
         return err(500, f"Failed to create project directory: {str(e)}")
 

@@ -7,8 +7,24 @@ from backend import db
 from backend.models import Message, TokenUsage, User
 
 
+def get_current_user():
+    """Get the current authenticated user from request context (g.current_user)."""
+    from flask import g
+    return getattr(g, "current_user", None)
+
+
 def get_or_create_default_user() -> User:
-    """Get or create default user"""
+    """Get or create default user.
+
+    .. deprecated::
+        Use g.current_user instead. This is kept for backward compatibility
+        and will be removed in a future version.
+    """
+    from flask import g
+    user = getattr(g, "current_user", None)
+    if user:
+        return user
+    # Fallback: look up or create default user (should not happen with auth middleware)
     user = User.query.filter_by(username="default").first()
     if not user:
         user = User(username="default", password=None)
