@@ -1,17 +1,7 @@
 <template>
   <div ref="processRef" class="process-block" :class="{ 'is-streaming': streaming }">
-    <!-- Placeholder while waiting for the first process step to arrive -->
-    <div v-if="streaming && processItems.length === 0" class="streaming-placeholder">
-      <div class="streaming-icon">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
-        </svg>
-      </div>
-      <span class="streaming-text">正在思考中<span class="dots">...</span></span>
-    </div>
-
     <!-- Render all steps in order: thinking, text, tool_call, tool_result interleaved -->
-    <template v-else>
+    <template v-if="processItems.length > 0">
       <template v-for="item in processItems" :key="item.key">
         <!-- Thinking block -->
         <div v-if="item.type === 'thinking'" class="step-item thinking">
@@ -60,14 +50,15 @@
         <div v-else-if="item.type === 'text'" class="step-item text-content md-content" v-html="item.rendered"></div>
       </template>
 
-      <!-- Active streaming indicator (cursor) -->
-      <div v-if="streaming" class="streaming-indicator">
-        <svg class="spinner" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
-        </svg>
-        <span>正在生成...</span>
-      </div>
     </template>
+
+    <!-- Active streaming indicator — always visible during streaming, even before any content arrives -->
+    <div v-if="streaming" class="streaming-indicator">
+      <svg class="spinner" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+      </svg>
+      <span>正在生成...</span>
+    </div>
   </div>
 </template>
 
@@ -231,44 +222,6 @@ watch(() => props.streamingContent?.length, () => {
   width: 100%;
 }
 
-/* Streaming placeholder while waiting for first step */
-.streaming-placeholder {
-  padding: 16px 20px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background: var(--bg-hover);
-  border-radius: 8px;
-  border: 1px solid var(--border-light);
-}
-
-.streaming-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  background: #fef3c7;
-  color: #f59e0b;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.streaming-text {
-  font-size: 14px;
-  color: var(--text-secondary);
-  font-weight: 500;
-}
-
-.streaming-text .dots {
-  display: inline-block;
-  animation: pulse 1s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 0.4; }
-  50% { opacity: 1; }
-}
-
 /* Step items (shared) */
 .step-item {
   margin-bottom: 8px;
@@ -276,6 +229,11 @@ watch(() => props.streamingContent?.length, () => {
 
 .step-item:last-child {
   margin-bottom: 0;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
 }
 
 /* Thinking and tool call step headers */
@@ -429,10 +387,14 @@ watch(() => props.streamingContent?.length, () => {
   display: flex;
   align-items: center;
   gap: 8px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+/* Add separator only when there are step items above the indicator */
+.process-block:has(.step-item) .streaming-indicator {
   margin-top: 8px;
   padding: 8px 0 0;
   border-top: 1px solid var(--border-light);
-  font-size: 12px;
-  color: var(--text-tertiary);
 }
 </style>

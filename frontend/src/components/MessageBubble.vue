@@ -16,7 +16,6 @@
         <ProcessBlock
           v-if="processSteps && processSteps.length > 0"
           :process-steps="processSteps"
-          :tool-calls="toolCalls"
         />
         <!-- Fallback path: old messages without processSteps in DB, -->
         <!-- render toolCalls via ProcessBlock and text separately -->

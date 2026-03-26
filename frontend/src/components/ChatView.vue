@@ -47,7 +47,6 @@
               <div class="avatar">claw</div>
               <div class="message-body">
                 <ProcessBlock
-                  :tool-calls="streamingToolCalls"
                   :process-steps="streamingProcessSteps"
                   :streaming-content="streamingContent"
                   :streaming="streaming"
@@ -88,7 +87,6 @@ const props = defineProps({
   messages: { type: Array, required: true },
   streaming: { type: Boolean, default: false },
   streamingContent: { type: String, default: '' },
-  streamingToolCalls: { type: Array, default: () => [] },
   streamingProcessSteps: { type: Array, default: () => [] },
   hasMoreMessages: { type: Boolean, default: false },
   loadingMore: { type: Boolean, default: false },

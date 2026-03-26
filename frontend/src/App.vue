@@ -44,7 +44,6 @@
       :messages="messages"
       :streaming="streaming"
       :streaming-content="streamContent"
-      :streaming-tool-calls="streamToolCalls"
       :streaming-process-steps="streamProcessSteps"
       :has-more-messages="hasMoreMessages"
       :loading-more="loadingMessages"
@@ -342,6 +341,11 @@ function createStreamCallbacks(convId, { updateConvList = true } = {}) {
         steps[step.index] = step
         return steps
       })
+      // When text is finalized as a process_step, reset streaming content
+      // to prevent duplication (the text is now rendered via processSteps).
+      if (step.type === 'text') {
+        updateStreamField(convId, 'streamContent', streamContent, () => '')
+      }
     },
     async onDone(data) {
       streamStates.delete(convId)

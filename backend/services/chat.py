@@ -64,8 +64,8 @@ class ChatService:
                 msg_id = str(uuid.uuid4())
                 tool_calls_list = []
 
-                # Send thinking_start event to clear previous thinking in frontend
-                yield f"event: thinking_start\ndata: {{}}\n\n"
+                # Clear state for new iteration
+                # (frontend resets via onProcessStep when first step arrives)
 
                 try:
                     with app.app_context():
@@ -102,7 +102,6 @@ class ChatService:
                         reasoning = delta.get("reasoning_content", "")
                         if reasoning:
                             full_thinking += reasoning
-                            yield f"event: thinking\ndata: {json.dumps({'content': reasoning}, ensure_ascii=False)}\n\n"
 
                         # Accumulate text content for this iteration
                         text = delta.get("content", "")

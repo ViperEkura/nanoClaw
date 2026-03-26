@@ -465,8 +465,6 @@ def process_tool_calls(self, tool_calls, context=None):
 
 | 事件 | 说明 |
 |------|------|
-| `thinking_start` | 新一轮思考开始，前端应清空之前的思考缓冲 |
-| `thinking` | 思维链增量内容（启用时） |
 | `message` | 回复内容的增量片段 |
 | `tool_calls` | 工具调用信息 |
 | `tool_result` | 工具执行结果 |
