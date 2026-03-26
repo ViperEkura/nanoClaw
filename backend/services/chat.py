@@ -53,8 +53,9 @@ class ChatService:
             messages = list(initial_messages)
             all_tool_calls = []
             all_tool_results = []
+            all_steps = []      # Collect all ordered steps for DB storage (thinking/text/tool_call/tool_result)
             step_index = 0  # Track global step index for ordering
-            
+
             for iteration in range(self.MAX_ITERATIONS):
                 full_content = ""
                 full_thinking = ""
@@ -62,10 +63,10 @@ class ChatService:
                 prompt_tokens = 0
                 msg_id = str(uuid.uuid4())
                 tool_calls_list = []
-                
+
                 # Send thinking_start event to clear previous thinking in frontend
                 yield f"event: thinking_start\ndata: {{}}\n\n"
-                
+
                 try:
                     with app.app_context():
                         active_conv = db.session.get(Conversation, conv_id)
@@ -79,7 +80,8 @@ class ChatService:
                             stream=True,
                         )
                         resp.raise_for_status()
-                    
+
+                    # Stream LLM response chunk by chunk
                     for line in resp.iter_lines():
                         if not line:
                             continue
@@ -93,76 +95,109 @@ class ChatService:
                             chunk = json.loads(data_str)
                         except json.JSONDecodeError:
                             continue
-                        
+
                         delta = chunk["choices"][0].get("delta", {})
-                        
-                        # Process thinking - send as process_step
+
+                        # Accumulate thinking content for this iteration
                         reasoning = delta.get("reasoning_content", "")
                         if reasoning:
                             full_thinking += reasoning
-                            # Still send thinking event for backward compatibility
                             yield f"event: thinking\ndata: {json.dumps({'content': reasoning}, ensure_ascii=False)}\n\n"
-                        
-                        # Process text
+
+                        # Accumulate text content for this iteration
                         text = delta.get("content", "")
                         if text:
                             full_content += text
                             yield f"event: message\ndata: {json.dumps({'content': text}, ensure_ascii=False)}\n\n"
-                        
-                        # Process tool calls
+
+                        # Accumulate tool calls from streaming deltas
                         tool_calls_list = self._process_tool_calls_delta(delta, tool_calls_list)
-                        
+
                         usage = chunk.get("usage", {})
                         if usage:
                             token_count = usage.get("completion_tokens", 0)
                             prompt_tokens = usage.get("prompt_tokens", 0)
-                
+
                 except Exception as e:
                     yield f"event: error\ndata: {json.dumps({'content': str(e)}, ensure_ascii=False)}\n\n"
                     return
-                
-                # Tool calls exist - execute and continue
+
+                # --- Tool calls exist: emit finalized steps, execute tools, continue loop ---
                 if tool_calls_list:
                     all_tool_calls.extend(tool_calls_list)
-                    
-                    # Send thinking as a complete step if exists
+
+                    # Record thinking as a finalized step (preserves order)
                     if full_thinking:
-                        yield f"event: process_step\ndata: {json.dumps({'index': step_index, 'type': 'thinking', 'content': full_thinking}, ensure_ascii=False)}\n\n"
+                        step_data = {
+                            'id': f'step-{step_index}',
+                            'index': step_index,
+                            'type': 'thinking',
+                            'content': full_thinking,
+                        }
+                        all_steps.append(step_data)
+                        yield f"event: process_step\ndata: {json.dumps(step_data, ensure_ascii=False)}\n\n"
                         step_index += 1
-                    
-                    # Send text as a step if exists (text before tool calls)
+
+                    # Record text as a finalized step (text that preceded tool calls)
                     if full_content:
-                        yield f"event: process_step\ndata: {json.dumps({'index': step_index, 'type': 'text', 'content': full_content}, ensure_ascii=False)}\n\n"
+                        step_data = {
+                            'id': f'step-{step_index}',
+                            'index': step_index,
+                            'type': 'text',
+                            'content': full_content,
+                        }
+                        all_steps.append(step_data)
+                        yield f"event: process_step\ndata: {json.dumps(step_data, ensure_ascii=False)}\n\n"
                         step_index += 1
-                    
-                    # Also send legacy tool_calls event for backward compatibility
+
+                    # Legacy tool_calls event for backward compatibility
                     yield f"event: tool_calls\ndata: {json.dumps({'calls': tool_calls_list}, ensure_ascii=False)}\n\n"
-                    
-                    # Process each tool call one by one, send result immediately
+
+                    # Execute each tool call, emit tool_call + tool_result as paired steps
                     tool_results = []
                     for tc in tool_calls_list:
-                        # Send tool call step
-                        yield f"event: process_step\ndata: {json.dumps({'index': step_index, 'type': 'tool_call', 'id': tc['id'], 'name': tc['function']['name'], 'arguments': tc['function']['arguments']}, ensure_ascii=False)}\n\n"
+                        # Emit tool_call step (before execution)
+                        call_step = {
+                            'id': f'step-{step_index}',
+                            'index': step_index,
+                            'type': 'tool_call',
+                            'id_ref': tc['id'],
+                            'name': tc['function']['name'],
+                            'arguments': tc['function']['arguments'],
+                        }
+                        all_steps.append(call_step)
+                        yield f"event: process_step\ndata: {json.dumps(call_step, ensure_ascii=False)}\n\n"
                         step_index += 1
-                        
-                        # Execute this single tool call (needs app context for db access)
+
+                        # Execute the tool
                         with app.app_context():
                             single_result = self.executor.process_tool_calls([tc], context)
                         tool_results.extend(single_result)
-                        
-                        # Send tool result step immediately
+
+                        # Emit tool_result step (after execution)
                         tr = single_result[0]
                         try:
                             result_content = json.loads(tr["content"])
                             skipped = result_content.get("skipped", False)
                         except:
                             skipped = False
-                        yield f"event: process_step\ndata: {json.dumps({'index': step_index, 'type': 'tool_result', 'id': tr['tool_call_id'], 'name': tr['name'], 'content': tr['content'], 'skipped': skipped}, ensure_ascii=False)}\n\n"
+                        result_step = {
+                            'id': f'step-{step_index}',
+                            'index': step_index,
+                            'type': 'tool_result',
+                            'id_ref': tr['tool_call_id'],
+                            'name': tr['name'],
+                            'content': tr['content'],
+                            'skipped': skipped,
+                        }
+                        all_steps.append(result_step)
+                        yield f"event: process_step\ndata: {json.dumps(result_step, ensure_ascii=False)}\n\n"
                         step_index += 1
-                        
-                        # Also send legacy tool_result event
+
+                        # Legacy tool_result event for backward compatibility
                         yield f"event: tool_result\ndata: {json.dumps({'id': tr['tool_call_id'], 'name': tr['name'], 'content': tr['content'], 'skipped': skipped}, ensure_ascii=False)}\n\n"
-                    
+
+                    # Append assistant message + tool results for the next iteration
                     messages.append({
                         "role": "assistant",
                         "content": full_content or None,
@@ -171,28 +206,41 @@ class ChatService:
                     messages.extend(tool_results)
                     all_tool_results.extend(tool_results)
                     continue
-                
-                # No tool calls - finish
-                # Send thinking as a step if exists
+
+                # --- No tool calls: final iteration — emit remaining steps and save ---
                 if full_thinking:
-                    yield f"event: process_step\ndata: {json.dumps({'index': step_index, 'type': 'thinking', 'content': full_thinking}, ensure_ascii=False)}\n\n"
+                    step_data = {
+                        'id': f'step-{step_index}',
+                        'index': step_index,
+                        'type': 'thinking',
+                        'content': full_thinking,
+                    }
+                    all_steps.append(step_data)
+                    yield f"event: process_step\ndata: {json.dumps(step_data, ensure_ascii=False)}\n\n"
                     step_index += 1
 
-                # Send text as a step if exists
                 if full_content:
-                    yield f"event: process_step\ndata: {json.dumps({'index': step_index, 'type': 'text', 'content': full_content}, ensure_ascii=False)}\n\n"
+                    step_data = {
+                        'id': f'step-{step_index}',
+                        'index': step_index,
+                        'type': 'text',
+                        'content': full_content,
+                    }
+                    all_steps.append(step_data)
+                    yield f"event: process_step\ndata: {json.dumps(step_data, ensure_ascii=False)}\n\n"
                     step_index += 1
 
                 suggested_title = None
                 with app.app_context():
-                    # Build content JSON
+                    # Build content JSON with ordered steps array for DB storage.
+                    # 'steps' is the single source of truth for rendering order.
                     content_json = {
                         "text": full_content,
                     }
-                    if full_thinking:
-                        content_json["thinking"] = full_thinking
                     if all_tool_calls:
                         content_json["tool_calls"] = self._build_tool_calls_json(all_tool_calls, all_tool_results)
+                    # Store ordered steps — the single source of truth for rendering order
+                    content_json["steps"] = all_steps
 
                     msg = Message(
                         id=msg_id,
@@ -208,15 +256,13 @@ class ChatService:
                     if user:
                         record_token_usage(user.id, conv_model, prompt_tokens, token_count)
 
-                    # Check if we need to set title (first message in conversation)
+                    # Auto-generate title from first user message if needed
                     conv = db.session.get(Conversation, conv_id)
                     if conv and (not conv.title or conv.title == "新对话"):
-                        # Get user message content
                         user_msg = Message.query.filter_by(
                             conversation_id=conv_id, role="user"
                         ).order_by(Message.created_at.asc()).first()
                         if user_msg and user_msg.content:
-                            # Parse content JSON to get text
                             try:
                                 content_data = json.loads(user_msg.content)
                                 title_text = content_data.get("text", "")[:30]
@@ -226,7 +272,6 @@ class ChatService:
                                 suggested_title = title_text
                             else:
                                 suggested_title = "新对话"
-                            # Refresh conv to avoid stale state
                             db.session.refresh(conv)
                             conv.title = suggested_title
                             db.session.commit()

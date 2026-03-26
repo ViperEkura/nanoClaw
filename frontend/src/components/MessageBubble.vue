@@ -3,7 +3,7 @@
     <div v-if="role === 'user'" class="avatar">user</div>
     <div v-else class="avatar">claw</div>
     <div class="message-container">
-      <!-- 附件列表 -->
+      <!-- File attachments list -->
       <div v-if="attachments && attachments.length > 0" class="attachments-list">
         <div v-for="(file, index) in attachments" :key="index" class="attachment-item">
           <span class="attachment-icon">{{ file.extension }}</span>
@@ -11,18 +11,18 @@
         </div>
       </div>
       <div ref="messageRef" class="message-body">
-        <!-- 新格式: processSteps 包含所有步骤（含 text），统一通过 ProcessBlock 渲染 -->
+        <!-- Primary rendering path: processSteps contains all ordered steps -->
+        <!-- (thinking, text, tool_call, tool_result) from both streaming and DB load -->
         <ProcessBlock
           v-if="processSteps && processSteps.length > 0"
           :process-steps="processSteps"
-          :thinking-content="thinkingContent"
           :tool-calls="toolCalls"
         />
-        <!-- 旧格式: 无 processSteps，分开渲染 ProcessBlock + 文本 -->
+        <!-- Fallback path: old messages without processSteps in DB, -->
+        <!-- render toolCalls via ProcessBlock and text separately -->
         <template v-else>
           <ProcessBlock
-            v-if="thinkingContent || (toolCalls && toolCalls.length > 0)"
-            :thinking-content="thinkingContent"
+            v-if="toolCalls && toolCalls.length > 0"
             :tool-calls="toolCalls"
           />
           <div class="md-content message-content" v-html="renderedContent"></div>
@@ -62,15 +62,18 @@ import { useCodeEnhancement } from '../composables/useCodeEnhancement'
 import ProcessBlock from './ProcessBlock.vue'
 
 const props = defineProps({
-  role: { type: String, required: true },
-  text: { type: String, default: '' },
-  thinkingContent: { type: String, default: '' },
-  toolCalls: { type: Array, default: () => [] },
+  role: { type: String, required: true },           // 'user' or 'assistant'
+  text: { type: String, default: '' },               // Plain text content (legacy / user messages)
+  toolCalls: { type: Array, default: () => [] },     // Tool calls array (legacy fallback)
+  // Ordered steps array — primary rendering data source.
+  // During streaming: accumulated from process_step SSE events.
+  // On page load: loaded from DB via message_to_dict extracting 'steps' field.
+  // Each step: { id, index, type: 'thinking'|'text'|'tool_call'|'tool_result', content, ... }
   processSteps: { type: Array, default: () => [] },
   tokenCount: { type: Number, default: 0 },
   createdAt: { type: String, default: '' },
   deletable: { type: Boolean, default: false },
-  attachments: { type: Array, default: () => [] },
+  attachments: { type: Array, default: () => [] },   // User file attachments
 })
 
 defineEmits(['delete', 'regenerate'])

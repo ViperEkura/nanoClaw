@@ -1,6 +1,6 @@
 <template>
   <div ref="processRef" class="process-block" :class="{ 'is-streaming': streaming }">
-    <!-- 流式加载：还没有任何步骤时 -->
+    <!-- Placeholder while waiting for the first process step to arrive -->
     <div v-if="streaming && processItems.length === 0" class="streaming-placeholder">
       <div class="streaming-icon">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -10,10 +10,10 @@
       <span class="streaming-text">正在思考中<span class="dots">...</span></span>
     </div>
 
-    <!-- 按序渲染步骤 -->
+    <!-- Render all steps in order: thinking, text, tool_call, tool_result interleaved -->
     <template v-else>
       <template v-for="item in processItems" :key="item.key">
-        <!-- 思考过程 -->
+        <!-- Thinking block -->
         <div v-if="item.type === 'thinking'" class="step-item thinking">
           <div class="step-header" @click="toggleItem(item.key)">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -30,7 +30,7 @@
           </div>
         </div>
 
-        <!-- 工具调用 -->
+        <!-- Tool call block -->
         <div v-else-if="item.type === 'tool_call'" class="step-item tool_call" :class="{ loading: item.loading }">
           <div class="step-header" @click="toggleItem(item.key)">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -56,11 +56,11 @@
           </div>
         </div>
 
-        <!-- 文本内容 - 直接渲染 markdown -->
+        <!-- Text content — render as markdown -->
         <div v-else-if="item.type === 'text'" class="step-item text-content md-content" v-html="item.rendered"></div>
       </template>
 
-      <!-- 流式进行中指示器 -->
+      <!-- Active streaming indicator (cursor) -->
       <div v-if="streaming" class="streaming-indicator">
         <svg class="spinner" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
@@ -78,7 +78,6 @@ import { formatJson, truncate } from '../utils/format'
 import { useCodeEnhancement } from '../composables/useCodeEnhancement'
 
 const props = defineProps({
-  thinkingContent: { type: String, default: '' },
   toolCalls: { type: Array, default: () => [] },
   processSteps: { type: Array, default: () => [] },
   streamingContent: { type: String, default: '' },
@@ -87,7 +86,7 @@ const props = defineProps({
 
 const expandedKeys = ref({})
 
-// 流式时自动展开
+// Auto-collapse all items when a new stream starts
 watch(() => props.streaming, (v) => {
   if (v) expandedKeys.value = {}
 })
@@ -110,30 +109,45 @@ function getResultSummary(result) {
   }
 }
 
+// Build ordered process items from all available data (thinking, tool calls, text).
+// During streaming, processSteps accumulate completed iterations while streamingContent
+// represents the text being generated in the current (latest) iteration.
+// When loaded from DB, steps use 'id_ref' for tool_call/tool_result matching;
+// during streaming they use 'id'. Both fields are normalized here.
 const processItems = computed(() => {
   const items = []
 
-  // 优先使用 processSteps（按顺序）
+  // Build items from processSteps — finalized steps sent by backend or loaded from DB.
+  // Steps are ordered: each iteration produces thinking → text → tool_call → tool_result.
   if (props.processSteps && props.processSteps.length > 0) {
     for (const step of props.processSteps) {
       if (!step) continue
 
       if (step.type === 'thinking') {
-        items.push({ type: 'thinking', content: step.content, summary: truncate(step.content), key: `thinking-${step.index}` })
+        items.push({
+          type: 'thinking',
+          content: step.content,
+          summary: truncate(step.content),
+          key: step.id || `thinking-${step.index}`,
+        })
       } else if (step.type === 'tool_call') {
+        // Normalize: DB-loaded steps use 'id_ref', streaming steps use 'id'
+        const toolId = step.id_ref || step.id
         items.push({
           type: 'tool_call',
           toolName: step.name || '未知工具',
           arguments: formatJson(step.arguments),
           summary: truncate(step.arguments),
-          id: step.id,
-          key: `tool_call-${step.id || step.index}`,
+          id: toolId,
+          key: step.id || `tool_call-${toolId || step.index}`,
           loading: false,
           result: null,
         })
       } else if (step.type === 'tool_result') {
+        // Merge result back into its corresponding tool_call item by matching tool ID
+        const toolId = step.id_ref || step.id
         const summary = getResultSummary(step.content)
-        const match = items.findLast(it => it.type === 'tool_call' && it.id === step.id)
+        const match = items.findLast(it => it.type === 'tool_call' && it.id === toolId)
         if (match) {
           match.result = formatJson(step.content)
           match.resultSummary = summary.text
@@ -145,12 +159,12 @@ const processItems = computed(() => {
           type: 'text',
           content: step.content,
           rendered: renderMarkdown(step.content),
-          key: `text-${step.index}`,
+          key: step.id || `text-${step.index}`,
         })
       }
     }
 
-    // 流式中最后一个 tool_call（尚无结果时）标记为 loading
+    // Mark the last tool_call as loading if it has no result yet (still executing)
     if (props.streaming && items.length > 0) {
       const last = items[items.length - 1]
       if (last.type === 'tool_call' && !last.result) {
@@ -158,26 +172,18 @@ const processItems = computed(() => {
       }
     }
 
-    // 流式中追加正在增长的文本（仅当还没有 text 类型的步骤时）
+    // Append the currently streaming text as a live text item.
+    // This text belongs to the latest LLM iteration that hasn't finished yet.
     if (props.streaming && props.streamingContent) {
-      const hasTextStep = items.some(it => it.type === 'text')
-      if (!hasTextStep) {
-        items.push({
-          type: 'text',
-          content: props.streamingContent,
-          rendered: renderMarkdown(props.streamingContent) || '<span class="placeholder">...</span>',
-          key: 'text-streaming',
-        })
-      }
+      items.push({
+        type: 'text',
+        content: props.streamingContent,
+        rendered: renderMarkdown(props.streamingContent) || '<span class="placeholder">...</span>',
+        key: 'text-streaming',
+      })
     }
   } else {
-    // 回退逻辑：旧版 thinking + toolCalls
-    if (props.thinkingContent) {
-      items.push({ type: 'thinking', content: props.thinkingContent, summary: truncate(props.thinkingContent), key: 'thinking-0' })
-    } else if (props.streaming && items.length === 0) {
-      items.push({ type: 'thinking', content: '', key: 'thinking-loading' })
-    }
-
+    // Fallback: legacy mode for old messages without processSteps stored in DB
     if (props.toolCalls && props.toolCalls.length > 0) {
       props.toolCalls.forEach((call, i) => {
         const toolName = call.function?.name || '未知工具'
@@ -197,7 +203,7 @@ const processItems = computed(() => {
       })
     }
 
-    // 旧模式下追加流式文本
+    // Append streaming text in legacy mode
     if (props.streaming && props.streamingContent) {
       items.push({
         type: 'text',
@@ -211,10 +217,10 @@ const processItems = computed(() => {
   return items
 })
 
-// 增强 processBlock 内代码块
+// Enhance code blocks inside process items (syntax highlighting, copy buttons)
 const { debouncedEnhance } = useCodeEnhancement(processRef, processItems, { deep: true })
 
-// 流式时使用节流的代码块增强，减少 DOM 操作
+// Throttle code enhancement during streaming to reduce DOM operations
 watch(() => props.streamingContent?.length, () => {
   if (props.streaming) debouncedEnhance()
 })
@@ -225,7 +231,7 @@ watch(() => props.streamingContent?.length, () => {
   width: 100%;
 }
 
-/* 流式占位 */
+/* Streaming placeholder while waiting for first step */
 .streaming-placeholder {
   padding: 16px 20px;
   display: flex;
@@ -263,7 +269,7 @@ watch(() => props.streamingContent?.length, () => {
   50% { opacity: 1; }
 }
 
-/* 步骤通用 */
+/* Step items (shared) */
 .step-item {
   margin-bottom: 8px;
 }
@@ -272,7 +278,7 @@ watch(() => props.streamingContent?.length, () => {
   margin-bottom: 0;
 }
 
-/* 思考过程 */
+/* Thinking and tool call step headers */
 .thinking .step-header,
 .tool_call .step-header {
   display: flex;
@@ -361,7 +367,7 @@ watch(() => props.streamingContent?.length, () => {
   background: var(--bg-hover);
 }
 
-/* 步骤展开内容 */
+/* Expandable step content panel */
 .step-content {
   padding: 12px;
   margin-top: 4px;
@@ -404,7 +410,7 @@ watch(() => props.streamingContent?.length, () => {
   word-break: break-word;
 }
 
-/* 文本内容直接渲染 */
+/* Text content — rendered as markdown */
 .text-content {
   padding: 0;
   font-size: 15px;
@@ -418,7 +424,7 @@ watch(() => props.streamingContent?.length, () => {
   color: var(--text-tertiary);
 }
 
-/* 流式指示器 */
+/* Streaming cursor indicator */
 .streaming-indicator {
   display: flex;
   align-items: center;

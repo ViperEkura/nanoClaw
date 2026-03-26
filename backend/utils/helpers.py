@@ -63,7 +63,12 @@ def to_dict(inst, **extra):
 
 
 def message_to_dict(msg: Message) -> dict:
-    """Convert message to dict, parsing JSON content"""
+    """Convert message to dict, parsing JSON content.
+
+    For assistant messages, extracts the 'steps' array which preserves the
+    ordered sequence of thinking/text/tool_call/tool_result steps, so the
+    frontend can render them in the correct interleaved order.
+    """
     result = to_dict(msg)
 
     # Parse content JSON
@@ -71,16 +76,15 @@ def message_to_dict(msg: Message) -> dict:
         try:
             content_data = json.loads(msg.content)
             if isinstance(content_data, dict):
-                # Extract all fields from JSON
                 result["text"] = content_data.get("text", "")
                 if content_data.get("attachments"):
                     result["attachments"] = content_data["attachments"]
-                if content_data.get("thinking"):
-                    result["thinking"] = content_data["thinking"]
                 if content_data.get("tool_calls"):
                     result["tool_calls"] = content_data["tool_calls"]
+                # Extract ordered steps array for correct rendering order
+                if content_data.get("steps"):
+                    result["process_steps"] = content_data["steps"]
             else:
-                # Fallback: plain text
                 result["text"] = msg.content
         except (json.JSONDecodeError, TypeError):
             result["text"] = msg.content

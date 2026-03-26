@@ -35,6 +35,16 @@
               <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
             </svg>
           </button>
+          <button
+            class="btn-group-action btn-delete-project"
+            title="删除项目"
+            @click.stop="$emit('deleteProject', { id: group.id, name: group.name })"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            </svg>
+          </button>
         </div>
         <div v-show="expandedGroups[group.id]">
           <div
@@ -60,8 +70,8 @@
         </div>
       </div>
 
-      <!-- Standalone conversations -->
-      <div v-if="groupedData.standalone.length > 0" class="project-group">
+      <!-- Standalone conversations (always visible) -->
+      <div class="project-group">
         <div class="project-header" @click="toggleGroup('__standalone__')">
           <svg class="chevron" :class="{ collapsed: !expandedGroups['__standalone__'] }" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="6 9 12 15 18 9"/>
@@ -131,12 +141,13 @@ import { formatTime } from '../utils/format'
 
 const props = defineProps({
   conversations: { type: Array, required: true },
+  projects: { type: Array, default: () => [] },
   currentId: { type: String, default: null },
   loading: { type: Boolean, default: false },
   hasMore: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['select', 'delete', 'loadMore', 'createProject', 'browseProject', 'createInProject', 'toggleSettings', 'toggleStats'])
+const emit = defineEmits(['select', 'delete', 'loadMore', 'createProject', 'browseProject', 'createInProject', 'toggleSettings', 'toggleStats', 'deleteProject'])
 
 const expandedGroups = reactive({})
 
@@ -144,6 +155,16 @@ const groupedData = computed(() => {
   const groups = {}
   const standalone = []
 
+  // First, initialize groups from projects list (includes projects with 0 conversations)
+  for (const p of props.projects) {
+    groups[p.id] = {
+      id: p.id,
+      name: p.name,
+      conversations: [],
+    }
+  }
+
+  // Then merge conversations into groups
   for (const conv of props.conversations) {
     if (conv.project_id) {
       if (!groups[conv.project_id]) {
@@ -162,7 +183,7 @@ const groupedData = computed(() => {
   for (const id of Object.keys(groups)) {
     if (!(id in expandedGroups)) expandedGroups[id] = true
   }
-  if (standalone.length > 0 && !('__standalone__' in expandedGroups)) {
+  if (!('__standalone__' in expandedGroups)) {
     expandedGroups['__standalone__'] = true
   }
 
@@ -318,6 +339,11 @@ function onScroll(e) {
   color: var(--accent-primary);
   background: var(--accent-primary-light);
   opacity: 1;
+}
+
+.btn-delete-project:hover {
+  color: var(--danger-color);
+  background: var(--danger-bg);
 }
 
 .conversation-item {

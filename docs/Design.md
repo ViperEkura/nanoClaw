@@ -175,7 +175,6 @@ classDiagram
 ```json
 {
   "text": "AI 回复的文本内容",
-  "thinking": "思考过程（可选）",
   "tool_calls": [
     {
       "id": "call_xxx",
@@ -189,9 +188,54 @@ classDiagram
       "skipped": false,
       "execution_time": 0.5
     }
+  ],
+  "steps": [
+    {
+      "id": "step-0",
+      "index": 0,
+      "type": "thinking",
+      "content": "第一轮思考过程..."
+    },
+    {
+      "id": "step-1",
+      "index": 1,
+      "type": "text",
+      "content": "工具调用前的文本..."
+    },
+    {
+      "id": "step-2",
+      "index": 2,
+      "type": "tool_call",
+      "id_ref": "call_abc123",
+      "name": "web_search",
+      "arguments": "{\"query\": \"...\"}"
+    },
+    {
+      "id": "step-3",
+      "index": 3,
+      "type": "tool_result",
+      "id_ref": "call_abc123",
+      "name": "web_search",
+      "content": "{\"success\": true, ...}",
+      "skipped": false
+    },
+    {
+      "id": "step-4",
+      "index": 4,
+      "type": "thinking",
+      "content": "第二轮思考过程..."
+    },
+    {
+      "id": "step-5",
+      "index": 5,
+      "type": "text",
+      "content": "最终回复文本..."
+    }
   ]
 }
 ```
+
+`steps` 字段是**渲染顺序的唯一数据源**，按 `index` 顺序排列。thinking、text、tool_call、tool_result 可以在多轮迭代中穿插出现。`id_ref` 用于 tool_call 和 tool_result 步骤之间的匹配（对应 LLM 返回的工具调用 ID）。`tool_calls` 字段保留用于向后兼容旧版前端。
 
 ### 服务层
 
@@ -426,33 +470,53 @@ def process_tool_calls(self, tool_calls, context=None):
 | `message` | 回复内容的增量片段 |
 | `tool_calls` | 工具调用信息 |
 | `tool_result` | 工具执行结果 |
-| `process_step` | 处理步骤（按顺序：thinking/text/tool_call/tool_result），支持穿插显示 |
+| `process_step` | 有序处理步骤（thinking/text/tool_call/tool_result），支持穿插显示。携带 `id`、`index` 确保渲染顺序 |
 | `error` | 错误信息 |
 | `done` | 回复结束，携带 message_id 和 token_count |
 
 ### process_step 事件格式
 
+每个 `process_step` 事件携带一个带 `id`、`index` 和 `type` 的步骤对象。步骤按 `index` 顺序排列，确保前端可以正确渲染穿插的思考、文本和工具调用。
+
 ```json
 // 思考过程
-{"index": 0, "type": "thinking", "content": "完整思考内容..."}
+{"id": "step-0", "index": 0, "type": "thinking", "content": "完整思考内容..."}
 
 // 回复文本（可穿插在任意步骤之间）
-{"index": 1, "type": "text", "content": "回复文本内容..."}
+{"id": "step-1", "index": 1, "type": "text", "content": "回复文本内容..."}
 
-// 工具调用
-{"index": 2, "type": "tool_call", "id": "call_abc123", "name": "web_search", "arguments": "{\"query\": \"...\"}"}
+// 工具调用（id_ref 存储工具调用 ID，用于与 tool_result 匹配）
+{"id": "step-2", "index": 2, "type": "tool_call", "id_ref": "call_abc123", "name": "web_search", "arguments": "{\"query\": \"...\"}"}
 
-// 工具返回
-{"index": 3, "type": "tool_result", "id": "call_abc123", "name": "web_search", "content": "{\"success\": true, ...}", "skipped": false}
+// 工具返回（id_ref 与 tool_call 的 id_ref 匹配）
+{"id": "step-3", "index": 3, "type": "tool_result", "id_ref": "call_abc123", "name": "web_search", "content": "{\"success\": true, ...}", "skipped": false}
 ```
 
 字段说明：
-- `index`: 步骤序号，确保按正确顺序显示
-- `type`: 步骤类型（thinking/tool_call/tool_result）
-- `id`: 工具调用唯一标识，用于匹配工具调用和返回结果
-- `name`: 工具名称
-- `content`: 内容或结果
-- `skipped`: 工具是否被跳过（失败后跳过）
+
+| 字段 | 说明 |
+|------|------|
+| `id` | 步骤唯一标识（格式 `step-{index}`），用于前端 key |
+| `index` | 步骤序号，确保按正确顺序显示 |
+| `type` | 步骤类型：`thinking` / `text` / `tool_call` / `tool_result` |
+| `id_ref` | 工具调用引用 ID（仅 tool_call/tool_result），用于匹配调用与结果 |
+| `name` | 工具名称（仅 tool_call/tool_result） |
+| `arguments` | 工具调用参数 JSON 字符串（仅 tool_call） |
+| `content` | 内容（thinking 的思考内容、text 的文本、tool_result 的返回结果） |
+| `skipped` | 工具是否被跳过（仅 tool_result） |
+
+### 多轮迭代中的步骤顺序
+
+一次完整的 LLM 交互可能经历多轮工具调用循环，每轮产生的步骤按以下顺序追加：
+
+```
+迭代 1:  thinking → text → tool_call → tool_result
+迭代 2:  thinking → text → tool_call → tool_result
+...
+最终轮:  thinking → text（无工具调用，结束）
+```
+
+所有步骤通过全局递增的 `index` 保证顺序。后端在完成所有迭代后，将这些步骤存入 `content_json["steps"]` 数组写入数据库。前端页面刷新时从 API 加载消息，`message_to_dict` 提取 `steps` 字段映射为 `process_steps` 返回，ProcessBlock 组件按 `index` 顺序渲染。
 
 ---
 
@@ -509,9 +573,11 @@ def process_tool_calls(self, tool_calls, context=None):
 | `id` | String(64) | UUID 主键 |
 | `conversation_id` | String(64) | 外键关联 Conversation |
 | `role` | String(16) | user/assistant/system/tool |
-| `content` | LongText | JSON 格式内容（见上方结构说明） |
+| `content` | LongText | JSON 格式内容（见上方结构说明），assistant 消息包含 `steps` 有序步骤数组 |
 | `token_count` | Integer | Token 数量 |
 | `created_at` | DateTime | 创建时间 |
+
+`message_to_dict()` 辅助函数负责解析 `content` JSON，并提取 `steps` 字段映射为 `process_steps` 返回给前端，确保页面刷新后仍能按正确顺序渲染穿插的思考、文本和工具调用。
 
 ### TokenUsage（Token 使用统计）
 

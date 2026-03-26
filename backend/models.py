@@ -96,7 +96,16 @@ class Message(db.Model):
     role = db.Column(db.String(16), nullable=False)  # user, assistant, system, tool
     # Unified JSON structure:
     # User: {"text": "...", "attachments": [{"name": "a.py", "extension": "py", "content": "..."}]}
-    # Assistant: {"text": "...", "thinking": "...", "tool_calls": [{"id": "...", "name": "...", "arguments": "...", "result": "..."}]}
+    # Assistant: {
+    #   "text": "...",
+    #   "tool_calls": [...],         // legacy flat structure
+    #   "steps": [                   // ordered steps for rendering (primary source of truth)
+    #     {"id": "step-0", "index": 0, "type": "thinking", "content": "..."},
+    #     {"id": "step-1", "index": 1, "type": "text", "content": "..."},
+    #     {"id": "step-2", "index": 2, "type": "tool_call", "id_ref": "call_xxx", "name": "...", "arguments": "..."},
+    #     {"id": "step-3", "index": 3, "type": "tool_result", "id_ref": "call_xxx", "name": "...", "content": "..."},
+    #   ]
+    # }
     content = db.Column(LongText, default="")
     token_count = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)

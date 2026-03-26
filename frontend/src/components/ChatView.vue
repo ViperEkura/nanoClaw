@@ -27,12 +27,11 @@
               v-for="msg in messages"
               :key="msg.id"
               :data-msg-id="msg.id"
-              v-memo="[msg.text, msg.thinking, msg.tool_calls, msg.process_steps, msg.attachments]"
+              v-memo="[msg.text, msg.tool_calls, msg.process_steps, msg.attachments]"
             >
               <MessageBubble
                 :role="msg.role"
                 :text="msg.text"
-                :thinking-content="msg.thinking"
                 :tool-calls="msg.tool_calls"
                 :process-steps="msg.process_steps"
                 :token-count="msg.token_count"
@@ -48,7 +47,6 @@
               <div class="avatar">claw</div>
               <div class="message-body">
                 <ProcessBlock
-                  :thinking-content="streamingThinking"
                   :tool-calls="streamingToolCalls"
                   :process-steps="streamingProcessSteps"
                   :streaming-content="streamingContent"
@@ -90,7 +88,6 @@ const props = defineProps({
   messages: { type: Array, required: true },
   streaming: { type: Boolean, default: false },
   streamingContent: { type: String, default: '' },
-  streamingThinking: { type: String, default: '' },
   streamingToolCalls: { type: Array, default: () => [] },
   streamingProcessSteps: { type: Array, default: () => [] },
   hasMoreMessages: { type: Boolean, default: false },

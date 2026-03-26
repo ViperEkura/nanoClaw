@@ -194,8 +194,8 @@ export const messageApi = {
 }
 
 export const projectApi = {
-  list(userId) {
-    return request(`/projects${buildQueryParams({ user_id: userId })}`)
+  list() {
+    return request('/projects')
   },
 
   create(data) {
@@ -211,7 +211,6 @@ export const projectApi = {
 
   uploadFolder(data) {
     const formData = new FormData()
-    formData.append('user_id', String(data.user_id))
     formData.append('name', data.name || '')
     formData.append('description', data.description || '')
     for (const file of data.files) {

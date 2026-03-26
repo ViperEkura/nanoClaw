@@ -224,7 +224,7 @@ def upload_project_folder():
     # Create project record
     project = Project(
         id=str(uuid.uuid4()),
-        user_id=user_id,
+        user_id=user.id,
         name=project_name,
         path=relative_path,
         description=description

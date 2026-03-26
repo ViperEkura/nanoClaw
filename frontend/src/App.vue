@@ -2,6 +2,7 @@
   <div class="app">
     <Sidebar
       :conversations="conversations"
+      :projects="projects"
       :current-id="currentConvId"
       :loading="loadingConvs"
       :has-more="hasMoreConvs"
@@ -11,6 +12,7 @@
       @create-project="showCreateModal = true"
       @browse-project="browseProject"
       @create-in-project="createConversationInProject"
+      @delete-project="deleteProject"
       @toggle-settings="togglePanel('settings')"
       @toggle-stats="togglePanel('stats')"
     />
@@ -42,7 +44,6 @@
       :messages="messages"
       :streaming="streaming"
       :streaming-content="streamContent"
-      :streaming-thinking="streamThinking"
       :streaming-tool-calls="streamToolCalls"
       :streaming-process-steps="streamProcessSteps"
       :has-more-messages="hasMoreMessages"
@@ -128,6 +129,9 @@ const loadingConvs = ref(false)
 const hasMoreConvs = ref(false)
 const nextConvCursor = ref(null)
 
+// -- Projects state --
+const projects = ref([])
+
 // -- Messages state --
 const messages = shallowRef([])
 const hasMoreMessages = ref(false)
@@ -135,11 +139,14 @@ const loadingMessages = ref(false)
 const nextMsgCursor = ref(null)
 
 // -- Streaming state --
+// These refs hold the real-time streaming data for the current conversation.
+// When switching conversations, the current state is saved to streamStates Map
+// and restored when switching back. On stream completion (onDone), the finalized
+// processSteps are stored in the message object and later persisted to DB.
 const streaming = ref(false)
-const streamContent = ref('')
-const streamThinking = ref('')
-const streamToolCalls = shallowRef([])
-const streamProcessSteps = shallowRef([])
+const streamContent = ref('')            // Accumulated text content during current iteration
+const streamToolCalls = shallowRef([])   // All tool calls across iterations (legacy compat)
+const streamProcessSteps = shallowRef([]) // Ordered steps: thinking/text/tool_call/tool_result
 
 // 保存每个对话的流式状态
 const streamStates = new Map()
@@ -147,7 +154,6 @@ const streamStates = new Map()
 function setStreamState(isActive) {
   streaming.value = isActive
   streamContent.value = ''
-  streamThinking.value = ''
   streamToolCalls.value = []
   streamProcessSteps.value = []
 }
@@ -253,7 +259,6 @@ async function selectConversation(id) {
     streamStates.set(currentConvId.value, {
       streaming: true,
       streamContent: streamContent.value,
-      streamThinking: streamThinking.value,
       streamToolCalls: [...streamToolCalls.value],
       streamProcessSteps: [...streamProcessSteps.value],
       messages: [...messages.value],
@@ -269,7 +274,6 @@ async function selectConversation(id) {
   if (savedState && savedState.streaming) {
     streaming.value = true
     streamContent.value = savedState.streamContent
-    streamThinking.value = savedState.streamThinking
     streamToolCalls.value = savedState.streamToolCalls
     streamProcessSteps.value = savedState.streamProcessSteps
     messages.value = savedState.messages || []
@@ -310,13 +314,6 @@ function loadMoreMessages() {
 // -- Helpers: create stream callbacks for a conversation --
 function createStreamCallbacks(convId, { updateConvList = true } = {}) {
   return {
-    onThinkingStart() {
-      updateStreamField(convId, 'streamThinking', streamThinking, '')
-      updateStreamField(convId, 'streamContent', streamContent, '')
-    },
-    onThinking(text) {
-      updateStreamField(convId, 'streamThinking', streamThinking, prev => (prev || '') + text)
-    },
     onMessage(text) {
       updateStreamField(convId, 'streamContent', streamContent, prev => (prev || '') + text)
     },
@@ -335,6 +332,10 @@ function createStreamCallbacks(convId, { updateConvList = true } = {}) {
       })
     },
     onProcessStep(step) {
+      // Insert step at its index position to preserve ordering.
+      // Uses sparse array strategy: fills gaps with null.
+      // Each step carries { id, index, type, content, ... } —
+      // these are the same steps that get stored to DB as the 'steps' array.
       updateStreamField(convId, 'streamProcessSteps', streamProcessSteps, prev => {
         const steps = prev ? [...prev] : []
         while (steps.length <= step.index) steps.push(null)
@@ -347,12 +348,15 @@ function createStreamCallbacks(convId, { updateConvList = true } = {}) {
 
       if (currentConvId.value === convId) {
         streaming.value = false
+
+        // Build the final message object.
+        // process_steps is the primary ordered data for rendering (thinking/text/tool_call/tool_result).
+        // When page reloads, these steps are loaded from DB via the 'steps' field in content JSON.
         messages.value = [...messages.value, {
           id: data.message_id,
           conversation_id: convId,
           role: 'assistant',
           text: streamContent.value,
-          thinking: streamThinking.value || null,
           tool_calls: streamToolCalls.value.length > 0 ? streamToolCalls.value : null,
           process_steps: streamProcessSteps.value.filter(Boolean),
           token_count: data.token_count,
@@ -507,13 +511,13 @@ async function createProject() {
   creatingProject.value = true
   try {
     await projectApi.create({
-      user_id: 1,
       name: newProjectName.value.trim(),
       description: newProjectDesc.value.trim(),
     })
     showCreateModal.value = false
     newProjectName.value = ''
     newProjectDesc.value = ''
+    await loadProjects()
   } catch (e) {
     console.error('Failed to create project:', e)
   } finally {
@@ -521,8 +525,47 @@ async function createProject() {
   }
 }
 
+// -- Load projects --
+async function loadProjects() {
+  try {
+    const res = await projectApi.list()
+    projects.value = res.data.projects || []
+  } catch (e) {
+    console.error('Failed to load projects:', e)
+  }
+}
+
+// -- Delete project --
+async function deleteProject(project) {
+  if (!confirm(`确定删除项目「${project.name}」及其所有对话？`)) return
+  try {
+    await projectApi.delete(project.id)
+    // Remove conversations belonging to this project
+    conversations.value = conversations.value.filter(c => c.project_id !== project.id)
+    // If current conversation was in this project, switch away
+    if (currentConvId.value && conversations.value.length > 0) {
+      const currentConv = conversations.value.find(c => c.id === currentConvId.value)
+      if (!currentConv || currentConv.project_id === project.id) {
+        await selectConversation(conversations.value[0].id)
+      }
+    } else if (conversations.value.length === 0) {
+      currentConvId.value = null
+      messages.value = []
+      currentProject.value = null
+    }
+    if (currentProject.value?.id === project.id) {
+      currentProject.value = null
+      showFileExplorer.value = false
+    }
+    await loadProjects()
+  } catch (e) {
+    console.error('Failed to delete project:', e)
+  }
+}
+
 // -- Init --
 onMounted(() => {
+  loadProjects()
   loadConversations()
 })
 </script>
