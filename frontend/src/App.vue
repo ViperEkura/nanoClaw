@@ -57,22 +57,23 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, shallowRef, computed, onMounted, defineAsyncComponent, triggerRef } from 'vue'
 import Sidebar from './components/Sidebar.vue'
 import ChatView from './components/ChatView.vue'
-import SettingsPanel from './components/SettingsPanel.vue'
-import StatsPanel from './components/StatsPanel.vue'
+
+const SettingsPanel = defineAsyncComponent(() => import('./components/SettingsPanel.vue'))
+const StatsPanel = defineAsyncComponent(() => import('./components/StatsPanel.vue'))
 import { conversationApi, messageApi } from './api'
 
 // -- Conversations state --
-const conversations = ref([])
+const conversations = shallowRef([])
 const currentConvId = ref(null)
 const loadingConvs = ref(false)
 const hasMoreConvs = ref(false)
 const nextConvCursor = ref(null)
 
 // -- Messages state --
-const messages = ref([])
+const messages = shallowRef([])
 const hasMoreMessages = ref(false)
 const loadingMessages = ref(false)
 const nextMsgCursor = ref(null)
@@ -81,8 +82,8 @@ const nextMsgCursor = ref(null)
 const streaming = ref(false)
 const streamContent = ref('')
 const streamThinking = ref('')
-const streamToolCalls = ref([])
-const streamProcessSteps = ref([])
+const streamToolCalls = shallowRef([])
+const streamProcessSteps = shallowRef([])
 
 // 保存每个对话的流式状态
 const streamStates = new Map()
@@ -151,7 +152,7 @@ async function loadConversations(reset = true) {
     if (reset) {
       conversations.value = res.data.items
     } else {
-      conversations.value.push(...res.data.items)
+      conversations.value = [...conversations.value, ...res.data.items]
     }
     nextConvCursor.value = res.data.next_cursor
     hasMoreConvs.value = res.data.has_more
@@ -173,7 +174,7 @@ async function createConversation() {
       title: '新对话',
       project_id: currentProject.value?.id || null,
     })
-    conversations.value.unshift(res.data)
+    conversations.value = [res.data, ...conversations.value]
     await selectConversation(res.data.id)
   } catch (e) {
     console.error('Failed to create conversation:', e)
@@ -282,7 +283,7 @@ function createStreamCallbacks(convId, { updateConvList = true } = {}) {
 
       if (currentConvId.value === convId) {
         streaming.value = false
-        messages.value.push({
+        messages.value = [...messages.value, {
           id: data.message_id,
           conversation_id: convId,
           role: 'assistant',
@@ -292,16 +293,20 @@ function createStreamCallbacks(convId, { updateConvList = true } = {}) {
           process_steps: streamProcessSteps.value.filter(Boolean),
           token_count: data.token_count,
           created_at: new Date().toISOString(),
-        })
+        }]
         resetStreamState()
 
         if (updateConvList) {
           const idx = conversations.value.findIndex(c => c.id === convId)
           if (idx >= 0) {
-            const conv = idx > 0 ? conversations.value.splice(idx, 1)[0] : conversations.value[0]
-            conv.message_count = (conv.message_count || 0) + 2
-            if (data.suggested_title) conv.title = data.suggested_title
-            if (idx > 0) conversations.value.unshift(conv)
+            const conv = conversations.value[idx]
+            const updated = {
+              ...conv,
+              message_count: (conv.message_count || 0) + 2,
+              ...(data.suggested_title ? { title: data.suggested_title } : {}),
+            }
+            const newList = conversations.value.filter((_, i) => i !== idx)
+            conversations.value = [updated, ...newList]
           }
         }
       } else {
@@ -309,11 +314,13 @@ function createStreamCallbacks(convId, { updateConvList = true } = {}) {
           const res = await messageApi.list(convId, null, 50)
           const idx = conversations.value.findIndex(c => c.id === convId)
           if (idx >= 0) {
-            conversations.value[idx].message_count = res.data.items.length
+            const conv = conversations.value[idx]
+            const updates = { message_count: res.data.items.length }
             if (res.data.items.length > 0) {
               const convRes = await conversationApi.get(convId)
-              if (convRes.data.title) conversations.value[idx].title = convRes.data.title
+              if (convRes.data.title) updates.title = convRes.data.title
             }
+            conversations.value = conversations.value.map((c, i) => i === idx ? { ...c, ...updates } : c)
           }
         } catch (_) {}
       }
@@ -345,7 +352,7 @@ async function sendMessage(data) {
     token_count: 0,
     created_at: new Date().toISOString(),
   }
-  messages.value.push(userMsg)
+  messages.value = [...messages.value, userMsg]
 
   initStreamState()
 
@@ -410,7 +417,7 @@ async function saveSettings(data) {
     const res = await conversationApi.update(currentConvId.value, data)
     const idx = conversations.value.findIndex(c => c.id === currentConvId.value)
     if (idx !== -1) {
-      conversations.value[idx] = { ...conversations.value[idx], ...res.data }
+    conversations.value = conversations.value.map((c, i) => i === idx ? { ...c, ...res.data } : c)
     }
   } catch (e) {
     console.error('Failed to save settings:', e)

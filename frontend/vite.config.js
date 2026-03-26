@@ -23,4 +23,14 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-markdown': ['marked', 'marked-highlight', 'highlight.js'],
+          'vendor-katex': ['katex'],
+        },
+      },
+    },
+  },
 })

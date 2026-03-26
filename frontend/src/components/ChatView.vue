@@ -42,6 +42,7 @@
               v-for="msg in messages"
               :key="msg.id"
               :data-msg-id="msg.id"
+              v-memo="[msg.text, msg.thinking, msg.tool_calls, msg.process_steps, msg.attachments]"
             >
               <MessageBubble
                 :role="msg.role"
@@ -119,6 +120,7 @@ const inputRef = ref(null)
 const modelNameMap = ref({})
 const activeMessageId = ref(null)
 let scrollObserver = null
+const observedElements = new WeakSet()
 
 function formatModelName(modelId) {
   return modelNameMap.value[modelId] || modelId
@@ -158,7 +160,12 @@ watch(() => props.messages.length, () => {
   nextTick(() => {
     if (!scrollObserver || !scrollContainer.value) return
     const wrappers = scrollContainer.value.querySelectorAll('[data-msg-id]')
-    wrappers.forEach(el => scrollObserver.observe(el))
+    wrappers.forEach(el => {
+      if (!observedElements.has(el)) {
+        scrollObserver.observe(el)
+        observedElements.add(el)
+      }
+    })
   })
 })
 

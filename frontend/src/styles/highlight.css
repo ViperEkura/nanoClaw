@@ -1,5 +1,5 @@
 /* highlight.js - Light theme for code blocks */
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
+/* JetBrains Mono font loaded via <link> in index.html */
 
 .hljs {
   color: #24292f;

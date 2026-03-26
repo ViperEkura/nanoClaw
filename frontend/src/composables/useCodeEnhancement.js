@@ -1,4 +1,4 @@
-import { watch, onMounted, nextTick } from 'vue'
+import { watch, onMounted, nextTick, onUnmounted } from 'vue'
 import { enhanceCodeBlocks } from '../utils/markdown'
 
 /**
@@ -10,15 +10,25 @@ import { enhanceCodeBlocks } from '../utils/markdown'
  * @param {import('vue').WatchOptions} [watchOpts] - Optional watch options (e.g. { deep: true })
  */
 export function useCodeEnhancement(templateRef, dep, watchOpts) {
+  let debounceTimer = null
+
   function enhance() {
     enhanceCodeBlocks(templateRef.value)
   }
 
+  function debouncedEnhance() {
+    if (debounceTimer) clearTimeout(debounceTimer)
+    debounceTimer = setTimeout(() => nextTick(enhance), 150)
+  }
+
   onMounted(enhance)
+  onUnmounted(() => {
+    if (debounceTimer) clearTimeout(debounceTimer)
+  })
 
   if (dep) {
     watch(dep, () => nextTick(enhance), watchOpts)
   }
 
-  return { enhance }
+  return { enhance, debouncedEnhance }
 }
