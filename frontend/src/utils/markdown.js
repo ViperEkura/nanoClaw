@@ -75,6 +75,9 @@ export function renderMarkdown(text) {
   return marked.parse(text)
 }
 
+const COPY_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>'
+const CHECK_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>'
+
 /**
  * 后处理 HTML：为所有代码块包裹 .code-block 容器，
  * 添加语言标签和复制按钮。在组件 onMounted / updated 中调用。
@@ -100,9 +103,6 @@ export function enhanceCodeBlocks(container) {
     const langSpan = document.createElement('span')
     langSpan.className = 'code-lang'
     langSpan.textContent = lang
-
-const COPY_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>'
-const CHECK_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>'
 
     const copyBtn = document.createElement('button')
     copyBtn.className = 'code-copy-btn'

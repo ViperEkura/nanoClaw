@@ -90,35 +90,7 @@ function copyContent() {
 </script>
 
 <style scoped>
-.message-bubble {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 16px;
-  width: 100%;
-}
-
-.message-bubble.user {
-  flex-direction: row-reverse;
-}
-
-.message-container {
-  display: flex;
-  flex-direction: column;
-  min-width: 200px;
-  width: 100%;
-}
-
-.message-bubble.user .message-container {
-  align-items: flex-end;
-  width: fit-content;
-  max-width: 85%;
-}
-
-.message-bubble.assistant .message-container {
-  align-items: flex-start;
-  flex: 1 1 auto;
-  min-width: 0;
-}
+/* .message-bubble, .avatar, .message-body now in global.css */
 
 .attachments-list {
   display: flex;
@@ -152,48 +124,6 @@ function copyContent() {
 .attachment-name {
   color: var(--text-primary);
   font-weight: 500;
-}
-
-.message-bubble.assistant .message-body {
-  width: 100%;
-}
-
-.avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  font-weight: 700;
-  flex-shrink: 0;
-}
-
-.user .avatar {
-  background: linear-gradient(135deg, #2563eb, #3b82f6);
-  color: white;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: -0.3px;
-}
-
-.assistant .avatar {
-  background: var(--avatar-gradient);
-  color: white;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: -0.3px;
-}
-
-.message-body {
-  flex: 1;
-  min-width: 0;
-  padding: 16px;
-  border: 1px solid var(--border-light);
-  border-radius: 12px;
-  background: var(--bg-primary);
-  transition: background 0.2s, border-color 0.2s;
 }
 
 .message-footer {

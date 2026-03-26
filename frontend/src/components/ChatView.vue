@@ -132,11 +132,7 @@ function scrollToBottom(smooth = true) {
   })
 }
 
-watch(() => props.messages.length, () => {
-  scrollToBottom()
-})
-
-watch(() => props.streamingContent, () => {
+watch([() => props.messages.length, () => props.streamingContent], () => {
   scrollToBottom()
 })
 
@@ -298,52 +294,8 @@ watch(() => props.conversation?.id, () => {
   padding: 0 16px;
 }
 
-.message-bubble {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 16px;
-  width: 100%;
-}
+/* .message-bubble, .avatar, .message-body now in global.css */
 
-.message-bubble .message-container {
-  display: flex;
-  flex-direction: column;
-  max-width: 85%;
-  min-width: 200px;
-}
 
-.message-bubble.user .message-container {
-  align-items: flex-end;
-}
-
-.message-bubble.assistant .message-container {
-  align-items: flex-start;
-}
-
-.message-bubble .avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: -0.3px;
-  flex-shrink: 0;
-  background: var(--avatar-gradient);
-  color: white;
-}
-
-.message-bubble .message-body {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  padding: 16px;
-  border: 1px solid var(--border-light);
-  border-radius: 12px;
-  background: var(--bg-primary);
-  transition: background 0.2s, border-color 0.2s;
-}
 
 </style>

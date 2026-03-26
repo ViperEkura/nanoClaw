@@ -53,7 +53,7 @@
       <div class="modal">
         <div class="modal-header">
           <h3>创建项目</h3>
-          <button class="btn-close" @click="showCreateModal = false">&times;</button>
+          <CloseButton @click="showCreateModal = false" />
         </div>
         <div class="modal-body">
           <div class="form-group">
@@ -79,7 +79,7 @@
       <div class="modal">
         <div class="modal-header">
           <h3>上传文件夹</h3>
-          <button class="btn-close" @click="closeUploadModal">&times;</button>
+          <CloseButton @click="closeUploadModal" />
         </div>
         <div class="modal-body">
           <div class="form-group">
@@ -124,7 +124,7 @@
       <div class="modal">
         <div class="modal-header">
           <h3>确认删除</h3>
-          <button class="btn-close" @click="showDeleteModal = false">&times;</button>
+          <CloseButton @click="showDeleteModal = false" />
         </div>
         <div class="modal-body">
           <p>确定要删除项目 <strong>{{ projectToDelete?.name }}</strong> 吗？</p>
@@ -144,9 +144,10 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { projectApi } from '../api'
+import CloseButton from './CloseButton.vue'
 
 const props = defineProps({
-  currentProject: Object,
+  currentProject: { type: Object, default: null },
 })
 
 const emit = defineEmits(['select', 'created', 'deleted'])
@@ -316,23 +317,7 @@ defineExpose({
   color: var(--text-primary);
 }
 
-.btn-icon {
-  padding: 6px;
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.btn-icon:hover {
-  background: var(--bg-hover);
-  color: var(--accent-primary);
-}
+/* .btn-icon is defined in global.css */
 
 .btn-icon.danger:hover {
   background: var(--danger-bg);

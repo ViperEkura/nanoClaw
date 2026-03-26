@@ -18,12 +18,7 @@
             {{ t.label }}
           </button>
         </div>
-        <button class="btn-close" @click="$emit('close')">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-        </button>
+        <CloseButton @click="$emit('close')" />
       </div>
     </div>
 
@@ -132,6 +127,7 @@
 import { reactive, ref, watch, onMounted } from 'vue'
 import { modelApi, conversationApi } from '../api'
 import { useTheme } from '../composables/useTheme'
+import CloseButton from './CloseButton.vue'
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
@@ -251,34 +247,7 @@ onMounted(loadModels)
   gap: 12px;
 }
 
-.period-tabs {
-  display: flex;
-  gap: 2px;
-  background: var(--bg-input);
-  padding: 3px;
-  border-radius: 8px;
-}
-
-.tab {
-  padding: 4px 12px;
-  border: none;
-  background: none;
-  color: var(--text-tertiary);
-  font-size: 12px;
-  cursor: pointer;
-  border-radius: 6px;
-  transition: all 0.2s;
-}
-
-.tab:hover {
-  color: var(--text-secondary);
-}
-
-.tab.active {
-  background: var(--accent-primary);
-  color: white;
-  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.3);
-}
+/* tab styles now in global.css */
 
 .settings-body {
   flex: 1;

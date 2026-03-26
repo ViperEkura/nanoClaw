@@ -23,3 +23,21 @@ export function formatNumber(num) {
   if (num >= 1000) return (num / 1000).toFixed(1) + 'K'
   return num.toString()
 }
+
+/**
+ * Format a value as pretty-printed JSON string.
+ */
+export function formatJson(value) {
+  if (value == null) return ''
+  const str = typeof value === 'string' ? value : JSON.stringify(value)
+  try { return JSON.stringify(JSON.parse(str), null, 2) } catch { return str }
+}
+
+/**
+ * Truncate text to max characters with ellipsis.
+ */
+export function truncate(text, max = 60) {
+  if (!text) return ''
+  const str = text.replace(/\s+/g, ' ').trim()
+  return str.length > max ? str.slice(0, max) + '\u2026' : str
+}

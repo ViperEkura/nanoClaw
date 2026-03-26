@@ -74,6 +74,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { renderMarkdown } from '../utils/markdown'
+import { formatJson, truncate } from '../utils/format'
 import { useCodeEnhancement } from '../composables/useCodeEnhancement'
 
 const props = defineProps({
@@ -95,18 +96,6 @@ const processRef = ref(null)
 
 function toggleItem(key) {
   expandedKeys.value[key] = !expandedKeys.value[key]
-}
-
-function formatJson(value) {
-  if (value == null) return ''
-  const str = typeof value === 'string' ? value : JSON.stringify(value)
-  try { return JSON.stringify(JSON.parse(str), null, 2) } catch { return str }
-}
-
-function truncate(text, max = 60) {
-  if (!text) return ''
-  const str = text.replace(/\s+/g, ' ').trim()
-  return str.length > max ? str.slice(0, max) + '…' : str
 }
 
 function getResultSummary(result) {

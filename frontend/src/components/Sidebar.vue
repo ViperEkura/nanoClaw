@@ -109,7 +109,8 @@ function selectProject(project) {
 }
 
 function onProjectCreated(project) {
-  // Auto-select newly created project
+  // Auto-select newly created project and refresh list
+  projectManagerRef.value?.loadProjects()
   emit('selectProject', project)
 }
 
@@ -132,7 +133,6 @@ function onScroll(e) {
 .sidebar {
   width: 20%;
   min-width: 220px;
-  max-width: 320px;
   flex-shrink: 0;
   background: color-mix(in srgb, var(--bg-primary) 75%, transparent);
   backdrop-filter: blur(40px);
