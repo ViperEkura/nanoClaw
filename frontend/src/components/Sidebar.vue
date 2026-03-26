@@ -76,6 +76,9 @@
           <svg class="chevron" :class="{ collapsed: !expandedGroups['__standalone__'] }" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="6 9 12 15 18 9"/>
           </svg>
+          <svg class="standalone-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
           <span class="conv-count">{{ groupedData.standalone.length }}</span>
           <button
             class="btn-group-action"
@@ -87,6 +90,7 @@
               <line x1="5" y1="12" x2="19" y2="12"></line>
             </svg>
           </button>
+          <span class="btn-placeholder"></span>
           <span class="btn-placeholder"></span>
         </div>
         <div v-show="expandedGroups['__standalone__']">
@@ -301,6 +305,11 @@ function onScroll(e) {
   text-overflow: ellipsis;
   flex: 1;
   min-width: 0;
+}
+
+.standalone-icon {
+  flex-shrink: 0;
+  color: var(--text-secondary);
 }
 
 .btn-placeholder { width: 24px; flex-shrink: 0; }

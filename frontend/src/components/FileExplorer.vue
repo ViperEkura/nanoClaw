@@ -60,23 +60,11 @@
           </span>
         </div>
         <div class="viewer-actions">
-          <button v-if="!editing" class="btn-icon-sm" @click="startEdit" title="编辑">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-            </svg>
-          </button>
-          <button v-if="editing" class="btn-icon-sm save" @click="saveFile" title="保存 (Ctrl+S)" :disabled="saving">
+          <button class="btn-icon-sm save" @click="saveFile" title="保存 (Ctrl+S)" :disabled="saving">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
               <polyline points="17 21 17 13 7 13 7 21"/>
               <polyline points="7 3 7 8 15 8"/>
-            </svg>
-          </button>
-          <button v-if="editing" class="btn-icon-sm" @click="cancelEdit" title="取消">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="18" y1="6" x2="6" y2="18"/>
-              <line x1="6" y1="6" x2="18" y2="18"/>
             </svg>
           </button>
           <button class="btn-icon-sm danger" @click="deleteFile" title="删除文件">
@@ -105,21 +93,9 @@
         <span>{{ fileError }}</span>
       </div>
 
-      <!-- Read-only viewer (code highlighted, markdown rendered) -->
-      <div
-        v-else-if="!editing && fileType !== 'image'"
-        class="file-content-viewer md-content"
-        v-html="renderedContent"
-      ></div>
-
-      <!-- Image viewer -->
-      <div v-else-if="!editing && fileType === 'image'" class="image-viewer">
-        <img :src="imageUrl" :alt="activeFile" />
-      </div>
-
-      <!-- Highlighted editor -->
-      <div v-else class="editor-container">
-        <pre class="editor-highlight" aria-hidden="true"><code v-html="editorHighlighted"></code></pre>
+      <!-- Text / code editor (default mode) -->
+      <div v-else-if="fileType !== 'image'" class="editor-container">
+        <div class="editor-highlight" aria-hidden="true" v-html="editorHighlighted"></div>
         <textarea
           ref="editorRef"
           v-model="editContent"
@@ -128,6 +104,11 @@
           @keydown="onEditorKeydown"
           @scroll="syncScroll"
         ></textarea>
+      </div>
+
+      <!-- Image viewer -->
+      <div v-else class="image-viewer">
+        <img :src="imageUrl" :alt="activeFile" />
       </div>
     </div>
 
@@ -150,7 +131,6 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { projectApi } from '../api'
 import FileTreeItem from './FileTreeItem.vue'
 import { renderMarkdown } from '../utils/markdown'
-import { highlightCode } from '../utils/highlight'
 import { normalizeFileTree } from '../utils/fileTree'
 
 const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg', 'ico'])
@@ -169,10 +149,8 @@ const loadingTree = ref(false)
 
 // -- Viewer state --
 const activeFile = ref(null)
-const fileContent = ref('')
 const fileError = ref('')
 const loadingFile = ref(false)
-const editing = ref(false)
 const editContent = ref('')
 const saving = ref(false)
 const editorRef = ref(null)
@@ -195,18 +173,11 @@ const fileType = computed(() => {
 })
 
 // -- Content rendering --
-const renderedContent = computed(() => {
-  if (!fileContent.value) return ''
-  if (isMarkdownFile.value) return renderMarkdown(fileContent.value)
-  // Wrap code in fenced code block — rendered by same markdown pipeline, same CSS
-  const lang = fileExt.value || ''
-  return renderMarkdown('```' + lang + '\n' + fileContent.value + '\n```')
-})
-
 const editorHighlighted = computed(() => {
   if (!editContent.value) return ''
+  if (isMarkdownFile.value) return renderMarkdown(editContent.value)
   const lang = fileExt.value || ''
-  return highlightCode(editContent.value, lang)
+  return renderMarkdown('```' + lang + '\n' + editContent.value + '\n```')
 })
 
 function syncScroll() {
@@ -232,9 +203,8 @@ async function loadTree(path = '') {
 
 async function openFile(filepath) {
   activeFile.value = filepath
-  fileContent.value = ''
   fileError.value = ''
-  editing.value = false
+  editContent.value = ''
   imageUrl.value = ''
   loadingFile.value = true
 
@@ -254,7 +224,7 @@ async function openFile(filepath) {
 
   try {
     const res = await projectApi.readFile(props.projectId, filepath)
-    fileContent.value = res.data.content
+    editContent.value = res.data.content
   } catch (e) {
     fileError.value = e.message || '加载文件失败'
   } finally {
@@ -262,23 +232,11 @@ async function openFile(filepath) {
   }
 }
 
-function startEdit() {
-  editContent.value = fileContent.value
-  editing.value = true
-}
-
-function cancelEdit() {
-  editing.value = false
-  editContent.value = ''
-}
-
 async function saveFile() {
   if (!activeFile.value || saving.value) return
   saving.value = true
   try {
     await projectApi.writeFile(props.projectId, activeFile.value, editContent.value)
-    fileContent.value = editContent.value
-    editing.value = false
   } catch (e) {
     alert('保存失败: ' + e.message)
   } finally {
@@ -293,7 +251,6 @@ function deleteFile() {
 
   projectApi.deleteFile(props.projectId, activeFile.value).then(() => {
     activeFile.value = null
-    fileContent.value = ''
     loadTree()
   }).catch(e => {
     alert('删除失败: ' + e.message)
@@ -308,7 +265,6 @@ async function createNewFile() {
     await projectApi.writeFile(props.projectId, path, '')
     await loadTree()
     openFile(path)
-    startEdit()
   } catch (e) {
     alert('创建失败: ' + e.message)
   }
@@ -330,14 +286,11 @@ function onEditorKeydown(e) {
     e.preventDefault()
     saveFile()
   }
-  if (e.key === 'Escape') {
-    cancelEdit()
-  }
 }
 
 // Ctrl+S global shortcut
 function onGlobalKeydown(e) {
-  if (e.key === 's' && (e.ctrlKey || e.metaKey) && editing.value) {
+  if (e.key === 's' && (e.ctrlKey || e.metaKey) && activeFile.value) {
     e.preventDefault()
     saveFile()
   }
@@ -345,9 +298,8 @@ function onGlobalKeydown(e) {
 
 watch(() => props.projectId, () => {
   activeFile.value = null
-  fileContent.value = ''
+  editContent.value = ''
   imageUrl.value = ''
-  editing.value = false
   loadTree()
 })
 
@@ -536,10 +488,6 @@ onUnmounted(() => {
   resize: none;
   border: none;
   outline: none;
-  padding: 12px;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  font-size: 13px;
-  line-height: 1.5;
   color: var(--text-primary);
   background: var(--bg-code);
   tab-size: 4;
@@ -547,14 +495,12 @@ onUnmounted(() => {
   overflow: auto;
 }
 
-.file-editor::-webkit-scrollbar,
-.file-content-viewer::-webkit-scrollbar {
+.file-editor::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
-.file-editor::-webkit-scrollbar-thumb,
-.file-content-viewer::-webkit-scrollbar-thumb {
+.file-editor::-webkit-scrollbar-thumb {
   background: var(--scrollbar-thumb);
   border-radius: 3px;
 }
@@ -575,27 +521,39 @@ onUnmounted(() => {
   flex: 1;
   display: flex;
   position: relative;
-  margin: 8px;
-  border: 1px solid var(--border-light);
-  border-radius: 8px;
-  background: var(--bg-code);
   overflow: hidden;
 }
 
-.editor-container pre.editor-highlight {
+.editor-highlight {
   position: absolute;
   inset: 0;
   margin: 0;
-  padding: 12px;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  font-size: 13px;
-  line-height: 1.5;
+  padding: 20px 24px;
   overflow: auto;
   pointer-events: none;
   color: var(--text-primary);
-  background: var(--bg-code);
+  background: transparent;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 14px;
+  line-height: 1.7;
   white-space: pre;
   tab-size: 4;
+}
+
+/* Strip wrapper styles from markdown-rendered <pre><code> so text aligns with textarea */
+.editor-highlight :deep(pre),
+.editor-highlight :deep(code) {
+  margin: 0;
+  padding: 0;
+  background: transparent !important;
+  border: none;
+  border-radius: 0;
+  font-size: inherit;
+  font-family: inherit;
+  line-height: inherit;
+  white-space: inherit;
+  tab-size: inherit;
+  word-wrap: normal;
 }
 
 .editor-container .file-editor {
@@ -603,18 +561,13 @@ onUnmounted(() => {
   z-index: 1;
   flex: 1;
   border: none;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 14px;
+  line-height: 1.7;
+  padding: 20px 24px;
   color: transparent;
   caret-color: var(--text-primary);
   background: transparent;
-}
-
-.file-content-viewer {
-  flex: 1;
-  overflow: auto;
-  padding: 20px 24px;
-  font-size: 14px;
-  line-height: 1.7;
-  color: var(--text-primary);
 }
 
 /* -- Image viewer -- */

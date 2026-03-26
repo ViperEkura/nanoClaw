@@ -221,7 +221,7 @@ import { useTheme } from '../composables/useTheme'
 import { formatNumber } from '../utils/format'
 import CloseButton from './CloseButton.vue'
 
-const emit = defineEmits(['close'])
+defineEmits(['close'])
 
 const { isDark } = useTheme()
 

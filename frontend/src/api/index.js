@@ -121,11 +121,6 @@ export const modelApi = {
     return res
   },
 
-  // Clear cache (e.g., when models changed on server)
-  clearCache() {
-    modelsCache = null
-    localStorage.removeItem('models_cache')
-  }
 }
 
 export const statsApi = {
@@ -205,30 +200,6 @@ export const projectApi = {
     return request(`/projects/${projectId}`, { method: 'DELETE' })
   },
 
-  uploadFolder(data) {
-    const formData = new FormData()
-    formData.append('name', data.name || '')
-    formData.append('description', data.description || '')
-    for (const file of data.files) {
-      formData.append('files', file, file.webkitRelativePath)
-    }
-    return fetch(`${BASE}/projects/upload`, {
-      method: 'POST',
-      body: formData,
-    }).then(async res => {
-      let json
-      try {
-        json = await res.json()
-      } catch (_) {
-        throw new Error(`服务器错误 (${res.status})，请确认后端已重启`)
-      }
-      if (json.code !== 0) {
-        throw new Error(json.message || 'Request failed')
-      }
-      return json
-    })
-  },
-
   listFiles(projectId, path = '') {
     return request(`/projects/${projectId}/files${buildQueryParams({ path })}`)
   },
@@ -259,13 +230,6 @@ export const projectApi = {
     return request(`/projects/${projectId}/files/mkdir`, {
       method: 'POST',
       body: { path: dirPath },
-    })
-  },
-
-  search(projectId, query, options = {}) {
-    return request(`/projects/${projectId}/search`, {
-      method: 'POST',
-      body: { query, ...options },
     })
   },
 }

@@ -93,7 +93,7 @@ const props = defineProps({
   toolsEnabled: { type: Boolean, default: true },
 })
 
-const emit = defineEmits(['sendMessage', 'deleteMessage', 'regenerateMessage', 'toggleSettings', 'toggleStats', 'loadMoreMessages', 'toggleTools'])
+const emit = defineEmits(['sendMessage', 'deleteMessage', 'regenerateMessage', 'loadMoreMessages', 'toggleTools'])
 
 const scrollContainer = ref(null)
 const inputRef = ref(null)
