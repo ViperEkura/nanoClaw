@@ -68,7 +68,7 @@ def message_list(conv_id):
     db.session.commit()
 
     tools_enabled = d.get("tools_enabled", True)
-    project_id = d.get("project_id")
+    project_id = d.get("project_id") or conv.project_id
     
     return _chat_service.stream_response(conv, tools_enabled, project_id)
 
@@ -112,7 +112,7 @@ def regenerate_message(conv_id, msg_id):
     # 获取工具启用状态
     d = request.json or {}
     tools_enabled = d.get("tools_enabled", True)
-    project_id = d.get("project_id")  # Get project_id from request
+    project_id = d.get("project_id") or conv.project_id
 
     # 流式重新生成
     return _chat_service.stream_response(conv, tools_enabled, project_id)

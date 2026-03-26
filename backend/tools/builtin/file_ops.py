@@ -48,17 +48,13 @@ def _resolve_path(path: str, project_id: str = None) -> Tuple[Path, Path]:
                 "type": "string",
                 "description": "File path to read (relative to project root or absolute within project)"
             },
-            "project_id": {
-                "type": "string",
-                "description": "Project ID for workspace isolation (required)"
-            },
             "encoding": {
                 "type": "string",
                 "description": "File encoding, default utf-8",
                 "default": "utf-8"
             }
         },
-        "required": ["path", "project_id"]
+        "required": ["path"]
     },
     category="file"
 )
@@ -112,10 +108,6 @@ def file_read(arguments: dict) -> dict:
                 "type": "string",
                 "description": "Content to write to the file"
             },
-            "project_id": {
-                "type": "string",
-                "description": "Project ID for workspace isolation (required)"
-            },
             "encoding": {
                 "type": "string",
                 "description": "File encoding, default utf-8",
@@ -128,7 +120,7 @@ def file_read(arguments: dict) -> dict:
                 "default": "write"
             }
         },
-        "required": ["path", "content", "project_id"]
+        "required": ["path", "content"]
     },
     category="file"
 )
@@ -183,13 +175,9 @@ def file_write(arguments: dict) -> dict:
             "path": {
                 "type": "string",
                 "description": "File path to delete (relative to project root or absolute within project)"
-            },
-            "project_id": {
-                "type": "string",
-                "description": "Project ID for workspace isolation (required)"
             }
         },
-        "required": ["path", "project_id"]
+        "required": ["path"]
     },
     category="file"
 )
@@ -237,13 +225,9 @@ def file_delete(arguments: dict) -> dict:
                 "type": "string",
                 "description": "Glob pattern to filter files, e.g. '*.py'",
                 "default": "*"
-            },
-            "project_id": {
-                "type": "string",
-                "description": "Project ID for workspace isolation (required)"
             }
         },
-        "required": ["project_id"]
+        "required": []
     },
     category="file"
 )
@@ -308,13 +292,9 @@ def file_list(arguments: dict) -> dict:
             "path": {
                 "type": "string",
                 "description": "Path to check (relative to project root or absolute within project)"
-            },
-            "project_id": {
-                "type": "string",
-                "description": "Project ID for workspace isolation (required)"
             }
         },
-        "required": ["path", "project_id"]
+        "required": ["path"]
     },
     category="file"
 )
@@ -369,13 +349,9 @@ def file_exists(arguments: dict) -> dict:
             "path": {
                 "type": "string",
                 "description": "Directory path to create (relative to project root or absolute within project)"
-            },
-            "project_id": {
-                "type": "string",
-                "description": "Project ID for workspace isolation (required)"
             }
         },
-        "required": ["path", "project_id"]
+        "required": ["path"]
     },
     category="file"
 )

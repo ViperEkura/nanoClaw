@@ -169,10 +169,10 @@ const processItems = computed(() => {
       }
     }
 
-    // 流式中最后一个 tool_call 标记为 loading
+    // 流式中最后一个 tool_call（尚无结果时）标记为 loading
     if (props.streaming && items.length > 0) {
       const last = items[items.length - 1]
-      if (last.type === 'tool_call') {
+      if (last.type === 'tool_call' && !last.result) {
         last.loading = true
       }
     }

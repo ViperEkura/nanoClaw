@@ -79,24 +79,31 @@
       <div class="modal">
         <div class="modal-header">
           <h3>上传文件夹</h3>
-          <button class="btn-close" @click="showUploadModal = false">&times;</button>
+          <button class="btn-close" @click="closeUploadModal">&times;</button>
         </div>
         <div class="modal-body">
           <div class="form-group">
-            <label>项目名称</label>
-            <input v-model="uploadData.name" type="text" placeholder="留空则使用文件夹名称" />
-          </div>
-          <div class="form-group">
-            <label>文件夹路径</label>
-            <div class="input-with-action">
-              <input v-model="uploadData.folderPath" type="text" placeholder="输入文件夹绝对路径或点击右侧按钮选择" />
-              <button class="btn-browse" @click="selectFolder" type="button">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <label>选择文件夹</label>
+            <div class="upload-drop-zone" :class="{ 'has-files': selectedFiles.length > 0 }" @click="triggerFolderInput">
+              <template v-if="selectedFiles.length === 0">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color: var(--text-tertiary)">
                   <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
                 </svg>
-                选择文件夹
-              </button>
+                <span>点击选择文件夹</span>
+              </template>
+              <template v-else>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--success-color)" stroke-width="2">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                  <polyline points="22 4 12 14.01 9 11.01"/>
+                </svg>
+                <span>{{ folderName }} <small>({{ selectedFiles.length }} 个文件)</small></span>
+              </template>
             </div>
+            <input ref="folderInput" type="file" webkitdirectory directory multiple style="display:none" @change="onFolderSelected" />
+          </div>
+          <div class="form-group">
+            <label>项目名称</label>
+            <input v-model="uploadData.name" type="text" placeholder="留空则使用文件夹名称" />
           </div>
           <div class="form-group">
             <label>描述（可选）</label>
@@ -104,8 +111,8 @@
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn-secondary" @click="showUploadModal = false">取消</button>
-          <button class="btn-primary" @click="uploadFolder" :disabled="!uploadData.folderPath.trim() || uploading">
+          <button class="btn-secondary" @click="closeUploadModal">取消</button>
+          <button class="btn-primary" @click="uploadFolder" :disabled="selectedFiles.length === 0 || uploading">
             {{ uploading ? '上传中...' : '上传' }}
           </button>
         </div>
@@ -161,28 +168,38 @@ const newProject = ref({
 
 const uploadData = ref({
   name: '',
-  folderPath: '',
   description: '',
 })
 
-async function selectFolder() {
-  try {
-    if ('showDirectoryPicker' in window) {
-      const dirHandle = await window.showDirectoryPicker()
-      // 将文件夹名称自动填入项目名（如未填写）
-      if (!uploadData.value.name.trim()) {
-        uploadData.value.name = dirHandle.name
-      }
-      // 提示用户手动确认服务器路径
-      if (!uploadData.value.folderPath.trim()) {
-        uploadData.value.folderPath = dirHandle.name
-      }
-    }
-  } catch (e) {
-    if (e.name !== 'AbortError') {
-      console.error('Failed to select folder:', e)
-    }
+const selectedFiles = ref([])
+const folderName = ref('')
+const folderInput = ref(null)
+
+function triggerFolderInput() {
+  folderInput.value?.click()
+}
+
+function onFolderSelected(e) {
+  const files = Array.from(e.target.files || [])
+  if (files.length === 0) return
+
+  // 提取文件夹名称（所有文件的公共父目录名）
+  const relativePaths = files.map(f => f.webkitRelativePath)
+  folderName.value = relativePaths[0].split('/')[0]
+  selectedFiles.value = files
+
+  // 自动填入项目名（如未填写）
+  if (!uploadData.value.name.trim()) {
+    uploadData.value.name = folderName.value
   }
+}
+
+function closeUploadModal() {
+  showUploadModal.value = false
+  uploadData.value = { name: '', description: '' }
+  selectedFiles.value = []
+  folderName.value = ''
+  if (folderInput.value) folderInput.value.value = ''
 }
 
 // 固定用户ID（实际应用中应从登录状态获取）
@@ -223,19 +240,18 @@ async function createProject() {
 }
 
 async function uploadFolder() {
-  if (!uploadData.value.folderPath.trim()) return
-  
+  if (selectedFiles.value.length === 0) return
+
   uploading.value = true
   try {
     const res = await projectApi.uploadFolder({
       user_id: userId,
-      name: uploadData.value.name.trim() || undefined,
-      folder_path: uploadData.value.folderPath.trim(),
+      name: uploadData.value.name.trim() || folderName.value,
       description: uploadData.value.description.trim(),
+      files: selectedFiles.value,
     })
     projects.value.unshift(res.data)
-    showUploadModal.value = false
-    uploadData.value = { name: '', folderPath: '', description: '' }
+    closeUploadModal()
     emit('created', res.data)
   } catch (e) {
     console.error('Failed to upload folder:', e)
@@ -476,6 +492,37 @@ defineExpose({
 .input-with-action input {
   flex: 1;
   min-width: 0;
+}
+
+.upload-drop-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px 16px;
+  border: 2px dashed var(--border-input);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+.upload-drop-zone:hover {
+  border-color: var(--accent-primary);
+  background: var(--accent-primary-light);
+}
+
+.upload-drop-zone.has-files {
+  border-color: var(--success-color);
+  border-style: solid;
+  color: var(--text-primary);
+}
+
+.upload-drop-zone small {
+  color: var(--text-tertiary);
+  font-size: 12px;
 }
 
 .btn-browse {

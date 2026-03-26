@@ -122,9 +122,13 @@ def process_tool_calls(
 # backend/services/chat.py
 
 def stream_response(self, conv, tools_enabled=True, project_id=None):
-    # 构建上下文
-    context = {"project_id": project_id} if project_id else None
-    
+    # 构建上下文（优先使用请求传递的 project_id，否则回退到对话绑定的）
+    context = None
+    if project_id:
+        context = {"project_id": project_id}
+    elif conv.project_id:
+        context = {"project_id": conv.project_id}
+
     # 处理工具调用时自动注入
     tool_results = self.executor.process_tool_calls(tool_calls, context)
 ```
@@ -133,9 +137,9 @@ def stream_response(self, conv, tools_enabled=True, project_id=None):
 
 ## 四、文件工具安全设计
 
-### project_id 必需
+### project_id 自动注入（非 AI 必填参数）
 
-所有文件工具都需要 `project_id` 参数：
+所有文件工具的 `project_id` 不再作为 AI 可见的必填参数，由 `ToolExecutor` 自动注入：
 
 ```python
 @tool(
@@ -145,16 +149,16 @@ def stream_response(self, conv, tools_enabled=True, project_id=None):
         "type": "object",
         "properties": {
             "path": {"type": "string", "description": "File path"},
-            "project_id": {"type": "string", "description": "Project ID (required)"},
             "encoding": {"type": "string", "default": "utf-8"}
         },
-        "required": ["path", "project_id"]
+        "required": ["path"]  # project_id 已移除，后端自动注入
     },
     category="file"
 )
 def file_read(arguments: dict) -> dict:
+    # arguments["project_id"] 由 ToolExecutor 自动注入
     path, project_dir = _resolve_path(
-        arguments["path"], 
+        arguments["path"],
         arguments.get("project_id")
     )
     # ...
@@ -229,16 +233,16 @@ file_read({"path": "src/main.py", "project_id": "xxx"})
 
 ### 5.4 文件操作工具 (file)
 
-**所有文件工具需要 `project_id` 参数**
+**`project_id` 由后端自动注入，AI 无需感知此参数。**
 
-| 工具名称 | 描述 | 参数 |
+| 工具名称 | 描述 | 参数（AI 可见） |
 |---------|------|------|
-| `file_read` | 读取文件内容 | `path`, `project_id`, `encoding` |
-| `file_write` | 写入文件 | `path`, `content`, `project_id`, `mode` |
-| `file_delete` | 删除文件 | `path`, `project_id` |
-| `file_list` | 列出目录内容 | `path`, `pattern`, `project_id` |
-| `file_exists` | 检查文件是否存在 | `path`, `project_id` |
-| `file_mkdir` | 创建目录 | `path`, `project_id` |
+| `file_read` | 读取文件内容 | `path`, `encoding` |
+| `file_write` | 写入文件 | `path`, `content`, `encoding`, `mode` |
+| `file_delete` | 删除文件 | `path` |
+| `file_list` | 列出目录内容 | `path`, `pattern` |
+| `file_exists` | 检查文件是否存在 | `path` |
+| `file_mkdir` | 创建目录 | `path` |
 
 ### 5.5 天气工具 (weather)
 

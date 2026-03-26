@@ -12,7 +12,7 @@ from backend.utils.workspace import (
     create_project_directory,
     delete_project_directory,
     get_project_path,
-    copy_folder_to_project
+    save_uploaded_files
 )
 
 bp = Blueprint("projects", __name__)
@@ -201,49 +201,46 @@ def delete_project(project_id):
 
 @bp.route("/api/projects/upload", methods=["POST"])
 def upload_project_folder():
-    """Upload a folder as a new project (via temporary upload)"""
-    if "folder_path" not in request.json:
-        return err(400, "Missing folder_path in request body")
-    
-    user_id = request.json.get("user_id")
-    folder_path = request.json.get("folder_path")
-    project_name = request.json.get("name")
-    description = request.json.get("description", "")
-    
+    """Upload a folder as a new project via file upload"""
+    user_id = request.form.get("user_id", type=int)
+    project_name = request.form.get("name", "").strip()
+    description = request.form.get("description", "")
+
+    files = request.files.getlist("files")
+
     if not user_id:
         return err(400, "Missing user_id")
-    
-    if not folder_path:
-        return err(400, "Missing folder_path")
-    
+
+    if not files:
+        return err(400, "No files uploaded")
+
     if not project_name:
-        # Use folder name as project name
-        project_name = os.path.basename(folder_path)
-    
+        # Use first file's top-level folder name
+        project_name = files[0].filename.split("/")[0] if files[0].filename else "untitled"
+
     # Check if user exists
     user = User.query.get(user_id)
     if not user:
         return err(404, "User not found")
-    
+
     # Check if project name already exists
     existing = Project.query.filter_by(user_id=user_id, name=project_name).first()
     if existing:
         return err(400, f"Project '{project_name}' already exists")
-    
+
     # Create project directory first
     try:
         relative_path, absolute_path = create_project_directory(project_name, user_id)
     except Exception as e:
         return err(500, f"Failed to create project directory: {str(e)}")
-    
-    # Copy folder contents to project directory
+
+    # Write uploaded files to project directory
     try:
-        stats = copy_folder_to_project(folder_path, absolute_path, project_name)
+        stats = save_uploaded_files(files, absolute_path)
     except Exception as e:
-        # Clean up created directory on error
         shutil.rmtree(absolute_path, ignore_errors=True)
-        return err(500, f"Failed to copy folder: {str(e)}")
-    
+        return err(500, f"Failed to save uploaded files: {str(e)}")
+
     # Create project record
     project = Project(
         id=str(uuid.uuid4()),
@@ -252,10 +249,10 @@ def upload_project_folder():
         path=relative_path,
         description=description
     )
-    
+
     db.session.add(project)
     db.session.commit()
-    
+
     return ok({
         "id": project.id,
         "name": project.name,

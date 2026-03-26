@@ -64,7 +64,7 @@ backend/
 │       ├── crawler.py   # 网页搜索、抓取
 │       ├── data.py      # 计算器、文本、JSON
 │       ├── weather.py   # 天气查询
-│       ├── file_ops.py  # 文件操作（需要 project_id）
+│       ├── file_ops.py  # 文件操作（project_id 自动注入）
 │       └── code.py      # 代码执行
 │
 ├── utils/               # 辅助函数
@@ -356,10 +356,10 @@ def process_tool_calls(self, tool_calls, context=None):
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `POST` | `/api/conversations` | 创建会话 |
-| `GET` | `/api/conversations` | 获取会话列表（游标分页） |
+| `POST` | `/api/conversations` | 创建会话（可选 `project_id` 绑定项目） |
+| `GET` | `/api/conversations` | 获取会话列表（可选 `project_id` 筛选，游标分页） |
 | `GET` | `/api/conversations/:id` | 获取会话详情 |
-| `PATCH` | `/api/conversations/:id` | 更新会话 |
+| `PATCH` | `/api/conversations/:id` | 更新会话（支持修改 `project_id`） |
 | `DELETE` | `/api/conversations/:id` | 删除会话 |
 
 ### 消息管理
@@ -538,6 +538,179 @@ GET /api/conversations?limit=20&cursor=conv_abc123
   "message": "conversation not found"
 }
 ```
+
+---
+
+## 项目-对话关联机制
+
+### 设计目标
+
+将项目（Project）和对话（Conversation）建立**持久绑定关系**，实现：
+1. 创建对话时自动绑定当前选中的项目
+2. 对话列表支持按项目筛选/分组
+3. 工具执行自动使用对话所属项目的上下文，无需 AI 每次询问 `project_id`
+4. 支持对话在项目间迁移
+
+### 数据模型（已存在）
+
+```mermaid
+erDiagram
+    Project ||--o{ Conversation : "包含"
+    Conversation {
+        string id PK
+        int user_id FK
+        string project_id FK " nullable, 可选绑定项目"
+        string title
+    }
+    Project {
+        string id PK
+        int user_id FK
+        string name
+    }
+```
+
+`Conversation.project_id` 是 nullable 的外键：
+- `null` = 未绑定项目（通用对话，文件工具不可用）
+- 非 null = 绑定到特定项目（工具自动使用该项目的工作空间）
+
+### API 设计
+
+#### 创建对话 `POST /api/conversations`
+
+```json
+// Request
+{
+  "title": "新对话",
+  "project_id": "uuid-of-project"  // 可选，传入则绑定项目
+}
+
+// Response
+{
+  "code": 0,
+  "data": {
+    "id": "conv-uuid",
+    "project_id": "uuid-of-project",  // 回显绑定
+    "project_name": "AlgoLab",         // 附带项目名称，方便前端显示
+    "title": "新对话",
+    ...
+  }
+}
+```
+
+#### 对话列表 `GET /api/conversations`
+
+支持按项目筛选：
+
+```
+GET /api/conversations?project_id=xxx    # 仅返回该项目的对话
+GET /api/conversations                    # 返回所有对话（当前行为）
+```
+
+响应中附带项目信息：
+
+```json
+{
+  "code": 0,
+  "data": {
+    "items": [
+      {
+        "id": "conv-1",
+        "project_id": "proj-1",
+        "project_name": "AlgoLab",
+        "title": "分析数据",
+        ...
+      },
+      {
+        "id": "conv-2",
+        "project_id": null,
+        "project_name": null,
+        "title": "闲聊",
+        ...
+      }
+    ]
+  }
+}
+```
+
+#### 更新对话 `PATCH /api/conversations/:id`
+
+支持修改 `project_id`（迁移对话到其他项目）：
+
+```json
+{
+  "project_id": "new-project-uuid"  // 设为 null 可解绑
+}
+```
+
+#### 发送消息 `POST /api/conversations/:id/messages`
+
+`project_id` 优先级：
+1. 请求体中的 `project_id`（前端显式传递）
+2. `conversation.project_id`（对话绑定的项目，自动回退）
+3. `null`（无项目上下文，文件工具报错提示）
+
+```python
+# 伪代码
+effective_project_id = request_project_id or conv.project_id
+context = {"project_id": effective_project_id} if effective_project_id else None
+```
+
+这样 AI **不需要**知道 `project_id`，后端会自动注入。建议将 `project_id` 从文件工具的 `required` 参数列表中移除，改为后端自动注入。
+
+### 工具上下文自动注入（已实施）
+
+`project_id` 已从所有文件工具的 `required` 参数列表中移除，改为后端自动注入。
+
+**实施细节：**
+
+1. **工具 Schema**：`file_*` 工具不再声明 `project_id` 参数，AI 不会看到也不会询问
+2. **自动注入**：`ToolExecutor` 在执行文件工具时自动从 context 注入 `project_id`
+3. **Context 构建**：`ChatService` 根据请求或对话绑定自动构建 `context = {"project_id": ...}`
+
+```python
+# 工具定义 - 不再声明 project_id
+parameters = {
+    "properties": {
+        "path": {"type": "string", "description": "文件路径"},
+        "pattern": {"type": "string", "description": "过滤模式", "default": "*"}
+    },
+    "required": []  # 所有参数有默认值，project_id 完全透明
+}
+
+# ToolExecutor 自动注入（已有逻辑）
+if name.startswith("file_") and context and "project_id" in context:
+    args["project_id"] = context["project_id"]
+```
+
+### UI 交互设计
+
+#### 侧边栏布局
+
+```
+┌─────────────────────┐
+│ [📁 AlgoLab    ▼]   │  ← 项目选择器
+├─────────────────────┤
+│ [+ 新对话]           │
+├─────────────────────┤
+│  📎 分析数据   3条   │  ← 属于当前项目的对话
+│  📎 优化算法   5条   │
+│  📎 调试测试   2条   │
+├─────────────────────┤
+│ 选择其他项目查看对话  │  ← 或切换项目
+└─────────────────────┘
+```
+
+**交互规则：**
+1. 顶部项目选择器决定**当前工作空间**
+2. 选中项目后，对话列表**仅显示该项目的对话**
+3. 创建新对话时**自动绑定**当前项目
+4. 未选中项目时显示全部对话
+5. 切换项目不切换当前对话（保持对话焦点）
+
+#### 对话项显示
+
+- 对话标题前显示小圆点颜色，区分所属项目（可选）
+- 悬浮/详情中显示所属项目名称
 
 ---
 

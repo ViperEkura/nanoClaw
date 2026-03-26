@@ -4,6 +4,9 @@
 # # Allow directories
 !*/
 
+# ignore workspaces
+/workspaces
+
 # Allow docs and settings
 !/docs/*.md
 !/README.md

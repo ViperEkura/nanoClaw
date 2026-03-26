@@ -130,10 +130,11 @@ export const statsApi = {
 }
 
 export const conversationApi = {
-  list(cursor, limit = 20) {
+  list(cursor, limit = 20, projectId = null) {
     const params = new URLSearchParams()
     if (cursor) params.set('cursor', cursor)
     if (limit) params.set('limit', limit)
+    if (projectId) params.set('project_id', projectId)
     return request(`/conversations?${params}`)
   },
 
@@ -207,9 +208,27 @@ export const projectApi = {
   },
 
   uploadFolder(data) {
-    return request('/projects/upload', {
+    const formData = new FormData()
+    formData.append('user_id', String(data.user_id))
+    formData.append('name', data.name || '')
+    formData.append('description', data.description || '')
+    for (const file of data.files) {
+      formData.append('files', file, file.webkitRelativePath)
+    }
+    return fetch(`${BASE}/projects/upload`, {
       method: 'POST',
-      body: data,
+      body: formData,
+    }).then(async res => {
+      let json
+      try {
+        json = await res.json()
+      } catch (_) {
+        throw new Error(`服务器错误 (${res.status})，请确认后端已重启`)
+      }
+      if (json.code !== 0) {
+        throw new Error(json.message || 'Request failed')
+      }
+      return json
     })
   },
 }

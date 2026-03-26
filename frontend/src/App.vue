@@ -109,7 +109,8 @@ async function loadConversations(reset = true) {
   if (loadingConvs.value) return
   loadingConvs.value = true
   try {
-    const res = await conversationApi.list(reset ? null : nextConvCursor.value)
+    const projectId = currentProject.value?.id || null
+    const res = await conversationApi.list(reset ? null : nextConvCursor.value, 20, projectId)
     if (reset) {
       conversations.value = res.data.items
     } else {
@@ -131,7 +132,10 @@ function loadMoreConversations() {
 // -- Create conversation --
 async function createConversation() {
   try {
-    const res = await conversationApi.create({ title: '新对话' })
+    const res = await conversationApi.create({
+      title: '新对话',
+      project_id: currentProject.value?.id || null,
+    })
     conversations.value.unshift(res.data)
     await selectConversation(res.data.id)
   } catch (e) {
@@ -426,6 +430,9 @@ function updateToolsEnabled(val) {
 // -- Select project --
 function selectProject(project) {
   currentProject.value = project
+  // Reload conversations filtered by the selected project
+  nextConvCursor.value = null
+  loadConversations(true)
 }
 
 // -- Init --

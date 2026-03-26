@@ -3,11 +3,21 @@ import uuid
 from datetime import datetime
 from flask import Blueprint, request
 from backend import db
-from backend.models import Conversation
+from backend.models import Conversation, Project
 from backend.utils.helpers import ok, err, to_dict, get_or_create_default_user
 from backend.config import DEFAULT_MODEL
 
 bp = Blueprint("conversations", __name__)
+
+
+def _conv_to_dict(conv, **extra):
+    """Convert conversation to dict with project info"""
+    d = to_dict(conv, **extra)
+    if conv.project_id:
+        project = db.session.get(Project, conv.project_id)
+        if project:
+            d["project_name"] = project.name
+    return d
 
 
 @bp.route("/api/conversations", methods=["GET", "POST"])
@@ -16,9 +26,18 @@ def conversation_list():
     if request.method == "POST":
         d = request.json or {}
         user = get_or_create_default_user()
+
+        # Validate project_id if provided
+        project_id = d.get("project_id")
+        if project_id:
+            project = db.session.get(Project, project_id)
+            if not project:
+                return err(404, "Project not found")
+
         conv = Conversation(
             id=str(uuid.uuid4()),
             user_id=user.id,
+            project_id=project_id or None,
             title=d.get("title", ""),
             model=d.get("model", DEFAULT_MODEL),
             system_prompt=d.get("system_prompt", ""),
@@ -28,19 +47,25 @@ def conversation_list():
         )
         db.session.add(conv)
         db.session.commit()
-        return ok(to_dict(conv))
+        return ok(_conv_to_dict(conv))
     
     # GET - list conversations
     cursor = request.args.get("cursor")
     limit = min(int(request.args.get("limit", 20)), 100)
+    project_id = request.args.get("project_id")
     user = get_or_create_default_user()
     q = Conversation.query.filter_by(user_id=user.id)
+    
+    # Filter by project if specified
+    if project_id:
+        q = q.filter_by(project_id=project_id)
+    
     if cursor:
         q = q.filter(Conversation.updated_at < (
             db.session.query(Conversation.updated_at).filter_by(id=cursor).scalar() or datetime.utcnow))
     rows = q.order_by(Conversation.updated_at.desc()).limit(limit + 1).all()
     
-    items = [to_dict(r, message_count=r.messages.count()) for r in rows[:limit]]
+    items = [_conv_to_dict(r, message_count=r.messages.count()) for r in rows[:limit]]
     return ok({
         "items": items,
         "next_cursor": items[-1]["id"] if len(rows) > limit else None,
@@ -56,7 +81,7 @@ def conversation_detail(conv_id):
         return err(404, "conversation not found")
     
     if request.method == "GET":
-        return ok(to_dict(conv))
+        return ok(_conv_to_dict(conv))
     
     if request.method == "DELETE":
         db.session.delete(conv)
@@ -68,5 +93,15 @@ def conversation_detail(conv_id):
     for k in ("title", "model", "system_prompt", "temperature", "max_tokens", "thinking_enabled"):
         if k in d:
             setattr(conv, k, d[k])
+    
+    # Support updating project_id
+    if "project_id" in d:
+        project_id = d["project_id"]
+        if project_id:
+            project = db.session.get(Project, project_id)
+            if not project:
+                return err(404, "Project not found")
+        conv.project_id = project_id or None
+    
     db.session.commit()
-    return ok(to_dict(conv))
+    return ok(_conv_to_dict(conv))

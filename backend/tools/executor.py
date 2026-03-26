@@ -87,7 +87,6 @@ class ToolExecutor:
 
             # Inject context into tool arguments
             if context:
-                # For file operation tools, inject project_id automatically
                 if name.startswith("file_") and "project_id" in context:
                     args["project_id"] = context["project_id"]
 
@@ -96,7 +95,7 @@ class ToolExecutor:
             if call_key in seen_calls:
                 # Skip duplicate, but still return a result
                 results.append(self._create_tool_result(
-                    call_id, name, 
+                    call_id, name,
                     {"success": True, "data": None, "cached": True, "duplicate": True}
                 ))
                 continue
@@ -148,15 +147,16 @@ class ToolExecutor:
         call_id: str,
         name: str,
         result: dict,
-        execution_time: float = 0
+        execution_time: float = 0,
     ) -> dict:
         """Create tool result message"""
         result["execution_time"] = execution_time
+        content = json.dumps(result, ensure_ascii=False, default=str)
         return {
             "role": "tool",
             "tool_call_id": call_id,
             "name": name,
-            "content": json.dumps(result, ensure_ascii=False, default=str)
+            "content": content
         }
 
     def _create_error_result(

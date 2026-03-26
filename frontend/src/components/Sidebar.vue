@@ -7,19 +7,32 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
           </svg>
-          <span>{{ currentProject?.name || '选择项目' }}</span>
+          <span>{{ currentProject?.name || '全部对话' }}</span>
         </div>
-        <svg 
-          width="16" 
-          height="16" 
-          viewBox="0 0 24 24" 
-          fill="none" 
-          stroke="currentColor" 
-          stroke-width="2"
-          :style="{ transform: showProjects ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }"
-        >
-          <polyline points="6 9 12 15 18 9"></polyline>
-        </svg>
+        <div class="project-selector-actions">
+          <button
+            v-if="currentProject"
+            class="btn-clear-project"
+            @click.stop="$emit('selectProject', null)"
+            title="显示全部对话"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+          <svg 
+            width="16" 
+            height="16" 
+            viewBox="0 0 24 24" 
+            fill="none" 
+            stroke="currentColor" 
+            stroke-width="2"
+            :style="{ transform: showProjects ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }"
+          >
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </div>
       </div>
     </div>
 
@@ -52,7 +65,8 @@
         <div class="conv-info">
           <div class="conv-title">{{ conv.title || '新对话' }}</div>
           <div class="conv-meta">
-            {{ conv.message_count || 0 }} 条消息 · {{ formatTime(conv.updated_at) }}
+            <span>{{ conv.message_count || 0 }} 条消息 · {{ formatTime(conv.updated_at) }}</span>
+            <span v-if="!currentProject && conv.project_name" class="conv-project-badge">{{ conv.project_name }}</span>
           </div>
         </div>
         <button class="btn-delete" @click.stop="$emit('delete', conv.id)" title="删除">
@@ -65,7 +79,7 @@
 
       <div v-if="loading" class="loading-more">加载中...</div>
       <div v-if="!loading && conversations.length === 0" class="empty-hint">
-        暂无对话
+        {{ currentProject ? '该项目暂无对话' : '暂无对话' }}
       </div>
     </div>
   </aside>
@@ -167,6 +181,39 @@ function onScroll(e) {
   font-size: 13px;
   font-weight: 500;
   color: var(--text-primary);
+  min-width: 0;
+}
+
+.project-current span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.project-selector-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-clear-project {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+
+.btn-clear-project:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
 }
 
 .project-panel {
@@ -252,9 +299,20 @@ function onScroll(e) {
 }
 
 .conv-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   font-size: 12px;
   color: var(--text-tertiary);
   margin-top: 2px;
+}
+
+.conv-project-badge {
+  font-size: 11px;
+  color: var(--accent-primary);
+  opacity: 0.8;
+  flex-shrink: 0;
+  margin-left: 8px;
 }
 
 .btn-delete {

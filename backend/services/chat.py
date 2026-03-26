@@ -44,7 +44,11 @@ class ChatService:
         self.executor.clear_history()
         
         # Build context for tool execution
-        context = {"project_id": project_id} if project_id else None
+        context = None
+        if project_id:
+            context = {"project_id": project_id}
+        elif conv.project_id:
+            context = {"project_id": conv.project_id}
         
         def generate():
             messages = list(initial_messages)
@@ -142,8 +146,9 @@ class ChatService:
                         yield f"event: process_step\ndata: {json.dumps({'index': step_index, 'type': 'tool_call', 'id': tc['id'], 'name': tc['function']['name'], 'arguments': tc['function']['arguments']}, ensure_ascii=False)}\n\n"
                         step_index += 1
                         
-                        # Execute this single tool call
-                        single_result = self.executor.process_tool_calls([tc], context)
+                        # Execute this single tool call (needs app context for db access)
+                        with app.app_context():
+                            single_result = self.executor.process_tool_calls([tc], context)
                         tool_results.extend(single_result)
                         
                         # Send tool result step immediately

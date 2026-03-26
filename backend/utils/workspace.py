@@ -137,6 +137,57 @@ def delete_project_directory(project_path: str) -> bool:
     return False
 
 
+
+
+def save_uploaded_files(files, project_dir: Path) -> dict:
+    """
+    Save uploaded files to project directory (for folder upload)
+
+    Args:
+        files: List of FileStorage objects from Flask request.files
+        project_dir: Target project directory
+
+    Returns:
+        Dict with upload statistics
+    """
+    file_count = 0
+    dir_count = 0
+    total_size = 0
+
+    for f in files:
+        if not f.filename:
+            continue
+
+        # filename contains relative path like "AlgoLab/src/main.py"
+        # Skip the first segment (folder name) since project_dir already represents it
+        parts = f.filename.split("/")
+        if len(parts) > 1:
+            relative = "/".join(parts[1:])  # "src/main.py"
+        else:
+            relative = f.filename  # root-level file
+
+        target = project_dir / relative
+
+        # Create parent directories if needed
+        target.parent.mkdir(parents=True, exist_ok=True)
+
+        # Save file
+        f.save(str(target))
+        file_count += 1
+
+        # Count new directories
+        if target.parent != project_dir:
+            dir_count += 1
+
+        total_size += target.stat().st_size
+
+    return {
+        "files": file_count,
+        "directories": dir_count,
+        "size": total_size
+    }
+
+
 def copy_folder_to_project(source_path: str, project_dir: Path, project_name: str) -> dict:
     """
     Copy a folder to project directory (for folder upload)
