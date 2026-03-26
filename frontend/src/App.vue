@@ -5,10 +5,12 @@
       :current-id="currentConvId"
       :loading="loadingConvs"
       :has-more="hasMoreConvs"
+      :current-project="currentProject"
       @select="selectConversation"
       @create="createConversation"
       @delete="deleteConversation"
       @load-more="loadMoreConversations"
+      @select-project="selectProject"
     />
 
     <ChatView
@@ -78,6 +80,7 @@ let currentStreamPromise = null
 // -- UI state --
 const showSettings = ref(false)
 const toolsEnabled = ref(localStorage.getItem('tools_enabled') !== 'false') // 默认开启
+const currentProject = ref(null) // Current selected project
 
 const currentConv = computed(() =>
   conversations.value.find(c => c.id === currentConvId.value) || null
@@ -211,7 +214,7 @@ async function sendMessage(data) {
   streamToolCalls.value = []
   streamProcessSteps.value = []
 
-  currentStreamPromise = messageApi.send(convId, { text, attachments }, {
+  currentStreamPromise = messageApi.send(convId, { text, attachments, projectId: currentProject.value?.id }, {
     stream: true,
     toolsEnabled: toolsEnabled.value,
     onThinkingStart() {
@@ -383,6 +386,7 @@ async function regenerateMessage(msgId) {
 
   currentStreamPromise = messageApi.regenerate(convId, msgId, {
     toolsEnabled: toolsEnabled.value,
+    projectId: currentProject.value?.id,
     onThinkingStart() {
       if (currentConvId.value === convId) {
         streamThinking.value = ''
@@ -491,6 +495,11 @@ async function saveSettings(data) {
 function updateToolsEnabled(val) {
   toolsEnabled.value = val
   localStorage.setItem('tools_enabled', String(val))
+}
+
+// -- Select project --
+function selectProject(project) {
+  currentProject.value = project
 }
 
 // -- Init --

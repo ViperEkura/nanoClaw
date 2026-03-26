@@ -1,5 +1,39 @@
 <template>
   <aside class="sidebar">
+    <!-- Project Selector -->
+    <div class="project-section">
+      <div class="project-selector" @click="showProjects = !showProjects">
+        <div class="project-current">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+          </svg>
+          <span>{{ currentProject?.name || '选择项目' }}</span>
+        </div>
+        <svg 
+          width="16" 
+          height="16" 
+          viewBox="0 0 24 24" 
+          fill="none" 
+          stroke="currentColor" 
+          stroke-width="2"
+          :style="{ transform: showProjects ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }"
+        >
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+      </div>
+    </div>
+
+    <!-- Project Manager Panel -->
+    <div v-if="showProjects" class="project-panel">
+      <ProjectManager
+        ref="projectManagerRef"
+        :current-project="currentProject"
+        @select="selectProject"
+        @created="onProjectCreated"
+        @deleted="onProjectDeleted"
+      />
+    </div>
+
     <div class="sidebar-header">
       <button class="btn-new" @click="$emit('create')">
         <span class="icon">+</span>
@@ -39,14 +73,38 @@
 </template>
 
 <script setup>
-defineProps({
+import { ref } from 'vue'
+import ProjectManager from './ProjectManager.vue'
+
+const props = defineProps({
   conversations: { type: Array, required: true },
   currentId: { type: String, default: null },
   loading: { type: Boolean, default: false },
   hasMore: { type: Boolean, default: false },
+  currentProject: { type: Object, default: null },
 })
 
-const emit = defineEmits(['select', 'create', 'delete', 'loadMore'])
+const emit = defineEmits(['select', 'create', 'delete', 'loadMore', 'selectProject'])
+
+const showProjects = ref(false)
+const projectManagerRef = ref(null)
+
+function selectProject(project) {
+  emit('selectProject', project)
+  showProjects.value = false
+}
+
+function onProjectCreated(project) {
+  // Auto-select newly created project
+  emit('selectProject', project)
+}
+
+function onProjectDeleted(projectId) {
+  // If deleted project is current, clear selection
+  if (props.currentProject?.id === projectId) {
+    emit('selectProject', null)
+  }
+}
 
 function formatTime(iso) {
   if (!iso) return ''
@@ -83,6 +141,44 @@ function onContextMenu(e, conv) {
   flex-direction: column;
   height: 100vh;
   transition: all 0.2s;
+}
+
+.project-section {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.project-selector {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.project-selector:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-primary);
+}
+
+.project-current {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.project-panel {
+  max-height: 300px;
+  overflow-y: auto;
+  border-bottom: 1px solid var(--border-light);
+  background: var(--bg-secondary);
 }
 
 .sidebar-header {

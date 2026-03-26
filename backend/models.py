@@ -44,6 +44,7 @@ class Conversation(db.Model):
 
     id = db.Column(db.String(64), primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    project_id = db.Column(db.String(64), db.ForeignKey("projects.id"), nullable=True, index=True)
     title = db.Column(db.String(255), nullable=False, default="")
     model = db.Column(db.String(64), nullable=False, default="glm-5")
     system_prompt = db.Column(db.Text, default="")
@@ -90,4 +91,26 @@ class TokenUsage(db.Model):
     __table_args__ = (
         db.UniqueConstraint("user_id", "date", "model", name="uq_user_date_model"),
         db.Index("ix_token_usage_date_model", "date", "model"),  # Composite index
+    )
+
+
+class Project(db.Model):
+    """Project model for workspace isolation"""
+    __tablename__ = "projects"
+
+    id = db.Column(db.String(64), primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    name = db.Column(db.String(255), nullable=False)
+    path = db.Column(db.String(512), nullable=False)  # Relative path within workspace root
+    description = db.Column(db.Text, default="")
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
+                          onupdate=lambda: datetime.now(timezone.utc))
+
+    # Relationship: one project can have multiple conversations
+    conversations = db.relationship("Conversation", backref="project", lazy="dynamic",
+                                   cascade="all, delete-orphan")
+
+    __table_args__ = (
+        db.UniqueConstraint("user_id", "name", name="uq_user_project_name"),
     )

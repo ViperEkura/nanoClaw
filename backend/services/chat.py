@@ -8,7 +8,7 @@ from backend.tools import registry, ToolExecutor
 from backend.utils.helpers import (
     get_or_create_default_user,
     record_token_usage,
-    build_glm_messages,
+    build_messages,
     ok,
     err,
     to_dict,
@@ -26,13 +26,22 @@ class ChatService:
         self.executor = ToolExecutor(registry=registry)
 
 
-    def sync_response(self, conv: Conversation, tools_enabled: bool = True):
-        """Sync response with tool call support"""
+    def sync_response(self, conv: Conversation, tools_enabled: bool = True, project_id: str = None):
+        """Sync response with tool call support
+        
+        Args:
+            conv: Conversation object
+            tools_enabled: Whether to enable tools
+            project_id: Project ID for workspace isolation
+        """
         tools = registry.list_all() if tools_enabled else None
-        messages = build_glm_messages(conv)
+        messages = build_messages(conv, project_id)
         
         # Clear tool call history for new request
         self.executor.clear_history()
+        
+        # Build context for tool execution
+        context = {"project_id": project_id} if project_id else None
         
         all_tool_calls = []
         all_tool_results = []
@@ -119,26 +128,34 @@ class ChatService:
             all_tool_calls.extend(tool_calls)
             messages.append(message)
             
-            tool_results = self.executor.process_tool_calls(tool_calls)
+            tool_results = self.executor.process_tool_calls(tool_calls, context)
             all_tool_results.extend(tool_results)
             messages.extend(tool_results)
         
         return err(500, "exceeded maximum tool call iterations")
     
-    def stream_response(self, conv: Conversation, tools_enabled: bool = True):
+    def stream_response(self, conv: Conversation, tools_enabled: bool = True, project_id: str = None):
         """Stream response with tool call support
         
         Uses 'process_step' events to send thinking and tool calls in order,
         allowing them to be interleaved properly in the frontend.
+        
+        Args:
+            conv: Conversation object
+            tools_enabled: Whether to enable tools
+            project_id: Project ID for workspace isolation
         """
         conv_id = conv.id
         conv_model = conv.model
         app = current_app._get_current_object()
         tools = registry.list_all() if tools_enabled else None
-        initial_messages = build_glm_messages(conv)
+        initial_messages = build_messages(conv, project_id)
         
         # Clear tool call history for new request
         self.executor.clear_history()
+        
+        # Build context for tool execution
+        context = {"project_id": project_id} if project_id else None
         
         def generate():
             messages = list(initial_messages)
@@ -232,17 +249,16 @@ class ChatService:
                         step_index += 1
                         
                         # Execute this single tool call
-                        single_result = self.executor.process_tool_calls([tc])
+                        single_result = self.executor.process_tool_calls([tc], context)
                         tool_results.extend(single_result)
                         
                         # Send tool result step immediately
                         tr = single_result[0]
                         try:
-                            result_data = json.loads(tr["content"])
-                            skipped = result_data.get("skipped", False)
+                            result_content = json.loads(tr["content"])
+                            skipped = result_content.get("skipped", False)
                         except:
                             skipped = False
-                        
                         yield f"event: process_step\ndata: {json.dumps({'index': step_index, 'type': 'tool_result', 'id': tr['tool_call_id'], 'name': tr['name'], 'content': tr['content'], 'skipped': skipped}, ensure_ascii=False)}\n\n"
                         step_index += 1
                         
@@ -330,7 +346,7 @@ class ChatService:
         )
     
     def _build_tool_calls_json(self, tool_calls: list, tool_results: list) -> list:
-        """Build tool calls JSON structure"""
+        """Build tool calls JSON structure - matches streaming format"""
         result = []
         for i, tc in enumerate(tool_calls):
             result_content = tool_results[i]["content"] if i < len(tool_results) else None
@@ -348,10 +364,14 @@ class ChatService:
                 except:
                     pass
 
+            # Keep same structure as streaming format
             result.append({
                 "id": tc.get("id", ""),
-                "name": tc["function"]["name"],
-                "arguments": tc["function"]["arguments"],
+                "type": tc.get("type", "function"),
+                "function": {
+                    "name": tc["function"]["name"],
+                    "arguments": tc["function"]["arguments"],
+                },
                 "result": result_content,
                 "success": success,
                 "skipped": skipped,

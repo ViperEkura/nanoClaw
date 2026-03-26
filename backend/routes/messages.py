@@ -48,6 +48,7 @@ def message_list(conv_id):
     d = request.json or {}
     text = (d.get("text") or "").strip()
     attachments = d.get("attachments")  # [{"name": "a.py", "extension": "py", "content": "..."}]
+    project_id = d.get("project_id")  # Get project_id from request
 
     if not text and not attachments:
         return err(400, "text or attachments is required")
@@ -69,9 +70,9 @@ def message_list(conv_id):
     tools_enabled = d.get("tools_enabled", True)
     
     if d.get("stream", False):
-        return _chat_service.stream_response(conv, tools_enabled)
+        return _chat_service.stream_response(conv, tools_enabled, project_id)
     
-    return _chat_service.sync_response(conv, tools_enabled)
+    return _chat_service.sync_response(conv, tools_enabled, project_id)
 
 
 @bp.route("/api/conversations/<conv_id>/messages/<msg_id>", methods=["DELETE"])
@@ -113,6 +114,7 @@ def regenerate_message(conv_id, msg_id):
     # 获取工具启用状态
     d = request.json or {}
     tools_enabled = d.get("tools_enabled", True)
+    project_id = d.get("project_id")  # Get project_id from request
 
     # 流式重新生成
-    return _chat_service.stream_response(conv, tools_enabled)
+    return _chat_service.stream_response(conv, tools_enabled, project_id)

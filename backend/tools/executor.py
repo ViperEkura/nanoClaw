@@ -70,7 +70,7 @@ class ToolExecutor:
 
         Args:
             tool_calls: Tool call list returned by LLM
-            context: Optional context info (user_id, etc.)
+            context: Optional context info (user_id, project_id, etc.)
 
         Returns:
             Tool response message list, can be appended to messages
@@ -90,6 +90,12 @@ class ToolExecutor:
                     call_id, name, "Invalid JSON arguments"
                 ))
                 continue
+
+            # Inject context into tool arguments
+            if context:
+                # For file operation tools, inject project_id automatically
+                if name.startswith("file_") and "project_id" in context:
+                    args["project_id"] = context["project_id"]
 
             # Check for duplicate within same batch
             call_key = f"{name}:{json.dumps(args, sort_keys=True)}"

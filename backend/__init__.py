@@ -58,7 +58,7 @@ def create_app():
     db.init_app(app)
 
     # Import after db is initialized
-    from backend.models import User, Conversation, Message, TokenUsage
+    from backend.models import User, Conversation, Message, TokenUsage, Project
     from backend.routes import register_routes
     from backend.tools import init_tools
 

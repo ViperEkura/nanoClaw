@@ -2,41 +2,55 @@
 import os
 import json
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 from backend.tools.factory import tool
+from backend import db
+from backend.models import Project
+from backend.utils.workspace import get_project_path, validate_path_in_project
 
 
-# Base directory for file operations (sandbox)
-# Set to None to allow any path, or set a specific directory for security
-BASE_DIR = Path(__file__).parent.parent.parent.parent  # project root
-
-
-def _resolve_path(path: str) -> Path:
-    """Resolve path and ensure it's within allowed directory"""
-    p = Path(path)
-    if not p.is_absolute():
-        p = BASE_DIR / p
-    p = p.resolve()
+def _resolve_path(path: str, project_id: str = None) -> Tuple[Path, Path]:
+    """
+    Resolve path and ensure it's within project directory
     
-    # Security check: ensure path is within BASE_DIR
-    if BASE_DIR:
-        try:
-            p.relative_to(BASE_DIR.resolve())
-        except ValueError:
-            raise ValueError(f"Path '{path}' is outside allowed directory")
+    Args:
+        path: File path (relative or absolute)
+        project_id: Project ID for workspace isolation
+        
+    Returns:
+        Tuple of (resolved absolute path, project directory)
+        
+    Raises:
+        ValueError: If project_id is missing or path is outside project
+    """
+    if not project_id:
+        raise ValueError("project_id is required for file operations")
     
-    return p
+    # Get project from database
+    project = db.session.get(Project, project_id)
+    if not project:
+        raise ValueError(f"Project not found: {project_id}")
+    
+    # Get project directory
+    project_dir = get_project_path(project.id, project.path)
+    
+    # Validate and resolve path
+    return validate_path_in_project(path, project_dir), project_dir
 
 
 @tool(
     name="file_read",
-    description="Read content from a file. Use when you need to read file content.",
+    description="Read content from a file within the project workspace. Use when you need to read file content.",
     parameters={
         "type": "object",
         "properties": {
             "path": {
                 "type": "string",
-                "description": "File path to read (relative to project root or absolute)"
+                "description": "File path to read (relative to project root or absolute within project)"
+            },
+            "project_id": {
+                "type": "string",
+                "description": "Project ID for workspace isolation (required)"
             },
             "encoding": {
                 "type": "string",
@@ -44,7 +58,7 @@ def _resolve_path(path: str) -> Path:
                 "default": "utf-8"
             }
         },
-        "required": ["path"]
+        "required": ["path", "project_id"]
     },
     category="file"
 )
@@ -55,45 +69,52 @@ def file_read(arguments: dict) -> dict:
     Args:
         arguments: {
             "path": "file.txt",
+            "project_id": "project-uuid",
             "encoding": "utf-8"
         }
 
     Returns:
-        {"content": "...", "size": 100}
+        {"success": true, "content": "...", "size": 100}
     """
     try:
-        path = _resolve_path(arguments["path"])
+        path, project_dir = _resolve_path(arguments["path"], arguments.get("project_id"))
         encoding = arguments.get("encoding", "utf-8")
         
         if not path.exists():
-            return {"error": f"File not found: {path}"}
+            return {"success": False, "error": f"File not found: {path}"}
         
         if not path.is_file():
-            return {"error": f"Path is not a file: {path}"}
+            return {"success": False, "error": f"Path is not a file: {path}"}
         
         content = path.read_text(encoding=encoding)
+        
         return {
+            "success": True,
             "content": content,
             "size": len(content),
-            "path": str(path)
+            "path": str(path.relative_to(project_dir))
         }
     except Exception as e:
-        return {"error": str(e)}
+        return {"success": False, "error": str(e)}
 
 
 @tool(
     name="file_write",
-    description="Write content to a file. Creates the file if it doesn't exist, overwrites if it does. Use when you need to create or update a file.",
+    description="Write content to a file within the project workspace. Creates the file if it doesn't exist, overwrites if it does. Use when you need to create or update a file.",
     parameters={
         "type": "object",
         "properties": {
             "path": {
                 "type": "string",
-                "description": "File path to write (relative to project root or absolute)"
+                "description": "File path to write (relative to project root or absolute within project)"
             },
             "content": {
                 "type": "string",
                 "description": "Content to write to the file"
+            },
+            "project_id": {
+                "type": "string",
+                "description": "Project ID for workspace isolation (required)"
             },
             "encoding": {
                 "type": "string",
@@ -107,7 +128,7 @@ def file_read(arguments: dict) -> dict:
                 "default": "write"
             }
         },
-        "required": ["path", "content"]
+        "required": ["path", "content", "project_id"]
     },
     category="file"
 )
@@ -119,6 +140,7 @@ def file_write(arguments: dict) -> dict:
         arguments: {
             "path": "file.txt",
             "content": "Hello World",
+            "project_id": "project-uuid",
             "encoding": "utf-8",
             "mode": "write"
         }
@@ -127,7 +149,7 @@ def file_write(arguments: dict) -> dict:
         {"success": true, "size": 11}
     """
     try:
-        path = _resolve_path(arguments["path"])
+        path, project_dir = _resolve_path(arguments["path"], arguments.get("project_id"))
         content = arguments["content"]
         encoding = arguments.get("encoding", "utf-8")
         mode = arguments.get("mode", "write")
@@ -145,25 +167,29 @@ def file_write(arguments: dict) -> dict:
         return {
             "success": True,
             "size": len(content),
-            "path": str(path),
+            "path": str(path.relative_to(project_dir)),
             "mode": mode
         }
     except Exception as e:
-        return {"error": str(e)}
+        return {"success": False, "error": str(e)}
 
 
 @tool(
     name="file_delete",
-    description="Delete a file. Use when you need to remove a file.",
+    description="Delete a file within the project workspace. Use when you need to remove a file.",
     parameters={
         "type": "object",
         "properties": {
             "path": {
                 "type": "string",
-                "description": "File path to delete (relative to project root or absolute)"
+                "description": "File path to delete (relative to project root or absolute within project)"
+            },
+            "project_id": {
+                "type": "string",
+                "description": "Project ID for workspace isolation (required)"
             }
         },
-        "required": ["path"]
+        "required": ["path", "project_id"]
     },
     category="file"
 )
@@ -173,45 +199,51 @@ def file_delete(arguments: dict) -> dict:
 
     Args:
         arguments: {
-            "path": "file.txt"
+            "path": "file.txt",
+            "project_id": "project-uuid"
         }
 
     Returns:
         {"success": true}
     """
     try:
-        path = _resolve_path(arguments["path"])
+        path, project_dir = _resolve_path(arguments["path"], arguments.get("project_id"))
         
         if not path.exists():
-            return {"error": f"File not found: {path}"}
+            return {"success": False, "error": f"File not found: {path}"}
         
         if not path.is_file():
-            return {"error": f"Path is not a file: {path}"}
+            return {"success": False, "error": f"Path is not a file: {path}"}
         
+        rel_path = str(path.relative_to(project_dir))
         path.unlink()
-        return {"success": True, "path": str(path)}
+        return {"success": True, "path": rel_path}
     except Exception as e:
-        return {"error": str(e)}
+        return {"success": False, "error": str(e)}
 
 
 @tool(
     name="file_list",
-    description="List files and directories in a directory. Use when you need to see what files exist.",
+    description="List files and directories in a directory within the project workspace. Use when you need to see what files exist.",
     parameters={
         "type": "object",
         "properties": {
             "path": {
                 "type": "string",
-                "description": "Directory path to list (relative to project root or absolute)",
+                "description": "Directory path to list (relative to project root or absolute within project)",
                 "default": "."
             },
             "pattern": {
                 "type": "string",
                 "description": "Glob pattern to filter files, e.g. '*.py'",
                 "default": "*"
+            },
+            "project_id": {
+                "type": "string",
+                "description": "Project ID for workspace isolation (required)"
             }
         },
-        "required": []
+        "required": ["project_id"]
     },
     category="file"
 )
@@ -222,21 +254,22 @@ def file_list(arguments: dict) -> dict:
     Args:
         arguments: {
             "path": ".",
-            "pattern": "*"
+            "pattern": "*",
+            "project_id": "project-uuid"
         }
 
     Returns:
-        {"files": [...], "directories": [...]}
+        {"success": true, "files": [...], "directories": [...]}
     """
     try:
-        path = _resolve_path(arguments.get("path", "."))
+        path, project_dir = _resolve_path(arguments.get("path", "."), arguments.get("project_id"))
         pattern = arguments.get("pattern", "*")
         
         if not path.exists():
-            return {"error": f"Directory not found: {path}"}
+            return {"success": False, "error": f"Directory not found: {path}"}
         
         if not path.is_dir():
-            return {"error": f"Path is not a directory: {path}"}
+            return {"success": False, "error": f"Path is not a directory: {path}"}
         
         files = []
         directories = []
@@ -246,37 +279,42 @@ def file_list(arguments: dict) -> dict:
                 files.append({
                     "name": item.name,
                     "size": item.stat().st_size,
-                    "path": str(item.relative_to(BASE_DIR)) if BASE_DIR else str(item)
+                    "path": str(item.relative_to(project_dir))
                 })
             elif item.is_dir():
                 directories.append({
                     "name": item.name,
-                    "path": str(item.relative_to(BASE_DIR)) if BASE_DIR else str(item)
+                    "path": str(item.relative_to(project_dir))
                 })
         
         return {
-            "path": str(path),
+            "success": True,
+            "path": str(path.relative_to(project_dir)),
             "files": files,
             "directories": directories,
             "total_files": len(files),
             "total_dirs": len(directories)
         }
     except Exception as e:
-        return {"error": str(e)}
+        return {"success": False, "error": str(e)}
 
 
 @tool(
     name="file_exists",
-    description="Check if a file or directory exists. Use when you need to verify file existence.",
+    description="Check if a file or directory exists within the project workspace. Use when you need to verify file existence.",
     parameters={
         "type": "object",
         "properties": {
             "path": {
                 "type": "string",
-                "description": "Path to check (relative to project root or absolute)"
+                "description": "Path to check (relative to project root or absolute within project)"
+            },
+            "project_id": {
+                "type": "string",
+                "description": "Project ID for workspace isolation (required)"
             }
         },
-        "required": ["path"]
+        "required": ["path", "project_id"]
     },
     category="file"
 )
@@ -286,53 +324,58 @@ def file_exists(arguments: dict) -> dict:
 
     Args:
         arguments: {
-            "path": "file.txt"
+            "path": "file.txt",
+            "project_id": "project-uuid"
         }
 
     Returns:
         {"exists": true, "type": "file"}
     """
     try:
-        path = _resolve_path(arguments["path"])
+        path, project_dir = _resolve_path(arguments["path"], arguments.get("project_id"))
         
         if not path.exists():
-            return {"exists": False, "path": str(path)}
+            return {"exists": False, "path": str(path.relative_to(project_dir))}
         
         if path.is_file():
             return {
                 "exists": True,
                 "type": "file",
-                "path": str(path),
+                "path": str(path.relative_to(project_dir)),
                 "size": path.stat().st_size
             }
         elif path.is_dir():
             return {
                 "exists": True,
                 "type": "directory",
-                "path": str(path)
+                "path": str(path.relative_to(project_dir))
             }
         else:
             return {
                 "exists": True,
                 "type": "other",
-                "path": str(path)
+                "path": str(path.relative_to(project_dir))
             }
     except Exception as e:
-        return {"error": str(e)}
+        return {"success": False, "error": str(e)}
 
 
 @tool(
     name="file_mkdir",
-    description="Create a directory. Creates parent directories if needed. Use when you need to create a folder.",
+    description="Create a directory within the project workspace. Creates parent directories if needed. Use when you need to create a folder.",
     parameters={
         "type": "object",
         "properties": {
             "path": {
                 "type": "string",
-                "description": "Directory path to create (relative to project root or absolute)"
+                "description": "Directory path to create (relative to project root or absolute within project)"
+            },
+            "project_id": {
+                "type": "string",
+                "description": "Project ID for workspace isolation (required)"
             }
         },
-        "required": ["path"]
+        "required": ["path", "project_id"]
     },
     category="file"
 )
@@ -342,19 +385,23 @@ def file_mkdir(arguments: dict) -> dict:
 
     Args:
         arguments: {
-            "path": "new/folder"
+            "path": "new/folder",
+            "project_id": "project-uuid"
         }
 
     Returns:
         {"success": true}
     """
     try:
-        path = _resolve_path(arguments["path"])
+        path, project_dir = _resolve_path(arguments["path"], arguments.get("project_id"))
+        
+        created = not path.exists()
         path.mkdir(parents=True, exist_ok=True)
+        
         return {
             "success": True,
-            "path": str(path),
-            "created": not path.exists() or path.is_dir()
+            "path": str(path.relative_to(project_dir)),
+            "created": created
         }
     except Exception as e:
-        return {"error": str(e)}
+        return {"success": False, "error": str(e)}

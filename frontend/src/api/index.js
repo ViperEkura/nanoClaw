@@ -99,7 +99,7 @@ export const messageApi = {
     if (!stream) {
       return request(`/conversations/${convId}/messages`, {
         method: 'POST',
-        body: { text: data.text, attachments: data.attachments, stream: false, tools_enabled: toolsEnabled },
+        body: { text: data.text, attachments: data.attachments, stream: false, tools_enabled: toolsEnabled, project_id: data.projectId },
       })
     }
 
@@ -110,7 +110,7 @@ export const messageApi = {
         const res = await fetch(`${BASE}/conversations/${convId}/messages`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: data.text, attachments: data.attachments, stream: true, tools_enabled: toolsEnabled }),
+          body: JSON.stringify({ text: data.text, attachments: data.attachments, stream: true, tools_enabled: toolsEnabled, project_id: data.projectId }),
           signal: controller.signal,
         })
 
@@ -173,7 +173,7 @@ export const messageApi = {
     return request(`/conversations/${convId}/messages/${msgId}`, { method: 'DELETE' })
   },
 
-  regenerate(convId, msgId, { toolsEnabled = true, onThinkingStart, onThinking, onMessage, onToolCalls, onToolResult, onProcessStep, onDone, onError } = {}) {
+  regenerate(convId, msgId, { toolsEnabled = true, projectId, onThinkingStart, onThinking, onMessage, onToolCalls, onToolResult, onProcessStep, onDone, onError } = {}) {
     const controller = new AbortController()
 
     const promise = (async () => {
@@ -181,7 +181,7 @@ export const messageApi = {
         const res = await fetch(`${BASE}/conversations/${convId}/regenerate/${msgId}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tools_enabled: toolsEnabled }),
+          body: JSON.stringify({ tools_enabled: toolsEnabled, project_id: projectId }),
           signal: controller.signal,
         })
 
@@ -238,5 +238,45 @@ export const messageApi = {
     promise.abort = () => controller.abort()
 
     return promise
+  },
+}
+
+export const projectApi = {
+  list(userId) {
+    return request(`/projects?user_id=${userId}`)
+  },
+
+  create(data) {
+    return request('/projects', {
+      method: 'POST',
+      body: data,
+    })
+  },
+
+  get(projectId) {
+    return request(`/projects/${projectId}`)
+  },
+
+  update(projectId, data) {
+    return request(`/projects/${projectId}`, {
+      method: 'PUT',
+      body: data,
+    })
+  },
+
+  delete(projectId) {
+    return request(`/projects/${projectId}`, { method: 'DELETE' })
+  },
+
+  uploadFolder(data) {
+    return request('/projects/upload', {
+      method: 'POST',
+      body: data,
+    })
+  },
+
+  listFiles(projectId, path = '') {
+    const params = path ? `?path=${encodeURIComponent(path)}` : ''
+    return request(`/projects/${projectId}/files${params}`)
   },
 }

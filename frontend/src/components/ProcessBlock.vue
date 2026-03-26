@@ -175,10 +175,12 @@ const processItems = computed(() => {
 
   if (props.toolCalls && props.toolCalls.length > 0) {
     props.toolCalls.forEach((call, i) => {
+      const toolName = call.function?.name || '未知工具'
+      
       items.push({
         type: 'tool_call',
-        label: `调用工具: ${call.function?.name || '未知工具'}`,
-        toolName: call.function?.name || '未知工具',
+        label: `调用工具: ${toolName}`,
+        toolName: toolName,
         arguments: formatArgs(call.function?.arguments),
         id: call.id,
         index: idx,
@@ -191,7 +193,7 @@ const processItems = computed(() => {
         const resultSummary = getResultSummary(call.result)
         items.push({
           type: 'tool_result',
-          label: `工具返回: ${call.function?.name || '未知工具'}`,
+          label: `工具返回: ${toolName}`,
           content: formatResult(call.result),
           summary: resultSummary.text,
           isSuccess: resultSummary.success,
@@ -204,7 +206,7 @@ const processItems = computed(() => {
       } else if (props.streaming) {
         // 工具正在执行中
         items[items.length - 1].loading = true
-        items[items.length - 1].label = `执行工具: ${call.function?.name || '未知工具'}`
+        items[items.length - 1].label = `执行工具: ${toolName}`
       }
     })
   }

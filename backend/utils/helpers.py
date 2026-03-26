@@ -98,9 +98,16 @@ def record_token_usage(user_id, model, prompt_tokens, completion_tokens):
     db.session.commit()
 
 
-def build_glm_messages(conv):
-    """Build messages list for GLM API from conversation"""
+def build_messages(conv, project_id=None):
+    """Build messages list for LLM API from conversation
+    
+    Args:
+        conv: Conversation object
+        project_id: Project ID (used for context injection, backend enforces workspace isolation)
+    """
     msgs = []
+    
+    # System prompt (project_id is handled by backend for security)
     if conv.system_prompt:
         msgs.append({"role": "system", "content": conv.system_prompt})
     # Query messages directly to avoid detached instance warning

@@ -16,14 +16,14 @@ graph TB
     end
 
     subgraph External[外部服务]
-        GLM[GLM API]
+        LLM[LLM API]
         WEB[Web Resources]
     end
 
     UI -->|REST/SSE| API
     API --> SVC
     API --> TOOLS
-    SVC --> GLM
+    SVC --> LLM
     TOOLS --> WEB
     SVC --> DB
     TOOLS --> DB
@@ -45,6 +45,7 @@ backend/
 │   ├── conversations.py # 会话 CRUD
 │   ├── messages.py      # 消息 CRUD + 聊天
 │   ├── models.py        # 模型列表
+│   ├── projects.py      # 项目管理
 │   ├── stats.py         # Token 统计
 │   └── tools.py         # 工具列表
 │
@@ -63,12 +64,16 @@ backend/
 │       ├── crawler.py   # 网页搜索、抓取
 │       ├── data.py      # 计算器、文本、JSON
 │       ├── weather.py   # 天气查询
-│       ├── file_ops.py  # 文件操作
+│       ├── file_ops.py  # 文件操作（需要 project_id）
 │       └── code.py      # 代码执行
 │
-└── utils/               # 辅助函数
-    ├── __init__.py
-    └── helpers.py       # 通用函数
+├── utils/               # 辅助函数
+│   ├── __init__.py
+│   ├── helpers.py       # 通用函数
+│   └── workspace.py     # 工作目录工具
+│
+└── migrations/          # 数据库迁移
+    └── add_project_support.py
 ```
 
 ---
@@ -87,11 +92,24 @@ classDiagram
         +String password
         +String phone
         +relationship conversations
+        +relationship projects
+    }
+
+    class Project {
+        +String id
+        +Integer user_id
+        +String name
+        +String path
+        +String description
+        +DateTime created_at
+        +DateTime updated_at
+        +relationship conversations
     }
 
     class Conversation {
         +String id
         +Integer user_id
+        +String project_id
         +String title
         +String model
         +String system_prompt
@@ -124,6 +142,8 @@ classDiagram
     }
 
     User "1" --> "*" Conversation : 拥有
+    User "1" --> "*" Project : 拥有
+    Project "1" --> "*" Conversation : 包含
     Conversation "1" --> "*" Message : 包含
     User "1" --> "*" TokenUsage : 消耗
 ```
@@ -150,8 +170,11 @@ classDiagram
   "tool_calls": [
     {
       "id": "call_xxx",
-      "name": "read_file",
-      "arguments": "{\"path\": \"...\"}",
+      "type": "function",
+      "function": {
+        "name": "file_read",
+        "arguments": "{\"path\": \"...\"}"
+      },
       "result": "{\"content\": \"...\"}",
       "success": true,
       "skipped": false,
@@ -171,8 +194,8 @@ classDiagram
         -GLMClient glm_client
         -ToolExecutor executor
         +Integer MAX_ITERATIONS
-        +sync_response(conv, tools_enabled) Response
-        +stream_response(conv, tools_enabled) Response
+        +sync_response(conv, tools_enabled, project_id) Response
+        +stream_response(conv, tools_enabled, project_id) Response
         -_build_tool_calls_json(calls, results) list
         -_message_to_dict(msg) dict
         -_process_tool_calls_delta(delta, list) list
@@ -249,6 +272,86 @@ classDiagram
 
 ---
 
+## 工作目录系统
+
+### 概述
+
+工作目录系统为文件操作工具提供安全隔离，确保所有文件操作都在项目目录内执行。
+
+### 核心函数
+
+```python
+# backend/utils/workspace.py
+
+def get_workspace_root() -> Path:
+    """获取工作区根目录"""
+
+def get_project_path(project_id: str, project_path: str) -> Path:
+    """获取项目绝对路径"""
+
+def validate_path_in_project(path: str, project_dir: Path) -> Path:
+    """验证路径在项目目录内（核心安全函数）"""
+
+def create_project_directory(name: str, user_id: int) -> tuple:
+    """创建项目目录"""
+
+def delete_project_directory(project_path: str) -> bool:
+    """删除项目目录"""
+
+def copy_folder_to_project(source_path: str, project_dir: Path, project_name: str) -> dict:
+    """复制文件夹到项目目录"""
+```
+
+### 安全机制
+
+`validate_path_in_project()` 是核心安全函数：
+
+```python
+def validate_path_in_project(path: str, project_dir: Path) -> Path:
+    p = Path(path)
+    
+    # 相对路径转换为绝对路径
+    if not p.is_absolute():
+        p = project_dir / p
+    
+    p = p.resolve()
+    
+    # 安全检查：确保路径在项目目录内
+    try:
+        p.relative_to(project_dir.resolve())
+    except ValueError:
+        raise ValueError(f"Path '{path}' is outside project directory")
+    
+    return p
+```
+
+即使传入恶意路径，后端也会拒绝：
+```python
+"../../../etc/passwd"  # 尝试跳出项目目录 -> ValueError
+"/etc/passwd"         # 绝对路径攻击 -> ValueError
+```
+
+### project_id 自动注入
+
+工具执行器自动为文件工具注入 `project_id`：
+
+```python
+# backend/tools/executor.py
+
+def process_tool_calls(self, tool_calls, context=None):
+    for call in tool_calls:
+        name = call["function"]["name"]
+        args = json.loads(call["function"]["arguments"])
+        
+        # 自动注入 project_id
+        if context and name.startswith("file_") and "project_id" in context:
+            args["project_id"] = context["project_id"]
+        
+        result = self.registry.execute(name, args)
+```
+
+---
+
 ## API 总览
 
 ### 会话管理
@@ -268,6 +371,19 @@ classDiagram
 | `GET` | `/api/conversations/:id/messages` | 获取消息列表（游标分页） |
 | `POST` | `/api/conversations/:id/messages` | 发送消息（支持 SSE 流式） |
 | `DELETE` | `/api/conversations/:id/messages/:mid` | 删除消息 |
+| `POST` | `/api/conversations/:id/regenerate/:mid` | 重新生成消息 |
+
+### 项目管理
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET` | `/api/projects` | 获取项目列表 |
+| `POST` | `/api/projects` | 创建项目 |
+| `GET` | `/api/projects/:id` | 获取项目详情 |
+| `PUT` | `/api/projects/:id` | 更新项目 |
+| `DELETE` | `/api/projects/:id` | 删除项目 |
+| `POST` | `/api/projects/upload` | 上传文件夹作为项目 |
+| `GET` | `/api/projects/:id/files` | 列出项目文件 |
 
 ### 其他
 
@@ -291,26 +407,6 @@ classDiagram
 | `process_step` | 处理步骤（按顺序：thinking/tool_call/tool_result），支持交替显示 |
 | `error` | 错误信息 |
 | `done` | 回复结束，携带 message_id 和 token_count |
-
-### 思考与工具调用交替流程
-
-```
-iteration 1:
-  thinking_start  -> 前端清空 streamThinking
-  thinking (增量)  -> 前端累加到 streamThinking
-  process_step(thinking, "思考内容A")
-  tool_calls -> 批量通知（兼容）
-  process_step(tool_call, "file_read")   -> 调用工具
-  process_step(tool_result, {...})       -> 立即返回结果
-  process_step(tool_call, "file_list")   -> 下一个工具
-  process_step(tool_result, {...})       -> 立即返回结果
-
-iteration 2:
-  thinking_start  -> 前端清空 streamThinking
-  thinking (增量)  -> 前端累加到 streamThinking
-  process_step(thinking, "思考内容B")
-  done
-```
 
 ### process_step 事件格式
 
@@ -346,12 +442,25 @@ iteration 2:
 | `password` | String(255) | 密码（可为空，支持第三方登录） |
 | `phone` | String(20) | 手机号 |
 
+### Project（项目）
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | String(64) | UUID 主键 |
+| `user_id` | Integer | 外键关联 User |
+| `name` | String(255) | 项目名称（用户内唯一） |
+| `path` | String(512) | 相对路径（如 user_1/my_project） |
+| `description` | Text | 项目描述 |
+| `created_at` | DateTime | 创建时间 |
+| `updated_at` | DateTime | 更新时间 |
+
 ### Conversation（会话）
 
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `id` | String(64) | UUID | 主键 |
 | `user_id` | Integer | - | 外键关联 User |
+| `project_id` | String(64) | null | 外键关联 Project（可选） |
 | `title` | String(255) | "" | 会话标题 |
 | `model` | String(64) | "glm-5" | 模型名称 |
 | `system_prompt` | Text | "" | 系统提示词 |
@@ -440,9 +549,12 @@ GET /api/conversations?limit=20&cursor=conv_abc123
 backend_port: 3000
 frontend_port: 4000
 
-# GLM API
+# LLM API
 api_key: your-api-key
 api_url: https://open.bigmodel.cn/api/paas/v4/chat/completions
+
+# 工作区根目录
+workspace_root: ./workspaces
 
 # 数据库
 db_type: mysql  # mysql, sqlite, postgresql
