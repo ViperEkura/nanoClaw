@@ -2,6 +2,7 @@
 import json
 import time
 import hashlib
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict, Optional, Any
 from backend.tools.core import ToolRegistry, registry
 
@@ -54,6 +55,140 @@ class ToolExecutor:
         """Clear call history (call this at start of new conversation turn)"""
         self._call_history.clear()
 
+    @staticmethod
+    def _inject_context(name: str, args: dict, context: Optional[dict]) -> None:
+        """Inject context fields into tool arguments in-place.
+
+        - file_* tools: inject project_id
+        - agent_task: inject model and project_id (prefixed with _ to avoid collisions)
+        - parallel_execute: inject project_id (prefixed with _ to avoid collisions)
+        """
+        if not context:
+            return
+        if name.startswith("file_") and "project_id" in context:
+            args["project_id"] = context["project_id"]
+        if name == "agent_task":
+            if "model" in context:
+                args["_model"] = context["model"]
+            if "project_id" in context:
+                args["_project_id"] = context["project_id"]
+        if name == "parallel_execute":
+            if "project_id" in context:
+                args["_project_id"] = context["project_id"]
+
+    def process_tool_calls_parallel(
+        self,
+        tool_calls: List[dict],
+        context: Optional[dict] = None,
+        max_workers: int = 4,
+    ) -> List[dict]:
+        """
+        Process tool calls concurrently and return message list (ordered by input).
+
+        Identical logic to process_tool_calls but uses ThreadPoolExecutor so that
+        independent tool calls (e.g. reading 3 files, running 2 searches) execute
+        in parallel instead of sequentially.
+
+        Args:
+            tool_calls: Tool call list returned by LLM
+            context: Optional context info (user_id, project_id, etc.)
+            max_workers: Maximum concurrent threads (1-6, default 4)
+
+        Returns:
+            Tool response message list in the same order as input tool_calls.
+        """
+        if len(tool_calls) <= 1:
+            return self.process_tool_calls(tool_calls, context)
+
+        max_workers = min(max(max_workers, 1), 6)
+
+        # Phase 1: prepare each call (parse args, inject context, check dedup/cache)
+        # This phase is fast and sequential – it must be done before parallelism
+        # to avoid race conditions on seen_calls / _call_history / _cache.
+        prepared: List[Optional[tuple]] = [None] * len(tool_calls)
+        seen_calls: set = set()
+
+        for i, call in enumerate(tool_calls):
+            name = call["function"]["name"]
+            args_str = call["function"]["arguments"]
+            call_id = call["id"]
+
+            # Parse JSON arguments
+            try:
+                args = json.loads(args_str) if isinstance(args_str, str) else args_str
+            except json.JSONDecodeError:
+                prepared[i] = self._create_error_result(call_id, name, "Invalid JSON arguments")
+                continue
+
+            # Inject context into tool arguments
+            self._inject_context(name, args, context)
+
+            # Dedup within same batch
+            call_key = f"{name}:{json.dumps(args, sort_keys=True)}"
+            if call_key in seen_calls:
+                prepared[i] = self._create_tool_result(
+                    call_id, name,
+                    {"success": True, "data": None, "cached": True, "duplicate": True}
+                )
+                continue
+            seen_calls.add(call_key)
+
+            # History dedup
+            history_result = self._check_duplicate_in_history(name, args)
+            if history_result is not None:
+                prepared[i] = self._create_tool_result(call_id, name, {**history_result, "cached": True})
+                continue
+
+            # Cache check
+            cache_key = self._make_cache_key(name, args)
+            cached_result = self._get_cached(cache_key)
+            if cached_result is not None:
+                prepared[i] = self._create_tool_result(call_id, name, {**cached_result, "cached": True})
+                continue
+
+            # Mark as needing actual execution
+            prepared[i] = ("execute", call_id, name, args, cache_key)
+
+        # Separate pre-resolved results from tasks needing execution
+        results: List[dict] = [None] * len(tool_calls)
+        exec_tasks: Dict[int, tuple] = {}  # index -> (call_id, name, args, cache_key)
+
+        for i, item in enumerate(prepared):
+            if isinstance(item, dict):
+                results[i] = item
+            elif isinstance(item, tuple) and item[0] == "execute":
+                _, call_id, name, args, cache_key = item
+                exec_tasks[i] = (call_id, name, args, cache_key)
+
+        # Phase 2: execute remaining calls in parallel
+        if exec_tasks:
+            def _run(idx: int, call_id: str, name: str, args: dict, cache_key: str) -> tuple:
+                t0 = time.time()
+                result = self._execute_tool(name, args)
+                elapsed = time.time() - t0
+
+                if result.get("success"):
+                    self._set_cache(cache_key, result)
+
+                self._call_history.append({
+                    "name": name,
+                    "args_str": json.dumps(args, sort_keys=True, ensure_ascii=False),
+                    "result": result,
+                })
+
+                return idx, self._create_tool_result(call_id, name, result, execution_time=elapsed)
+
+            with ThreadPoolExecutor(max_workers=max_workers) as pool:
+                futures = {
+                    pool.submit(_run, idx, cid, n, a, ck): idx
+                    for idx, (cid, n, a, ck) in exec_tasks.items()
+                }
+                for future in as_completed(futures):
+                    idx, result_msg = future.result()
+                    results[idx] = result_msg
+
+        return results
+
     def process_tool_calls(
         self,
         tool_calls: List[dict],
@@ -86,9 +221,7 @@ class ToolExecutor:
                 continue
 
             # Inject context into tool arguments
-            if context:
-                if name.startswith("file_") and "project_id" in context:
-                    args["project_id"] = context["project_id"]
+            self._inject_context(name, args, context)
 
             # Check for duplicate within same batch
             call_key = f"{name}:{json.dumps(args, sort_keys=True)}"

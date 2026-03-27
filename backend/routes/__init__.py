@@ -17,6 +17,10 @@ def register_routes(app: Flask):
     client = LLMClient(MODEL_CONFIG)
     init_chat_service(client)
 
+    # Register LLM client in service locator so tools (e.g. agent_task) can access it
+    from backend.tools import register_service
+    register_service("llm_client", client)
+
     # Initialize authentication system (reads auth_mode from config.yml)
     init_auth(app)
 

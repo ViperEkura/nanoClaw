@@ -1,5 +1,6 @@
 """Tool helper services"""
 from typing import List
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from ddgs import DDGS
 import re
 
@@ -119,19 +120,34 @@ class FetchService:
         max_concurrent: int = 5
     ) -> List[dict]:
         """
-        Batch fetch pages
+        Batch fetch pages concurrently.
 
         Args:
             urls: URL list
             extract_type: Extract type
-            max_concurrent: Max concurrent requests
+            max_concurrent: Max concurrent requests (1-5, default 5)
 
         Returns:
-            Result list
+            Result list (same order as input URLs)
         """
-        results = []
-        for url in urls:
-            results.append(self.fetch(url, extract_type))
+        if len(urls) <= 1:
+            return [self.fetch(url, extract_type) for url in urls]
+
+        max_concurrent = min(max(max_concurrent, 1), 5)
+        results = [None] * len(urls)
+
+        with ThreadPoolExecutor(max_workers=max_concurrent) as pool:
+            futures = {
+                pool.submit(self.fetch, url, extract_type): i
+                for i, url in enumerate(urls)
+            }
+            for future in as_completed(futures):
+                idx = futures[future]
+                try:
+                    results[idx] = future.result()
+                except Exception as e:
+                    results[idx] = {"error": str(e)}
+
         return results
 
 

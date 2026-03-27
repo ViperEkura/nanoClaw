@@ -56,11 +56,11 @@ class ChatService:
         executor = ToolExecutor(registry=registry)
         
         # Build context for tool execution
-        context = None
+        context = {"model": conv_model}
         if project_id:
-            context = {"project_id": project_id}
+            context["project_id"] = project_id
         elif conv.project_id:
-            context = {"project_id": conv.project_id}
+            context["project_id"] = conv.project_id
         
         def generate():
             messages = list(initial_messages)
@@ -178,10 +178,8 @@ class ChatService:
                 if tool_calls_list:
                     all_tool_calls.extend(tool_calls_list)
 
-                    # Execute each tool call, emit tool_call + tool_result as paired steps
-                    tool_results = []
+                    # Phase 1: emit all tool_call steps (before execution)
                     for tc in tool_calls_list:
-                        # Emit tool_call step (before execution)
                         call_step = {
                             'id': f'step-{step_index}',
                             'index': step_index,
@@ -194,17 +192,24 @@ class ChatService:
                         yield f"event: process_step\ndata: {json.dumps(call_step, ensure_ascii=False)}\n\n"
                         step_index += 1
 
-                        # Execute the tool
+                    # Phase 2: execute tools — parallel when multiple, sequential when single
+                    if len(tool_calls_list) > 1:
                         with app.app_context():
-                            single_result = executor.process_tool_calls([tc], context)
-                        tool_results.extend(single_result)
+                            tool_results = executor.process_tool_calls_parallel(
+                                tool_calls_list, context, max_workers=4
+                            )
+                    else:
+                        with app.app_context():
+                            tool_results = executor.process_tool_calls(
+                                tool_calls_list, context
+                            )
 
-                        # Emit tool_result step (after execution)
-                        tr = single_result[0]
+                    # Phase 3: emit all tool_result steps (after execution, same order)
+                    for tr in tool_results:
                         try:
                             result_content = json.loads(tr["content"])
                             skipped = result_content.get("skipped", False)
-                        except:
+                        except Exception:
                             skipped = False
                         result_step = {
                             'id': f'step-{step_index}',
