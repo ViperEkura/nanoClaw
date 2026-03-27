@@ -21,3 +21,6 @@ for _m in MODELS:
     }
 
 DEFAULT_MODEL = _cfg.get("default_model", "glm-5")
+
+# Max agentic loop iterations (tool call rounds)
+MAX_ITERATIONS = _cfg.get("max_iterations", 5)

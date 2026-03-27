@@ -10,12 +10,11 @@ from backend.utils.helpers import (
     build_messages,
 )
 from backend.services.glm_client import GLMClient
+from backend.config import MAX_ITERATIONS
 
 
 class ChatService:
     """Chat completion service with tool support"""
-
-    MAX_ITERATIONS = 5
 
     def __init__(self, glm_client: GLMClient):
         self.glm_client = glm_client
@@ -60,15 +59,19 @@ class ChatService:
                                 # (each iteration re-sends the full context, so earlier
                                 #  prompts are strict subsets of the final one)
 
-            for iteration in range(self.MAX_ITERATIONS):
+            for iteration in range(MAX_ITERATIONS):
                 full_content = ""
                 full_thinking = ""
                 token_count = 0
                 msg_id = str(uuid.uuid4())
                 tool_calls_list = []
 
-                # Clear state for new iteration
-                # (frontend resets via onProcessStep when first step arrives)
+                # Streaming step tracking — step ID is assigned on first chunk arrival.
+                # thinking always precedes text in GLM's streaming order, so text gets step_index+1.
+                thinking_step_id = None
+                thinking_step_idx = None
+                text_step_id = None
+                text_step_idx = None
 
                 try:
                     with app.app_context():
@@ -115,13 +118,19 @@ class ChatService:
                         reasoning = delta.get("reasoning_content", "")
                         if reasoning:
                             full_thinking += reasoning
-                            yield f"event: thinking\ndata: {json.dumps({'content': reasoning}, ensure_ascii=False)}\n\n"
+                            if thinking_step_id is None:
+                                thinking_step_id = f'step-{step_index}'
+                                thinking_step_idx = step_index
+                            yield f"event: process_step\ndata: {json.dumps({'id': thinking_step_id, 'index': thinking_step_idx, 'type': 'thinking', 'content': full_thinking}, ensure_ascii=False)}\n\n"
 
                         # Accumulate text content for this iteration
                         text = delta.get("content", "")
                         if text:
                             full_content += text
-                            yield f"event: message\ndata: {json.dumps({'content': text}, ensure_ascii=False)}\n\n"
+                            if text_step_id is None:
+                                text_step_idx = step_index + (1 if thinking_step_id is not None else 0)
+                                text_step_id = f'step-{text_step_idx}'
+                            yield f"event: process_step\ndata: {json.dumps({'id': text_step_id, 'index': text_step_idx, 'type': 'text', 'content': full_content}, ensure_ascii=False)}\n\n"
 
                         # Accumulate tool calls from streaming deltas
                         tool_calls_list = self._process_tool_calls_delta(delta, tool_calls_list)
@@ -130,27 +139,20 @@ class ChatService:
                     yield f"event: error\ndata: {json.dumps({'content': str(e)}, ensure_ascii=False)}\n\n"
                     return
 
-                # --- Finalize thinking/text steps for this iteration (common to both paths) ---
-                if full_thinking:
-                    step_data = {
-                        'id': f'step-{step_index}',
-                        'index': step_index,
-                        'type': 'thinking',
-                        'content': full_thinking,
-                    }
-                    all_steps.append(step_data)
-                    yield f"event: process_step\ndata: {json.dumps(step_data, ensure_ascii=False)}\n\n"
+                # --- Finalize: save thinking/text steps to all_steps for DB storage ---
+                # No need to yield to frontend — incremental process_step events already sent.
+                if thinking_step_id is not None:
+                    all_steps.append({
+                        'id': thinking_step_id, 'index': thinking_step_idx,
+                        'type': 'thinking', 'content': full_thinking,
+                    })
                     step_index += 1
 
-                if full_content:
-                    step_data = {
-                        'id': f'step-{step_index}',
-                        'index': step_index,
-                        'type': 'text',
-                        'content': full_content,
-                    }
-                    all_steps.append(step_data)
-                    yield f"event: process_step\ndata: {json.dumps(step_data, ensure_ascii=False)}\n\n"
+                if text_step_id is not None:
+                    all_steps.append({
+                        'id': text_step_id, 'index': text_step_idx,
+                        'type': 'text', 'content': full_content,
+                    })
                     step_index += 1
 
                 # --- Branch: tool calls vs final ---

@@ -2,6 +2,7 @@
 import os
 import uuid
 import shutil
+from datetime import datetime, timezone
 from flask import Blueprint, request, g
 
 from backend import db
@@ -18,26 +19,46 @@ from backend.utils.workspace import (
 bp = Blueprint("projects", __name__)
 
 
+def _get_project(project_id, check_owner=True):
+    """Get project with optional ownership check."""
+    project = db.session.get(Project, project_id)
+    if not project:
+        return None
+    if check_owner and project.user_id != g.current_user.id:
+        return None
+    return project
+
+
 @bp.route("/api/projects", methods=["GET"])
 def list_projects():
     """List all projects for current user"""
     user = g.current_user
-    projects = Project.query.filter_by(user_id=user.id).order_by(Project.updated_at.desc()).all()
-    
+    cursor = request.args.get("cursor")
+    limit = min(int(request.args.get("limit", 20)), 100)
+    q = Project.query.filter_by(user_id=user.id)
+
+    if cursor:
+        q = q.filter(Project.updated_at < (
+            db.session.query(Project.updated_at).filter_by(id=cursor).scalar() or datetime.now(timezone.utc)))
+    rows = q.order_by(Project.updated_at.desc()).limit(limit + 1).all()
+
+    items = [
+        {
+            "id": p.id,
+            "name": p.name,
+            "path": p.path,
+            "description": p.description,
+            "created_at": p.created_at.isoformat() if p.created_at else None,
+            "updated_at": p.updated_at.isoformat() if p.updated_at else None,
+            "conversation_count": p.conversations.count(),
+        }
+        for p in rows[:limit]
+    ]
     return ok({
-        "projects": [
-            {
-                "id": p.id,
-                "name": p.name,
-                "path": p.path,
-                "description": p.description,
-                "created_at": p.created_at.isoformat() if p.created_at else None,
-                "updated_at": p.updated_at.isoformat() if p.updated_at else None,
-                "conversation_count": p.conversations.count()
-            }
-            for p in projects
-        ],
-        "total": len(projects)
+        "items": items,
+        "next_cursor": items[-1]["id"] if len(rows) > limit else None,
+        "has_more": len(rows) > limit,
+        "total": Project.query.filter_by(user_id=user.id).count(),
     })
 
 
@@ -91,8 +112,9 @@ def create_project():
 @bp.route("/api/projects/<project_id>", methods=["GET"])
 def get_project(project_id):
     """Get project details"""
-    project = Project.query.get(project_id)
-    
+    user = g.current_user
+    project = _get_project(project_id)
+
     if not project:
         return err(404, "Project not found")
     
@@ -124,7 +146,8 @@ def get_project(project_id):
 @bp.route("/api/projects/<project_id>", methods=["PUT"])
 def update_project(project_id):
     """Update project details"""
-    project = Project.query.get(project_id)
+    user = g.current_user
+    project = _get_project(project_id)
     
     if not project:
         return err(404, "Project not found")
@@ -169,10 +192,9 @@ def update_project(project_id):
 @bp.route("/api/projects/<project_id>", methods=["DELETE"])
 def delete_project(project_id):
     """Delete a project"""
-    user = g.current_user
-    project = Project.query.get(project_id)
-    
-    if not project or project.user_id != user.id:
+    project = _get_project(project_id)
+
+    if not project:
         return err(404, "Project not found")
     
     # Delete project directory
@@ -247,8 +269,8 @@ def upload_project_folder():
 @bp.route("/api/projects/<project_id>/files", methods=["GET"])
 def list_project_files(project_id):
     """List files in a project directory"""
-    project = Project.query.get(project_id)
-    
+    project = _get_project(project_id)
+
     if not project:
         return err(404, "Project not found")
     
@@ -326,7 +348,7 @@ TEXT_EXTENSIONS = {
 
 def _resolve_file_path(project_id, filepath):
     """Resolve and validate a file path within a project directory."""
-    project = Project.query.get(project_id)
+    project = _get_project(project_id)
     if not project:
         return None, None, err(404, "Project not found")
     project_dir = get_project_path(project.id, project.path)
@@ -390,9 +412,43 @@ def write_project_file(project_id, filepath):
     })
 
 
+@bp.route("/api/projects/<project_id>/files/<path:filepath>", methods=["PATCH"])
+def rename_project_file(project_id, filepath):
+    """Rename or move a file/directory."""
+    data = request.get_json()
+    if not data or "new_path" not in data:
+        return err(400, "Missing 'new_path' in request body")
+
+    project_dir, target, error = _resolve_file_path(project_id, filepath)
+    if error:
+        return error
+
+    if not target.exists():
+        return err(404, "File not found")
+
+    try:
+        new_target = validate_path_in_project(data["new_path"], project_dir)
+    except ValueError:
+        return err(403, "Invalid path: outside project directory")
+
+    if new_target.exists():
+        return err(400, "Destination already exists")
+
+    try:
+        new_target.parent.mkdir(parents=True, exist_ok=True)
+        target.rename(new_target)
+    except Exception as e:
+        return err(500, f"Failed to rename: {str(e)}")
+
+    return ok({
+        "name": new_target.name,
+        "path": str(new_target.relative_to(project_dir)),
+    })
+
+
 @bp.route("/api/projects/<project_id>/files/<path:filepath>", methods=["DELETE"])
 def delete_project_file(project_id, filepath):
-    """Delete a file or empty directory."""
+    """Delete a file or directory."""
     project_dir, target, error = _resolve_file_path(project_id, filepath)
     if error:
         return error
@@ -411,16 +467,22 @@ def delete_project_file(project_id, filepath):
     return ok({"message": f"Deleted '{filepath}'"})
 
 
-@bp.route("/api/projects/<project_id>/files/mkdir", methods=["POST"])
+@bp.route("/api/projects/<project_id>/directories", methods=["POST"])
 def create_project_directory_endpoint(project_id):
     """Create a directory in the project."""
+    project = _get_project(project_id)
+    if not project:
+        return err(404, "Project not found")
+
     data = request.get_json()
     if not data or "path" not in data:
         return err(400, "Missing 'path' in request body")
 
-    project_dir, target, error = _resolve_file_path(project_id, data["path"])
-    if error:
-        return error
+    project_dir = get_project_path(project.id, project.path)
+    try:
+        target = validate_path_in_project(data["path"], project_dir)
+    except ValueError:
+        return err(403, "Invalid path: outside project directory")
 
     try:
         target.mkdir(parents=True, exist_ok=True)
@@ -446,7 +508,7 @@ def search_project_files(project_id):
     max_results = min(data.get("max_results", 50), 200)
     case_sensitive = data.get("case_sensitive", False)
 
-    project = Project.query.get(project_id)
+    project = _get_project(project_id)
     if not project:
         return err(404, "Project not found")
 

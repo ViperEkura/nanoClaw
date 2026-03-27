@@ -71,8 +71,6 @@ import { useCodeEnhancement } from '../composables/useCodeEnhancement'
 const props = defineProps({
   toolCalls: { type: Array, default: () => [] },
   processSteps: { type: Array, default: () => [] },
-  streamingContent: { type: String, default: '' },
-  streamingThinking: { type: String, default: '' },
   streaming: { type: Boolean, default: false }
 })
 
@@ -102,26 +100,14 @@ function getResultSummary(result) {
 }
 
 // Build ordered process items from all available data (thinking, tool calls, text).
-// During streaming, processSteps accumulate completed iterations while streamingContent
-// represents the text being generated in the current (latest) iteration.
+// processSteps is the single source of truth — updated incrementally during streaming
+// (thinking/text steps have their content replaced in-place by id/index),
+// and loaded as finalized data from DB on page reload.
 // When loaded from DB, steps use 'id_ref' for tool_call/tool_result matching;
 // during streaming they use 'id'. Both fields are normalized here.
 const processItems = computed(() => {
   const items = []
 
-  // Prepend live streaming thinking content as the first item (before finalized steps).
-  // This appears while thinking chunks are streaming and before the finalized thinking step arrives.
-  if (props.streaming && props.streamingThinking) {
-    items.push({
-      type: 'thinking',
-      content: props.streamingThinking,
-      summary: truncate(props.streamingThinking),
-      key: 'thinking-streaming',
-    })
-  }
-
-  // Build items from processSteps — finalized steps sent by backend or loaded from DB.
-  // Steps are ordered: each iteration produces thinking → text → tool_call → tool_result.
   if (props.processSteps && props.processSteps.length > 0) {
     for (const step of props.processSteps) {
       if (!step) continue
@@ -161,7 +147,7 @@ const processItems = computed(() => {
         items.push({
           type: 'text',
           content: step.content,
-          rendered: renderMarkdown(step.content),
+          rendered: renderMarkdown(step.content) || '<span class="placeholder">...</span>',
           key: step.id || `text-${step.index}`,
         })
       }
@@ -173,17 +159,6 @@ const processItems = computed(() => {
       if (last.type === 'tool_call' && !last.result) {
         last.loading = true
       }
-    }
-
-    // Append the currently streaming text as a live text item.
-    // This text belongs to the latest LLM iteration that hasn't finished yet.
-    if (props.streaming && props.streamingContent) {
-      items.push({
-        type: 'text',
-        content: props.streamingContent,
-        rendered: renderMarkdown(props.streamingContent) || '<span class="placeholder">...</span>',
-        key: 'text-streaming',
-      })
     }
   } else {
     // Fallback: legacy mode for old messages without processSteps stored in DB
@@ -205,16 +180,6 @@ const processItems = computed(() => {
         })
       })
     }
-
-    // Append streaming text in legacy mode
-    if (props.streaming && props.streamingContent) {
-      items.push({
-        type: 'text',
-        content: props.streamingContent,
-        rendered: renderMarkdown(props.streamingContent) || '<span class="placeholder">...</span>',
-        key: 'text-streaming',
-      })
-    }
   }
 
   return items
@@ -224,7 +189,7 @@ const processItems = computed(() => {
 const { debouncedEnhance } = useCodeEnhancement(processRef, processItems, { deep: true })
 
 // Throttle code enhancement during streaming to reduce DOM operations
-watch(() => props.streamingContent?.length, () => {
+watch(() => props.processSteps?.length, () => {
   if (props.streaming) debouncedEnhance()
 })
 </script>

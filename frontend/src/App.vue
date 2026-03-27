@@ -43,8 +43,6 @@
       :conversation="currentConv"
       :messages="messages"
       :streaming="streaming"
-      :streaming-content="streamContent"
-      :streaming-thinking="streamThinkingContent"
       :streaming-process-steps="streamProcessSteps"
       :has-more-messages="hasMoreMessages"
       :loading-more="loadingMessages"
@@ -135,13 +133,11 @@ const loadingMessages = ref(false)
 const nextMsgCursor = ref(null)
 
 // -- Streaming state --
-// These refs hold the real-time streaming data for the current conversation.
-// When switching conversations, the current state is saved to streamStates Map
-// and restored when switching back. On stream completion (onDone), the finalized
-// processSteps are stored in the message object and later persisted to DB.
+// processSteps is the single source of truth for all streaming content.
+// thinking/text steps are sent incrementally via process_step events and
+// updated in-place by id. tool_call/tool_result steps are appended on arrival.
+// On stream completion (onDone), the finalized steps are stored in the message object.
 const streaming = ref(false)
-const streamContent = ref('')            // Accumulated text content during current iteration
-const streamThinkingContent = ref('')    // Accumulated thinking content during current iteration
 const streamProcessSteps = shallowRef([]) // Ordered steps: thinking/text/tool_call/tool_result
 
 // 保存每个对话的流式状态
@@ -149,8 +145,6 @@ const streamStates = new Map()
 
 function setStreamState(isActive) {
   streaming.value = isActive
-  streamContent.value = ''
-  streamThinkingContent.value = ''
   streamProcessSteps.value = []
 }
 
@@ -251,8 +245,6 @@ async function selectConversation(id) {
   if (currentConvId.value && streaming.value) {
     streamStates.set(currentConvId.value, {
       streaming: true,
-      streamContent: streamContent.value,
-      streamThinkingContent: streamThinkingContent.value,
       streamProcessSteps: [...streamProcessSteps.value],
       messages: [...messages.value],
     })
@@ -266,8 +258,6 @@ async function selectConversation(id) {
   const savedState = streamStates.get(id)
   if (savedState && savedState.streaming) {
     streaming.value = true
-    streamContent.value = savedState.streamContent
-    streamThinkingContent.value = savedState.streamThinkingContent || ''
     streamProcessSteps.value = savedState.streamProcessSteps
     messages.value = savedState.messages || []
   } else {
@@ -307,30 +297,16 @@ function loadMoreMessages() {
 // -- Helpers: create stream callbacks for a conversation --
 function createStreamCallbacks(convId, { updateConvList = true } = {}) {
   return {
-    onMessage(text) {
-      updateStreamField(convId, 'streamContent', streamContent, prev => (prev || '') + text)
-    },
-    onThinking(text) {
-      updateStreamField(convId, 'streamThinkingContent', streamThinkingContent, prev => (prev || '') + text)
-    },
     onProcessStep(step) {
-      // Insert step at its index position to preserve ordering.
-      // Uses sparse array strategy: fills gaps with null.
-      // Each step carries { id, index, type, content, ... } —
-      // these are the same steps that get stored to DB as the 'steps' array.
+      // Update or insert step by index position.
+      // thinking/text steps are sent incrementally with the same id — each update
+      // replaces the previous content at that index. tool_call/tool_result are appended.
       updateStreamField(convId, 'streamProcessSteps', streamProcessSteps, prev => {
         const steps = prev ? [...prev] : []
         while (steps.length <= step.index) steps.push(null)
         steps[step.index] = step
         return steps
       })
-      // When a step is finalized, reset the corresponding streaming content
-      // to prevent duplication (the content is now rendered via processSteps).
-      if (step.type === 'text') {
-        updateStreamField(convId, 'streamContent', streamContent, () => '')
-      } else if (step.type === 'thinking') {
-        updateStreamField(convId, 'streamThinkingContent', streamThinkingContent, () => '')
-      }
     },
     async onDone(data) {
       streamStates.delete(convId)
@@ -341,11 +317,9 @@ function createStreamCallbacks(convId, { updateConvList = true } = {}) {
         // Build the final message object.
         // process_steps is the primary ordered data for rendering (thinking/text/tool_call/tool_result).
         // When page reloads, these steps are loaded from DB via the 'steps' field in content JSON.
-        // NOTE: streamContent is already '' at this point (reset by process_step text event),
-        // so extract text from the last text step in processSteps.
         const steps = streamProcessSteps.value.filter(Boolean)
         const textSteps = steps.filter(s => s.type === 'text')
-        const lastText = textSteps.length > 0 ? textSteps[textSteps.length - 1].content : streamContent.value
+        const lastText = textSteps.length > 0 ? textSteps[textSteps.length - 1].content : ''
 
         // Derive legacy tool_calls from processSteps (backward compat for DB and MessageBubble fallback)
         const toolCallSteps = steps.filter(s => s && s.type === 'tool_call')
@@ -539,7 +513,7 @@ async function createProject() {
 async function loadProjects() {
   try {
     const res = await projectApi.list()
-    projects.value = res.data.projects || []
+    projects.value = res.data.items || []
   } catch (e) {
     console.error('Failed to load projects:', e)
   }

@@ -29,10 +29,10 @@ async function request(url, options = {}) {
  * Shared SSE stream processor - parses SSE events and dispatches to callbacks
  * @param {string} url - API URL (without BASE prefix)
  * @param {object} body - Request body
- * @param {object} callbacks - Event handlers: { onMessage, onThinking, onProcessStep, onDone, onError }
+ * @param {object} callbacks - Event handlers: { onProcessStep, onDone, onError }
  * @returns {{ abort: () => void }}
  */
-function createSSEStream(url, body, { onMessage, onThinking, onProcessStep, onDone, onError }) {
+function createSSEStream(url, body, { onProcessStep, onDone, onError }) {
   const controller = new AbortController()
 
   const promise = (async () => {
@@ -67,11 +67,7 @@ function createSSEStream(url, body, { onMessage, onThinking, onProcessStep, onDo
             currentEvent = line.slice(7).trim()
           } else if (line.startsWith('data: ')) {
             const data = JSON.parse(line.slice(6))
-            if (currentEvent === 'thinking' && onThinking) {
-              onThinking(data.content)
-            } else if (currentEvent === 'message' && onMessage) {
-              onMessage(data.content)
-            } else if (currentEvent === 'process_step' && onProcessStep) {
+            if (currentEvent === 'process_step' && onProcessStep) {
               onProcessStep(data)
             } else if (currentEvent === 'done' && onDone) {
               onDone(data)
@@ -183,8 +179,8 @@ export const messageApi = {
 }
 
 export const projectApi = {
-  list() {
-    return request('/projects')
+  list(cursor, limit = 20) {
+    return request(`/projects${buildQueryParams({ cursor, limit })}`)
   },
 
   create(data) {
@@ -220,12 +216,19 @@ export const projectApi = {
     })
   },
 
+  renameFile(projectId, filepath, newPath) {
+    return request(`/projects/${projectId}/files/${filepath}`, {
+      method: 'PATCH',
+      body: { new_path: newPath },
+    })
+  },
+
   deleteFile(projectId, filepath) {
     return request(`/projects/${projectId}/files/${filepath}`, { method: 'DELETE' })
   },
 
   mkdir(projectId, dirPath) {
-    return request(`/projects/${projectId}/files/mkdir`, {
+    return request(`/projects/${projectId}/directories`, {
       method: 'POST',
       body: { path: dirPath },
     })

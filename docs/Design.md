@@ -252,7 +252,6 @@ classDiagram
     class ChatService {
         -GLMClient glm_client
         -ToolExecutor executor
-        +Integer MAX_ITERATIONS
         +stream_response(conv, tools_enabled, project_id) Response
         -_build_tool_calls_json(calls, results) list
         -_process_tool_calls_delta(delta, list) list
@@ -445,7 +444,7 @@ def process_tool_calls(self, tool_calls, context=None):
 
 | 方法       | 路径                                  | 说明                                                                                       |
 | -------- | ----------------------------------- | ---------------------------------------------------------------------------------------- |
-| `GET`    | `/api/projects`                     | 获取项目列表                                                                                   |
+| `GET`    | `/api/projects`                     | 获取项目列表（支持 `?cursor=&limit=` 分页）                                                          |
 | `POST`   | `/api/projects`                     | 创建项目                                                                                     |
 | `GET`    | `/api/projects/:id`                 | 获取项目详情                                                                                   |
 | `PUT`    | `/api/projects/:id`                 | 更新项目                                                                                     |
@@ -454,8 +453,9 @@ def process_tool_calls(self, tool_calls, context=None):
 | `GET`    | `/api/projects/:id/files`           | 列出项目文件（支持 `?path=subdir` 子目录）                                                            |
 | `GET`    | `/api/projects/:id/files/:filepath` | 读取文件内容（文本文件，最大 5 MB）                                                                     |
 | `PUT`    | `/api/projects/:id/files/:filepath` | 创建或覆盖文件（Body: `{"content": "..."}`)                                                      |
+| `PATCH`  | `/api/projects/:id/files/:filepath` | 重命名或移动文件/目录（Body: `{"new_path": "..."}`)                                               |
 | `DELETE` | `/api/projects/:id/files/:filepath` | 删除文件或目录                                                                                  |
-| `POST`   | `/api/projects/:id/files/mkdir`     | 创建目录（Body: `{"path": "src/utils"}`)                                                      |
+| `POST`   | `/api/projects/:id/directories`     | 创建目录（Body: `{"path": "src/utils"}`)                                                      |
 | `POST`   | `/api/projects/:id/search`          | 搜索文件内容（Body: `{"query": "...", "path": "", "max_results": 50, "case_sensitive": false}`) |
 
 ### 其他
@@ -472,48 +472,24 @@ def process_tool_calls(self, tool_calls, context=None):
 
 | 事件             | 说明                                                                        |
 | -------------- | ------------------------------------------------------------------------- |
-| `thinking`     | 思考过程的增量片段（实时流式输出）                                                         |
-| `message`      | 回复内容的增量片段（实时流式输出）                                                         |
-| `process_step` | 有序处理步骤（thinking/text/tool_call/tool_result），支持穿插显示。携带 `id`、`index` 确保渲染顺序 |
+| `process_step` | 有序处理步骤（thinking/text/tool_call/tool_result），支持穿插显示和实时流式更新。携带 `id`、`index` 确保渲染顺序 |
 | `error`        | 错误信息                                                                      |
 | `done`         | 回复结束，携带 message_id、token_count 和 suggested_title                            |
 
-> **注意**：`thinking` 和 `message` 事件提供实时流式体验，每条 chunk 立即推送到前端。`process_step` 事件在每次迭代结束后发送完整内容，用于确定渲染顺序和 DB 存储。
-
-### thinking / message 事件格式
-
-实时流式事件，每条携带一个增量片段：
-
-```json
-// 思考增量片段
-{"content": "正在分析用户需求..."}
-
-// 文本增量片段
-{"content": "根据分析结果"}
-```
-
-字段说明：
-
-| 字段        | 说明                           |
-| --------- | ---------------------------- |
-| `content` | 增量文本片段（前端累积拼接为完整内容） |
+> **注意**：`process_step` 是唯一的内容传输事件。thinking/text 步骤在每个 LLM chunk 到达时**增量发送**（前端按 `id` 原地更新），tool_call/tool_result 步骤在工具执行时**追加发送**。所有步骤在迭代结束时存入 DB。
 
 ### process_step 事件格式
 
 每个 `process_step` 事件携带一个带 `id`、`index` 和 `type` 的步骤对象。步骤按 `index` 顺序排列，确保前端可以正确渲染穿插的思考、文本和工具调用。
 
 ```json
-// 思考过程
 {"id": "step-0", "index": 0, "type": "thinking", "content": "完整思考内容..."}
 
 
-// 回复文本（可穿插在任意步骤之间）
 {"id": "step-1", "index": 1, "type": "text", "content": "回复文本内容..."}
 
-// 工具调用（id_ref 存储工具调用 ID，用于与 tool_result 匹配）
 {"id": "step-2", "index": 2, "type": "tool_call", "id_ref": "call_abc123", "name": "web_search", "arguments": "{\"query\": \"...\"}"}
 
-// 工具返回（id_ref 与 tool_call 的 id_ref 匹配）
 {"id": "step-3", "index": 3, "type": "tool_result", "id_ref": "call_abc123", "name": "web_search", "content": "{\"success\": true, ...}", "skipped": false}
 ```
 
@@ -554,6 +530,36 @@ def process_tool_calls(self, tool_calls, context=None):
 | `message_id`     | 消息 UUID（已入库）                          |
 | `token_count`    | 总输出 token 数（跨所有迭代累积）                  |
 | `suggested_title` | 建议会话标题（从首条用户消息提取，无标题时为 `"新对话"`，已有标题时为 `null`） |
+
+### error 事件格式
+
+```json
+{"content": "exceeded maximum tool call iterations"}
+```
+
+| 字段        | 说明                    |
+| --------- | --------------------- |
+| `content` | 错误信息字符串，前端展示给用户或打印到控制台 |
+
+### 前端 SSE 解析机制
+
+前端不使用浏览器原生 `EventSource`（仅支持 GET），而是通过 `fetch` + `ReadableStream` 实现 POST 请求的 SSE 解析（`frontend/src/api/index.js`）：
+
+1. **读取**：通过 `response.body.getReader()` 获取可读流，循环 `reader.read()` 读取二进制 chunk
+2. **解码拼接**：`TextDecoder` 将二进制解码为 UTF-8 字符串，追加到 `buffer`（处理跨 chunk 的不完整行）
+3. **切行**：按 `\n` 分割，最后一段保留在 `buffer` 中（可能是不完整的 SSE 行）
+4. **解析分发**：逐行匹配 `event: xxx` 设置事件类型，`data: {...}` 解析 JSON 后分发到对应回调（`onThinking` / `onMessage` / `onProcessStep` / `onDone` / `onError`）
+
+```
+后端 yield:  event: thinking\ndata: {"content":"..."}\n\n
+                        ↓ TCP（可能跨多个网络包）
+reader.read(): [二进制片段1] → [二进制片段2] → ...
+                        ↓
+buffer 拼接:   "event: thinking\ndata: {\"content\":\"...\"}\n\n"
+                        ↓ split('\n')
+逐行解析:      event: → "thinking"
+              data:   → JSON.parse → onThinking(data.content)
+```
 
 ---
 
@@ -934,6 +940,9 @@ models:
 
 # 默认模型
 default_model: glm-5
+
+# 智能体循环最大迭代次数（工具调用轮次上限，默认 5）
+max_iterations: 5
 
 # 工作区根目录
 workspace_root: ./workspaces
