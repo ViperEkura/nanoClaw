@@ -3,33 +3,20 @@
     <!-- File tree sidebar -->
     <div class="explorer-sidebar">
       <div class="explorer-header">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-        </svg>
+        <span v-html="icons.folder" />
         <span class="explorer-title">{{ projectName }}</span>
         <div class="explorer-actions">
           <button class="btn-icon-sm" @click="createNewFile" title="新建文件">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-              <polyline points="14 2 14 8 20 8"/>
-              <line x1="12" y1="11" x2="12" y2="17"/>
-              <line x1="9" y1="14" x2="15" y2="14"/>
-            </svg>
+            <span v-html="icons.fileNew" />
           </button>
           <button class="btn-icon-sm" @click="createNewFolder" title="新建文件夹">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-              <line x1="12" y1="11" x2="12" y2="17"/>
-              <line x1="9" y1="14" x2="15" y2="14"/>
-            </svg>
+            <span v-html="icons.folderNew" />
           </button>
         </div>
       </div>
 
       <div v-if="loadingTree" class="explorer-loading">
-        <svg class="spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
-        </svg>
+        <span class="spinner" v-html="icons.spinnerMd" />
       </div>
 
       <div v-else-if="treeItems.length === 0" class="explorer-empty">
@@ -46,6 +33,7 @@
           :project-id="projectId"
           @select="openFile"
           @refresh="loadTree"
+          @move="moveItem"
         />
       </div>
     </div>
@@ -61,18 +49,13 @@
         </div>
         <div class="viewer-actions">
           <button class="btn-icon-sm" @click="activeFile = null" title="关闭">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="18" y1="6" x2="6" y2="18"/>
-              <line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
+            <span v-html="icons.close" />
           </button>
         </div>
       </div>
 
       <div v-if="loadingFile" class="viewer-loading">
-        <svg class="spinner" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
-        </svg>
+        <span class="spinner" v-html="icons.spinnerMd" />
         加载中...
       </div>
 
@@ -98,13 +81,7 @@
 
     <!-- Empty state -->
     <div v-else class="viewer-placeholder">
-      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" style="color: var(--text-tertiary); opacity: 0.5;">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-        <polyline points="14 2 14 8 20 8"/>
-        <line x1="16" y1="13" x2="8" y2="13"/>
-        <line x1="16" y1="17" x2="8" y2="17"/>
-        <polyline points="10 9 9 9 8 9"/>
-      </svg>
+      <span v-html="icons.fileLg" style="color: var(--text-tertiary); opacity: 0.5;" />
       <span>选择文件以预览</span>
     </div>
   </div>
@@ -117,8 +94,10 @@ import FileTreeItem from './FileTreeItem.vue'
 import CodeEditor from './CodeEditor.vue'
 import { normalizeFileTree } from '../utils/fileTree'
 import { useTheme } from '../composables/useTheme'
-
-const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg', 'ico'])
+import { useModal } from '../composables/useModal'
+import { useToast } from '../composables/useToast'
+import { icons } from '../utils/icons'
+import { getFileExtension, isImageFile } from '../utils/fileUtils'
 
 const props = defineProps({
   projectId: { type: String, required: true },
@@ -126,6 +105,8 @@ const props = defineProps({
 })
 
 const { isDark } = useTheme()
+const modal = useModal()
+const toast = useToast()
 
 // -- Tree state --
 const treeItems = ref([])
@@ -146,21 +127,14 @@ function releaseImageUrl() {
   }
 }
 
-const fileExt = computed(() => {
-  if (!activeFile.value) return ''
-  const parts = activeFile.value.split('.')
-  return parts.length > 1 ? parts.pop().toLowerCase() : ''
-})
+const fileExt = computed(() => getFileExtension(activeFile.value))
 
 const breadcrumbSegments = computed(() => {
   if (!activeFile.value) return []
   return activeFile.value.split('/')
 })
 
-const fileType = computed(() => {
-  if (IMAGE_EXTS.has(fileExt.value)) return 'image'
-  return 'text'
-})
+const fileType = computed(() => isImageFile(activeFile.value) ? 'image' : 'text')
 
 async function loadTree(path = '') {
   loadingTree.value = true
@@ -182,7 +156,7 @@ async function openFile(filepath) {
   loadingFile.value = true
 
   const ext = filepath.split('.').pop().toLowerCase()
-  if (IMAGE_EXTS.has(ext)) {
+  if (isImageFile(filepath)) {
     try {
       const res = await projectApi.readFileRaw(props.projectId, filepath)
       const blob = await res.blob()
@@ -210,47 +184,54 @@ async function saveFile() {
   saving.value = true
   try {
     await projectApi.writeFile(props.projectId, activeFile.value, editContent.value)
+    toast.success('已保存')
   } catch (e) {
-    alert('保存失败: ' + e.message)
+    toast.error('保存失败: ' + e.message)
   } finally {
     saving.value = false
   }
 }
 
-function deleteFile() {
-  if (!activeFile.value) return
-  const name = activeFile.value.split('/').pop()
-  if (!confirm(`确定要删除 ${name} 吗？`)) return
-
-  projectApi.deleteFile(props.projectId, activeFile.value).then(() => {
-    activeFile.value = null
-    loadTree()
-  }).catch(e => {
-    alert('删除失败: ' + e.message)
-  })
-}
 
 async function createNewFile() {
-  const name = prompt('文件名（例如 utils.py）')
-  if (!name?.trim()) return
-  const path = name.trim()
+  const name = await modal.prompt('新建文件', '请输入文件名（例如 utils.py）')
+  if (!name) return
   try {
-    await projectApi.writeFile(props.projectId, path, '')
+    await projectApi.writeFile(props.projectId, name, '')
+    toast.success(`已创建「${name}」`)
     await loadTree()
-    openFile(path)
+    openFile(name)
   } catch (e) {
-    alert('创建失败: ' + e.message)
+    toast.error('创建失败: ' + e.message)
   }
 }
 
 async function createNewFolder() {
-  const name = prompt('文件夹名称')
-  if (!name?.trim()) return
+  const name = await modal.prompt('新建文件夹', '请输入文件夹名称')
+  if (!name) return
   try {
-    await projectApi.mkdir(props.projectId, name.trim())
+    await projectApi.mkdir(props.projectId, name)
+    toast.success(`已创建文件夹「${name}」`)
     await loadTree()
   } catch (e) {
-    alert('创建失败: ' + e.message)
+    toast.error('创建失败: ' + e.message)
+  }
+}
+
+async function moveItem({ srcPath, destDir, name }) {
+  const newPath = `${destDir}/${name}`
+  try {
+    await projectApi.renameFile(props.projectId, srcPath, newPath)
+    toast.success(`已移动「${name}」到 ${destDir}`)
+    // Update active file path if it was moved
+    if (activeFile.value && activeFile.value === srcPath) {
+      activeFile.value = newPath
+    } else if (activeFile.value && activeFile.value.startsWith(srcPath + '/')) {
+      activeFile.value = newPath + activeFile.value.slice(srcPath.length)
+    }
+    await loadTree()
+  } catch (e) {
+    toast.error('移动失败: ' + e.message)
   }
 }
 
@@ -328,35 +309,6 @@ onUnmounted(() => {
   display: flex;
   gap: 2px;
   flex-shrink: 0;
-}
-
-.btn-icon-sm {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border: none;
-  background: none;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  border-radius: 4px;
-  transition: all 0.15s;
-}
-
-.btn-icon-sm:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.btn-icon-sm.save:hover {
-  background: var(--success-bg);
-  color: var(--success-color);
-}
-
-.btn-icon-sm.danger:hover {
-  background: var(--danger-bg);
-  color: var(--danger-color);
 }
 
 .tree-container {

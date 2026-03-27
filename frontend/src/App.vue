@@ -31,9 +31,7 @@
         />
       </div>
       <div v-else class="explorer-body explorer-empty">
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" style="color: var(--text-tertiary); opacity: 0.5;">
-          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-        </svg>
+        <span v-html="icons.folderLg" style="color: var(--text-tertiary); opacity: 0.5;" />
         <p>当前对话未关联项目</p>
       </div>
     </div>
@@ -82,7 +80,9 @@
       <div class="create-modal">
         <div class="modal-header">
           <h3>创建项目</h3>
-          <CloseButton @click="showCreateModal = false" />
+          <button class="btn-close" @click="showCreateModal = false">
+            <span v-html="icons.closeMd" />
+          </button>
         </div>
         <div class="modal-body">
           <div class="form-group">
@@ -103,6 +103,8 @@
       </div>
     </div>
   </div>
+  <ModalDialog />
+  <ToastContainer />
 </template>
 
 <script setup>
@@ -110,11 +112,16 @@ import { ref, shallowRef, computed, onMounted, defineAsyncComponent } from 'vue'
 import Sidebar from './components/Sidebar.vue'
 import ChatView from './components/ChatView.vue'
 import FileExplorer from './components/FileExplorer.vue'
-import CloseButton from './components/CloseButton.vue'
+import ModalDialog from './components/ModalDialog.vue'
+import ToastContainer from './components/ToastContainer.vue'
+import { icons } from './utils/icons'
+import { useModal } from './composables/useModal'
 
 const SettingsPanel = defineAsyncComponent(() => import('./components/SettingsPanel.vue'))
 const StatsPanel = defineAsyncComponent(() => import('./components/StatsPanel.vue'))
 import { conversationApi, messageApi, projectApi } from './api'
+
+const modal = useModal()
 
 // -- Conversations state --
 const conversations = shallowRef([])
@@ -521,7 +528,8 @@ async function loadProjects() {
 
 // -- Delete project --
 async function deleteProject(project) {
-  if (!confirm(`确定删除项目「${project.name}」及其所有对话？`)) return
+  const ok = await modal.confirm('删除确认', `确定删除项目「${project.name}」及其所有对话？`, { danger: true })
+  if (!ok) return
   try {
     await projectApi.delete(project.id)
     // Remove conversations belonging to this project

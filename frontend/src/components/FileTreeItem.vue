@@ -1,26 +1,35 @@
 <template>
-  <div class="tree-node" @mouseenter="hovered = true" @mouseleave="onMouseLeave">
-    <div class="tree-item" :class="{ active: isActive }" @click="onClick">
+  <div
+    class="tree-node"
+    :class="{ 'drag-over': isDragOver }"
+    @mouseenter="hovered = true"
+    @mouseleave="onMouseLeave"
+    @dragover.prevent="onDragOver"
+    @dragenter.prevent="onDragEnter"
+    @dragleave="onDragLeave"
+    @drop.prevent="onDrop"
+  >
+    <div
+      class="tree-item"
+      :class="{ active: isActive }"
+      :draggable="true"
+      @click="onClick"
+      @dragstart="onDragStart"
+      @dragend="onDragEnd"
+    >
       <span class="tree-indent" :style="{ width: depth * 16 + 'px' }"></span>
 
       <span v-if="item.type === 'dir'" class="tree-arrow" :class="{ open: expanded }">
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="9 18 15 12 9 6"/>
-        </svg>
+        <span v-html="icons.chevronRight" />
       </span>
       <span v-else class="tree-arrow-placeholder"></span>
 
       <!-- File icon -->
-      <span v-if="item.type === 'file'" class="tree-icon">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" :stroke="iconColor" stroke-width="2">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-          <polyline points="14 2 14 8 20 8"/>
-        </svg>
+      <span v-if="item.type === 'file'" class="tree-icon" :style="{ color: iconColor }">
+        <span v-html="icons.file" />
       </span>
       <span v-else class="tree-icon folder-icon">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-        </svg>
+        <span v-html="icons.folder" />
       </span>
 
       <!-- Rename input or name -->
@@ -41,35 +50,27 @@
       <!-- Folder: new file/folder dropdown -->
       <div v-if="item.type === 'dir'" class="tree-action-dropdown">
         <button class="btn-icon-sm" @click.stop="showCreateMenu = !showCreateMenu" title="新建">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-          </svg>
+          <span v-html="icons.plus" />
         </button>
         <!-- Dropdown menu -->
         <div v-if="showCreateMenu" class="tree-create-menu" @mouseenter="hovered = true" @mouseleave="onMouseLeave">
           <button @click="createNewFile">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            <span v-html="icons.file" />
             新建文件
           </button>
           <button @click="createNewFolder">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            <span v-html="icons.folder" />
             新建文件夹
           </button>
         </div>
       </div>
       <!-- Rename -->
       <button class="btn-icon-sm" @click.stop="startRename" title="重命名">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-        </svg>
+        <span v-html="icons.edit" />
       </button>
       <!-- Delete -->
       <button class="btn-icon-sm danger" @click.stop="deleteItem" title="删除">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="3 6 5 6 21 6"/>
-          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-        </svg>
+        <span v-html="icons.trash" />
       </button>
     </div>
   </div>
@@ -77,9 +78,7 @@
   <!-- Children -->
   <div v-if="item.type === 'dir' && expanded" class="tree-children">
     <div v-if="loading" class="tree-loading">
-      <svg class="spinner" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
-      </svg>
+      <span class="spinner" v-html="icons.spinner" />
     </div>
     <FileTreeItem
       v-for="child in item.children"
@@ -90,6 +89,7 @@
       :project-id="projectId"
       @select="$emit('select', $event)"
       @refresh="$emit('refresh')"
+      @move="$emit('move', $event)"
     />
   </div>
 </template>
@@ -98,6 +98,10 @@
 import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { projectApi } from '../api'
 import { normalizeFileTree } from '../utils/fileTree'
+import { useModal } from '../composables/useModal'
+import { useToast } from '../composables/useToast'
+import { icons } from '../utils/icons'
+import { getFileIconColor } from '../utils/fileUtils'
 
 const props = defineProps({
   item: { type: Object, required: true },
@@ -106,7 +110,10 @@ const props = defineProps({
   projectId: { type: String, required: true },
 })
 
-const emit = defineEmits(['select', 'refresh'])
+const emit = defineEmits(['select', 'refresh', 'move'])
+
+const modal = useModal()
+const toast = useToast()
 
 const expanded = ref(false)
 const loading = ref(false)
@@ -119,14 +126,8 @@ const renameInput = ref(null)
 const isActive = computed(() => props.activePath === props.item.path)
 
 const iconColor = computed(() => {
-  const ext = props.item.extension?.toLowerCase() || ''
-  const colorMap = {
-    '.py': '#3572A5', '.js': '#f1e05a', '.ts': '#3178c6', '.vue': '#41b883',
-    '.html': '#e34c26', '.css': '#563d7c', '.json': '#292929', '.md': '#083fa1',
-    '.yml': '#cb171e', '.yaml': '#cb171e', '.toml': '#9c4221', '.sql': '#e38c00',
-    '.sh': '#89e051', '.java': '#b07219', '.go': '#00ADD8', '.rs': '#dea584',
-  }
-  return colorMap[ext] || 'var(--text-tertiary)'
+  const ext = props.item.extension?.replace(/^\./, '').toLowerCase() || ''
+  return getFileIconColor(ext)
 })
 
 function onMouseLeave() {
@@ -186,9 +187,10 @@ async function confirmRename() {
 
   try {
     await projectApi.renameFile(props.projectId, props.item.path, newPath)
+    toast.success(`已重命名为「${newName}」`)
     emit('refresh')
   } catch (e) {
-    alert('重命名失败: ' + e.message)
+    toast.error('重命名失败: ' + e.message)
   }
 }
 
@@ -199,41 +201,101 @@ function cancelRename() {
 // -- Delete --
 async function deleteItem() {
   const type = props.item.type === 'dir' ? '文件夹' : '文件'
-  if (!confirm(`确定要删除${type}「${props.item.name}」吗？`)) return
+  const ok = await modal.confirm('删除确认', `确定要删除${type}「${props.item.name}」吗？`, { danger: true })
+  if (!ok) return
 
   try {
     await projectApi.deleteFile(props.projectId, props.item.path)
+    toast.success(`已删除「${props.item.name}」`)
     emit('refresh')
   } catch (e) {
-    alert('删除失败: ' + e.message)
+    toast.error('删除失败: ' + e.message)
   }
 }
 
 // -- Create (in folder) --
 async function createNewFile() {
   showCreateMenu.value = false
-  const name = prompt('文件名（例如 utils.py）')
-  if (!name?.trim()) return
-  const path = props.item.path ? `${props.item.path}/${name.trim()}` : name.trim()
+  const name = await modal.prompt('新建文件', '请输入文件名（例如 utils.py）')
+  if (!name) return
+  const path = props.item.path ? `${props.item.path}/${name}` : name
   try {
     await projectApi.writeFile(props.projectId, path, '')
+    toast.success(`已创建「${name}」`)
     emit('refresh')
   } catch (e) {
-    alert('创建失败: ' + e.message)
+    toast.error('创建失败: ' + e.message)
   }
 }
 
 async function createNewFolder() {
   showCreateMenu.value = false
-  const name = prompt('文件夹名称')
-  if (!name?.trim()) return
-  const path = props.item.path ? `${props.item.path}/${name.trim()}` : name.trim()
+  const name = await modal.prompt('新建文件夹', '请输入文件夹名称')
+  if (!name) return
+  const path = props.item.path ? `${props.item.path}/${name}` : name
   try {
     await projectApi.mkdir(props.projectId, path)
+    toast.success(`已创建文件夹「${name}」`)
     emit('refresh')
   } catch (e) {
-    alert('创建失败: ' + e.message)
+    toast.error('创建失败: ' + e.message)
   }
+}
+
+// -- Drag & Drop (move file/folder) --
+const isDragOver = ref(false)
+let dragCounter = 0
+
+function onDragStart(e) {
+  e.dataTransfer.effectAllowed = 'move'
+  e.dataTransfer.setData('application/json', JSON.stringify({
+    path: props.item.path,
+    name: props.item.name,
+    type: props.item.type,
+  }))
+}
+
+function onDragEnd() {
+  isDragOver.value = false
+  dragCounter = 0
+}
+
+function onDragOver(e) {
+  if (props.item.type !== 'dir') return
+  e.dataTransfer.dropEffect = 'move'
+}
+
+function onDragEnter() {
+  if (props.item.type !== 'dir') return
+  dragCounter++
+  isDragOver.value = true
+}
+
+function onDragLeave() {
+  dragCounter--
+  if (dragCounter <= 0) {
+    dragCounter = 0
+    isDragOver.value = false
+  }
+}
+
+function onDrop(e) {
+  isDragOver.value = false
+  dragCounter = 0
+  if (props.item.type !== 'dir') return
+
+  try {
+    const data = JSON.parse(e.dataTransfer.getData('application/json'))
+    if (!data.path || data.path === props.item.path) return
+
+    // Prevent moving a parent into its own child
+    if (props.item.path.startsWith(data.path + '/')) {
+      toast.error('不能将文件夹移动到其子文件夹内')
+      return
+    }
+
+    emit('move', { srcPath: data.path, destDir: props.item.path, name: data.name })
+  } catch (_) {}
 }
 </script>
 
@@ -341,31 +403,6 @@ async function createNewFolder() {
   border-radius: 4px;
 }
 
-.btn-icon-sm {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border: none;
-  background: none;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  border-radius: 4px;
-  transition: all 0.15s;
-  flex-shrink: 0;
-}
-
-.btn-icon-sm:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.btn-icon-sm.danger:hover {
-  background: var(--danger-bg);
-  color: var(--danger-color);
-}
-
 /* -- Create dropdown -- */
 .tree-action-dropdown {
   position: relative;
@@ -411,12 +448,24 @@ async function createNewFolder() {
 }
 
 /* -- Children & loading -- */
-.tree-children {
-  /* no additional styles needed */
-}
-
 .tree-loading {
   padding: 4px 0 4px 40px;
   color: var(--text-tertiary);
+}
+
+/* -- Drag & Drop -- */
+.tree-node.drag-over > .tree-item {
+  background: var(--accent-primary-light);
+  outline: 2px dashed var(--accent-primary);
+  outline-offset: -2px;
+  border-radius: 4px;
+}
+
+.tree-item[draggable="true"] {
+  cursor: grab;
+}
+
+.tree-item[draggable="true"]:active {
+  cursor: grabbing;
 }
 </style>

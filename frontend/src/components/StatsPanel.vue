@@ -2,11 +2,7 @@
   <div class="stats-panel">
     <div class="stats-header">
       <div class="stats-title">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M18 20V10"/>
-          <path d="M12 20V4"/>
-          <path d="M6 20v-6"/>
-        </svg>
+        <span v-html="icons.stats" />
         <h4>使用统计</h4>
       </div>
       <div class="header-actions">
@@ -20,14 +16,14 @@
             {{ p.label }}
           </button>
         </div>
-        <CloseButton @click="$emit('close')" />
+        <button class="btn-close" @click="$emit('close')">
+          <span v-html="icons.closeMd" />
+        </button>
       </div>
     </div>
 
     <div v-if="loading" class="stats-loading">
-      <svg class="spinner" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
-      </svg>
+      <span class="spinner" v-html="icons.spinnerMd" />
       加载中...
     </div>
 
@@ -36,10 +32,7 @@
       <div class="stats-summary">
         <div class="stat-card">
           <div class="stat-icon input-icon">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-              <path d="M18.375 2.625a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4Z"/>
-            </svg>
+            <span v-html="icons.edit" />
           </div>
           <div class="stat-info">
             <span class="stat-label">输入</span>
@@ -48,12 +41,7 @@
         </div>
         <div class="stat-card">
           <div class="stat-icon output-icon">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/>
-              <polyline points="14 2 14 8 20 8"/>
-              <line x1="16" y1="13" x2="8" y2="13"/>
-              <line x1="16" y1="17" x2="8" y2="17"/>
-            </svg>
+            <span v-html="icons.file" />
           </div>
           <div class="stat-info">
             <span class="stat-label">输出</span>
@@ -62,9 +50,7 @@
         </div>
         <div class="stat-card total">
           <div class="stat-icon total-icon">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
-            </svg>
+            <span v-html="icons.trendUp" />
           </div>
           <div class="stat-info">
             <span class="stat-label">总计</span>
@@ -203,11 +189,7 @@
 
       <!-- 空状态 -->
       <div v-if="!stats.total_tokens" class="stats-empty">
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path d="M18 20V10"/>
-          <path d="M12 20V4"/>
-          <path d="M6 20v-6"/>
-        </svg>
+        <span v-html="icons.stats" style="opacity: 0.5;" />
         <span>暂无使用数据</span>
       </div>
     </template>
@@ -218,7 +200,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { statsApi } from '../api'
 import { formatNumber } from '../utils/format'
-import CloseButton from './CloseButton.vue'
+import { icons } from '../utils/icons'
 
 defineEmits(['close'])
 

@@ -6,10 +6,7 @@
         <span class="file-icon">{{ getFileIcon(file.extension) }}</span>
         <span class="file-name">{{ file.name }}</span>
         <button class="btn-remove-file" @click="removeFile(index)" title="移除">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
+          <span v-html="icons.close" />
         </button>
       </div>
     </div>
@@ -39,9 +36,7 @@
             @click="toggleTools"
             :title="toolsEnabled ? '工具调用: 已开启' : '工具调用: 已关闭'"
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
-            </svg>
+            <span v-html="icons.wrench" />
           </button>
           <button
             class="btn-upload"
@@ -49,9 +44,7 @@
             @click="triggerFileUpload"
             title="上传文件"
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
-            </svg>
+            <span v-html="icons.upload" />
           </button>
           <button
             class="btn-send"
@@ -59,10 +52,7 @@
             :disabled="!canSend || disabled"
             @click="send"
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="22" y1="2" x2="11" y2="13"></line>
-              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-            </svg>
+            <span v-html="icons.send" />
           </button>
         </div>
       </div>
@@ -73,6 +63,7 @@
 
 <script setup>
 import { ref, computed, nextTick } from 'vue'
+import { icons } from '../utils/icons'
 
 const props = defineProps({
   disabled: { type: Boolean, default: false },

@@ -11,9 +11,7 @@
       <!-- Project groups -->
       <div v-for="group in groupedData.groups" :key="group.id" class="project-group">
         <div class="project-header" @click="toggleGroup(group.id)">
-          <svg class="chevron" :class="{ collapsed: !expandedGroups[group.id] }" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="6 9 12 15 18 9"/>
-          </svg>
+          <span class="chevron" :class="{ collapsed: !expandedGroups[group.id] }" v-html="icons.chevronDown" />
           <span class="project-name">{{ group.name }}</span>
           <span class="conv-count">{{ group.conversations.length }}</span>
           <button
@@ -21,29 +19,21 @@
             title="新建对话"
             @click.stop="$emit('createInProject', { id: group.id, name: group.name })"
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="12" y1="5" x2="12" y2="19"></line>
-              <line x1="5" y1="12" x2="19" y2="12"></line>
-            </svg>
+            <span v-html="icons.plus" />
           </button>
           <button
             class="btn-group-action"
             title="浏览文件"
             @click.stop="$emit('browseProject', { id: group.id, name: group.name })"
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-            </svg>
+            <span v-html="icons.folder" />
           </button>
           <button
             class="btn-group-action btn-delete-project"
             title="删除项目"
             @click.stop="$emit('deleteProject', { id: group.id, name: group.name })"
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="3 6 5 6 21 6"></polyline>
-              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-            </svg>
+            <span v-html="icons.trashSm" />
           </button>
         </div>
         <div v-show="expandedGroups[group.id]">
@@ -61,10 +51,7 @@
               </div>
             </div>
             <button class="btn-delete" @click.stop="$emit('delete', conv.id)" title="删除">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="3 6 5 6 21 6"></polyline>
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-              </svg>
+              <span v-html="icons.trash" />
             </button>
           </div>
         </div>
@@ -73,22 +60,15 @@
       <!-- Standalone conversations (always visible) -->
       <div class="project-group">
         <div class="project-header" @click="toggleGroup('__standalone__')">
-          <svg class="chevron" :class="{ collapsed: !expandedGroups['__standalone__'] }" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="6 9 12 15 18 9"/>
-          </svg>
-          <svg class="standalone-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-          </svg>
+          <span class="chevron" :class="{ collapsed: !expandedGroups['__standalone__'] }" v-html="icons.chevronDown" />
+          <span class="standalone-icon" v-html="icons.chat" />
           <span class="conv-count">{{ groupedData.standalone.length }}</span>
           <button
             class="btn-group-action"
             title="新建对话"
             @click.stop="$emit('createInProject', { id: null, name: null })"
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="12" y1="5" x2="12" y2="19"></line>
-              <line x1="5" y1="12" x2="19" y2="12"></line>
-            </svg>
+            <span v-html="icons.plus" />
           </button>
           <span class="btn-placeholder"></span>
           <span class="btn-placeholder"></span>
@@ -108,10 +88,7 @@
               </div>
             </div>
             <button class="btn-delete" @click.stop="$emit('delete', conv.id)" title="删除">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="3 6 5 6 21 6"></polyline>
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-              </svg>
+              <span v-html="icons.trash" />
             </button>
           </div>
         </div>
@@ -123,17 +100,10 @@
 
     <div class="sidebar-footer">
       <button class="btn-footer" title="使用统计" @click="$emit('toggleStats')">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M18 20V10"/>
-          <path d="M12 20V4"/>
-          <path d="M6 20v-6"/>
-        </svg>
+        <span v-html="icons.stats" />
       </button>
       <button class="btn-footer" title="设置" @click="$emit('toggleSettings')">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="3"></circle>
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-        </svg>
+        <span v-html="icons.settings" />
       </button>
     </div>
   </aside>
@@ -142,6 +112,7 @@
 <script setup>
 import { computed, reactive } from 'vue'
 import { formatTime } from '../utils/format'
+import { icons } from '../utils/icons'
 
 const props = defineProps({
   conversations: { type: Array, required: true },

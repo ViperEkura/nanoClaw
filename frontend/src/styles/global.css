@@ -319,26 +319,35 @@ body {
 }
 
 /* ============ Scrollbar ============ */
-textarea::-webkit-scrollbar {
+textarea::-webkit-scrollbar,
+.cm-scroller::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
-textarea::-webkit-scrollbar-track {
+textarea::-webkit-scrollbar-track,
+.cm-scroller::-webkit-scrollbar-track {
   background: transparent;
 }
 
-textarea::-webkit-scrollbar-thumb {
+textarea::-webkit-scrollbar-thumb,
+.cm-scroller::-webkit-scrollbar-thumb {
   background: var(--scrollbar-thumb);
   border-radius: 3px;
 }
 
-textarea::-webkit-scrollbar-thumb:hover {
+textarea::-webkit-scrollbar-thumb:hover,
+.cm-scroller::-webkit-scrollbar-thumb:hover {
   background: var(--text-tertiary);
 }
 
 textarea::-webkit-resizer {
   background: transparent;
+}
+
+.cm-scroller {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 /* ============ Range Slider ============ */
@@ -716,5 +725,31 @@ input[type="range"]::-moz-range-thumb {
 [data-theme="dark"] .form-group select {
   background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a0a0a0' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
 }
+
+/* ============ Small Icon Button ============ */
+.btn-icon-sm {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+
+.btn-icon-sm:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.btn-icon-sm.danger:hover {
+  background: var(--danger-bg);
+  color: var(--danger-color);
+}
+
 
 
