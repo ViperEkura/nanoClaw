@@ -9,7 +9,7 @@ import os
 import re
 import time
 import requests
-from typing import Optional, List
+from typing import Optional, List, Union
 
 
 def _resolve_env_vars(value: str) -> str:
@@ -59,7 +59,8 @@ class LLMClient:
             raise ValueError(f"Model '{model}' has no api_key configured")
         return api_url, api_key
 
-    def _build_body(self, model, messages, max_tokens, temperature, thinking_enabled, tools, stream, api_url):
+    def _build_body(self, model, messages, max_tokens, temperature, thinking_enabled,
+                    tools, tool_choice, stream, api_url):
         """Build request body with provider-specific parameter adaptation."""
         provider = _detect_provider(api_url)
 
@@ -79,23 +80,17 @@ class LLMClient:
 
         # --- Provider-specific: thinking ---
         if thinking_enabled:
-            if provider == "glm":
+            if provider == "glm" or provider == "deepseek":
                 body["thinking"] = {"type": "enabled"}
-            elif provider == "deepseek":
-                pass  # deepseek-reasoner has built-in reasoning, no extra param
+            else:
+                raise NotImplementedError(f"Thinking not supported for provider '{provider}'")
 
-        # --- Provider-specific: tools ---
         if tools:
             body["tools"] = tools
-            body["tool_choice"] = "auto"
+            body["tool_choice"] = tool_choice if tool_choice is not None else "auto"
 
-        # --- Provider-specific: stream ---
         if stream:
             body["stream"] = True
-            if provider == "glm":
-                body["stream_options"] = {"include_usage": True}
-            elif provider == "deepseek":
-                pass  # DeepSeek does not support stream_options
 
         return body
 
@@ -107,15 +102,16 @@ class LLMClient:
         temperature: float = 1.0,
         thinking_enabled: bool = False,
         tools: Optional[List[dict]] = None,
+        tool_choice: Optional[Union[str, dict]] = None,
         stream: bool = False,
-        timeout: int = 120,
+        timeout: int = 200,
         max_retries: int = 3,
     ):
         """Call LLM API with retry on rate limit (429)"""
         api_url, api_key = self._get_credentials(model)
         body = self._build_body(
             model, messages, max_tokens, temperature,
-            thinking_enabled, tools, stream, api_url,
+            thinking_enabled, tools, tool_choice, stream, api_url,
         )
 
         for attempt in range(max_retries + 1):

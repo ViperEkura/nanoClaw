@@ -638,6 +638,99 @@ buffer 拼接:   "event: process_step\ndata: {\"id\":\"step-0\",...}\n\n"
 
 ---
 
+## Token 用量计算
+
+### 术语定义
+
+| 术语 | 说明 |
+| --- | --- |
+| `prompt_tokens` | 发给模型的输入 token 数量（包括 system prompt、历史消息、工具定义、工具结果等全部上下文） |
+| `completion_tokens` | 模型生成的输出 token 数量（包括 thinking 内容、正文回复、工具调用 JSON） |
+| `total_tokens` | `prompt_tokens + completion_tokens` |
+
+### 计算流程
+
+一次完整的对话可能经历多轮工具调用迭代，每轮都会向 LLM 发送请求并收到响应。Token 用量计算分为三个阶段：
+
+```mermaid
+flowchart LR
+    A[LLM SSE Stream] -->|usage 字段| B["_stream_llm_response()"]
+    B -->|每轮累加| C["generate() 循环"]
+    C -->|最终值| D["_save_message()"]
+    D --> E["record_token_usage()"]
+    E --> F["TokenUsage 表"]
+```
+
+#### 1. 流式解析 — 从 SSE chunks 中提取
+
+LLM API 在流的最后一个 chunk 中返回 `usage` 字段（需要在请求中设置 `stream_options` 才有，否则为空）：
+
+```python
+# chat.py: _stream_llm_response()
+usage = chunk.get("usage", {})
+if usage:
+    token_count = usage.get("completion_tokens", 0)      # 本轮输出 token
+    prompt_tokens = usage.get("prompt_tokens", 0)         # 本轮输入 token
+```
+
+#### 2. 迭代累加 — generate() 循环
+
+每轮迭代结束后，将本轮的 prompt 和 completion token 累加到总计：
+
+```python
+# chat.py: generate()
+total_prompt_tokens += prompt_tokens        # 累加每轮 prompt
+total_completion_tokens += completion_tokens  # 累加每轮 completion
+```
+
+#### 3. 记录到数据库
+
+最终调用 `record_token_usage()` 写入 TokenUsage 表，同时 Message 表也记录 completion token：
+
+```python
+# chat.py: _save_message()
+msg = Message(token_count=total_completion_tokens)   # Message 表仅记录 completion
+record_token_usage(user_id, model, total_prompt_tokens, total_completion_tokens)
+```
+
+### 多轮迭代示例
+
+一次涉及工具调用的对话（如：用户提问 → LLM 调用搜索 → LLM 生成回复）：
+
+```
+迭代 1: prompt=800, completion=150  (LLM 决定调用 web_search)
+迭代 2: prompt=1500, completion=300  (LLM 根据搜索结果生成最终回复)
+
+─────────────────────────────────────────
+累加结果:
+  total_prompt_tokens     = 800 + 1500 = 2300
+  total_completion_tokens = 150 + 300  = 450
+─────────────────────────────────────────
+```
+
+> **注意**：`prompt_tokens` 的累加意味着存在重复计算 — 第 2 轮的 prompt 包含了第 1 轮的上下文，累加后 `total_prompt_tokens` 大于本次对话的真实输入 token 总量（历史部分被多次计算）。这是因为每轮请求是独立的 API 调用，各自计费。如果需要精确的单次对话输入 token，可以只取最后一轮的 `prompt_tokens`。
+
+### 存储位置
+
+| 位置 | 存什么 | 粒度 |
+| --- | --- | --- |
+| `Message.token_count` | `total_completion_tokens`（仅输出） | 单条消息 |
+| `TokenUsage` 表 | `prompt_tokens` + `completion_tokens` + `total_tokens` | 按 user + 日期 + model 聚合 |
+
+`TokenUsage` 按 **user_id + 日期 + model** 维度聚合，同一天同一模型的多次对话会累加到同一条记录：
+
+```python
+# helpers.py: record_token_usage()
+if existing:
+    existing.prompt_tokens += prompt_tokens
+    existing.completion_tokens += completion_tokens
+    existing.total_tokens += prompt_tokens + completion_tokens
+else:
+    create new TokenUsage record
+```
+
+---
+
 ## 分页机制
 
 所有列表接口使用**游标分页**：

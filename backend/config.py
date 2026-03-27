@@ -33,3 +33,9 @@ if MODELS and not DEFAULT_MODEL:
 
 # Max agentic loop iterations (tool call rounds)
 MAX_ITERATIONS = _cfg.get("max_iterations", 5)
+
+# Max parallel workers for tool execution (ThreadPoolExecutor)
+TOOL_MAX_WORKERS = _cfg.get("tool_max_workers", 4)
+
+# Max character length for a single tool result content (truncated if exceeded)
+TOOL_RESULT_MAX_LENGTH = _cfg.get("tool_result_max_length", 4096)
