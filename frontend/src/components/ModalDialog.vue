@@ -1,6 +1,6 @@
 <template>
   <Teleport to="body">
-    <Transition name="modal-fade">
+    <Transition name="fade">
       <div v-if="state.visible" class="modal-overlay" @click.self="onCancel" @keydown.escape="onCancel">
         <div class="modal-dialog" role="dialog" :aria-modal="true">
           <h3 class="modal-title">{{ state.title }}</h3>
@@ -128,13 +128,6 @@ watch(() => state.visible, (v) => {
   opacity: 0.85;
 }
 
-/* Transitions */
-.modal-fade-enter-active,
-.modal-fade-leave-active {
-  transition: opacity 0.2s;
-}
-.modal-fade-enter-from,
-.modal-fade-leave-to {
-  opacity: 0;
-}
+
+
 </style>

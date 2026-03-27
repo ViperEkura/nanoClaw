@@ -30,13 +30,13 @@
       <div class="message-footer">
         <span class="token-count" v-if="tokenCount">{{ tokenCount }} tokens</span>
         <span class="message-time">{{ formatTime(createdAt) }}</span>
-        <button v-if="role === 'assistant'" class="btn-regenerate" @click="$emit('regenerate')" title="重新生成">
+        <button v-if="role === 'assistant'" class="ghost-btn success" @click="$emit('regenerate')" title="重新生成">
           <span v-html="icons.regenerate" />
         </button>
-        <button v-if="role === 'assistant'" class="btn-copy" @click="copyContent" title="复制">
+        <button v-if="role === 'assistant'" class="ghost-btn accent" @click="copyContent" title="复制">
           <span v-html="icons.copy" />
         </button>
-        <button v-if="deletable" class="btn-delete-msg" @click="$emit('delete')" title="删除">
+        <button v-if="deletable" class="ghost-btn danger" @click="$emit('delete')" title="删除">
           <span v-html="icons.trash" />
         </button>
       </div>
@@ -140,32 +140,6 @@ function copyContent() {
   color: var(--text-tertiary);
 }
 
-.btn-regenerate,
-.btn-copy,
-.btn-delete-msg {
-  background: none;
-  border: none;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
-  transition: all 0.15s;
-  display: flex;
-  align-items: center;
-}
 
-.btn-regenerate:hover {
-  color: var(--success-color);
-  background: var(--success-bg);
-}
 
-.btn-copy:hover {
-  color: var(--accent-primary);
-  background: var(--accent-primary-light);
-}
-
-.btn-delete-msg:hover {
-  color: var(--danger-color);
-  background: var(--danger-bg);
-}
 </style>

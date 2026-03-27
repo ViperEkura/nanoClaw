@@ -15,21 +15,21 @@
           <span class="project-name">{{ group.name }}</span>
           <span class="conv-count">{{ group.conversations.length }}</span>
           <button
-            class="btn-group-action"
+            class="ghost-btn"
             title="新建对话"
             @click.stop="$emit('createInProject', { id: group.id, name: group.name })"
           >
             <span v-html="icons.plus" />
           </button>
           <button
-            class="btn-group-action"
+            class="ghost-btn"
             title="浏览文件"
             @click.stop="$emit('browseProject', { id: group.id, name: group.name })"
           >
             <span v-html="icons.folder" />
           </button>
           <button
-            class="btn-group-action btn-delete-project"
+            class="ghost-btn danger btn-delete-project"
             title="删除项目"
             @click.stop="$emit('deleteProject', { id: group.id, name: group.name })"
           >
@@ -50,7 +50,7 @@
                 <span>{{ conv.message_count || 0 }} 条消息 · {{ formatTime(conv.updated_at) }}</span>
               </div>
             </div>
-            <button class="btn-delete" @click.stop="$emit('delete', conv.id)" title="删除">
+            <button class="ghost-btn danger btn-delete" @click.stop="$emit('delete', conv.id)" title="删除">
               <span v-html="icons.trash" />
             </button>
           </div>
@@ -64,7 +64,7 @@
           <span class="standalone-icon" v-html="icons.chat" />
           <span class="conv-count">{{ groupedData.standalone.length }}</span>
           <button
-            class="btn-group-action"
+            class="ghost-btn"
             title="新建对话"
             @click.stop="$emit('createInProject', { id: null, name: null })"
           >
@@ -87,7 +87,7 @@
                 <span>{{ conv.message_count || 0 }} 条消息 · {{ formatTime(conv.updated_at) }}</span>
               </div>
             </div>
-            <button class="btn-delete" @click.stop="$emit('delete', conv.id)" title="删除">
+            <button class="ghost-btn danger btn-delete" @click.stop="$emit('delete', conv.id)" title="删除">
               <span v-html="icons.trash" />
             </button>
           </div>
@@ -229,10 +229,6 @@ function onScroll(e) {
   padding: 0 16px 16px;
 }
 
-.conversation-list::-webkit-scrollbar {
-  width: 4px;
-}
-
 .conversation-list::-webkit-scrollbar-thumb {
   background: var(--scrollbar-thumb-sidebar);
   border-radius: 2px;
@@ -297,16 +293,8 @@ function onScroll(e) {
 }
 
 .btn-group-action {
-  display: flex;
-  align-items: center;
-  justify-content: center;
   width: 24px;
   height: 24px;
-  border: none;
-  background: none;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  border-radius: 4px;
   flex-shrink: 0;
   transition: all 0.15s;
   opacity: 0.5;
@@ -316,15 +304,10 @@ function onScroll(e) {
   opacity: 1;
 }
 
-.btn-group-action:hover {
-  color: var(--accent-primary);
-  background: var(--accent-primary-light);
-  opacity: 1;
-}
-
 .btn-delete-project:hover {
   color: var(--danger-color);
   background: var(--danger-bg);
+  opacity: 1;
 }
 
 .conversation-item {
@@ -369,24 +352,12 @@ function onScroll(e) {
 
 .btn-delete {
   opacity: 0;
-  background: none;
-  border: none;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
-  transition: all 0.15s;
-  flex-shrink: 0;
 }
 
 .conversation-item:hover .btn-delete {
   opacity: 1;
 }
 
-.btn-delete:hover {
-  color: var(--danger-color);
-  background: var(--danger-bg);
-}
 
 .loading-more,
 .empty-hint {
@@ -407,16 +378,13 @@ function onScroll(e) {
 }
 
 .btn-footer {
-  display: flex;
-  align-items: center;
-  justify-content: center;
   width: 36px;
   height: 36px;
+  border-radius: 8px;
   border: none;
   background: none;
   color: var(--text-tertiary);
   cursor: pointer;
-  border-radius: 8px;
   transition: all 0.15s;
 }
 

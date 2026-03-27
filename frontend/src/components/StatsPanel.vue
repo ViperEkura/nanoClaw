@@ -1,7 +1,7 @@
 <template>
   <div class="stats-panel">
-    <div class="stats-header">
-      <div class="stats-title">
+    <div class="panel-header">
+      <div class="panel-title">
         <span v-html="icons.stats" />
         <h4>使用统计</h4>
       </div>
@@ -324,37 +324,7 @@ onMounted(loadStats)
   padding: 0;
 }
 
-.stats-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 20px;
-}
-
-.stats-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--text-primary);
-}
-
-.stats-title svg {
-  color: var(--text-tertiary);
-}
-
-.stats-title h4 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-/* tab styles now in global.css */
+/* panel-header, panel-title, header-actions now in global.css */
 
 .stats-loading {
   display: flex;

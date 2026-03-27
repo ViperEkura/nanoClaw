@@ -15,15 +15,15 @@
         </div>
       </div>
 
-      <div v-if="loadingTree" class="explorer-loading">
+      <div v-if="loadingTree" class="empty-state">
         <span class="spinner" v-html="icons.spinnerMd" />
       </div>
 
-      <div v-else-if="treeItems.length === 0" class="explorer-empty">
+      <div v-else-if="treeItems.length === 0" class="empty-state">
         空项目
       </div>
 
-      <div v-else class="tree-container">
+      <div v-else class="scrollbar-thin" style="flex: 1; padding: 4px 0;">
         <FileTreeItem
           v-for="item in treeItems"
           :key="item.path"
@@ -80,7 +80,7 @@
     </div>
 
     <!-- Empty state -->
-    <div v-else class="viewer-placeholder">
+    <div v-else class="empty-state">
       <span v-html="icons.fileLg" style="color: var(--text-tertiary); opacity: 0.5;" />
       <span>选择文件以预览</span>
     </div>
@@ -311,31 +311,6 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
-.tree-container {
-  flex: 1;
-  overflow-y: auto;
-  padding: 4px 0;
-}
-
-.tree-container::-webkit-scrollbar {
-  width: 4px;
-}
-
-.tree-container::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
-  border-radius: 2px;
-}
-
-.explorer-loading,
-.explorer-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: 1;
-  color: var(--text-tertiary);
-  font-size: 13px;
-}
-
 /* -- Viewer -- */
 .file-viewer {
   flex: 1;
@@ -397,17 +372,6 @@ onUnmounted(() => {
   justify-content: center;
   flex: 1;
   color: var(--danger-color);
-  font-size: 13px;
-}
-
-.viewer-placeholder {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  color: var(--text-tertiary);
   font-size: 13px;
 }
 

@@ -5,7 +5,7 @@
       <div v-for="(file, index) in uploadedFiles" :key="index" class="file-item">
         <span class="file-icon">{{ getFileIcon(file.extension) }}</span>
         <span class="file-name">{{ file.name }}</span>
-        <button class="btn-remove-file" @click="removeFile(index)" title="移除">
+        <button class="ghost-btn danger btn-remove-file" @click="removeFile(index)" title="移除">
           <span v-html="icons.close" />
         </button>
       </div>
@@ -213,23 +213,9 @@ defineExpose({ focus })
 }
 
 .btn-remove-file {
-  display: flex;
-  align-items: center;
-  justify-content: center;
   width: 18px;
   height: 18px;
-  border: none;
-  background: transparent;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  border-radius: 4px;
-  transition: all 0.15s;
   padding: 0;
-}
-
-.btn-remove-file:hover {
-  background: var(--danger-bg);
-  color: var(--danger-color);
 }
 
 .input-container {

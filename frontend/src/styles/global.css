@@ -751,5 +751,101 @@ input[type="range"]::-moz-range-thumb {
   color: var(--danger-color);
 }
 
+/* ============ Ghost Button (base for small icon buttons) ============ */
+.ghost-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+
+.ghost-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.ghost-btn.danger:hover {
+  background: var(--danger-bg);
+  color: var(--danger-color);
+}
+
+.ghost-btn.accent:hover {
+  background: var(--accent-primary-light);
+  color: var(--accent-primary);
+}
+
+.ghost-btn.success:hover {
+  background: var(--success-bg);
+  color: var(--success-color);
+}
+
+/* ============ Empty / Loading State ============ */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  gap: 12px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+/* ============ Thin Scrollbar (4px) ============ */
+.scrollbar-thin {
+  overflow-y: auto;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 4px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 2px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ============ Panel Header (title + actions) ============ */
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.panel-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-primary);
+}
+
+.panel-title svg {
+  color: var(--text-tertiary);
+}
+
+.panel-title h4 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+
 
 

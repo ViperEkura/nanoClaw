@@ -1,7 +1,7 @@
 <template>
   <div class="settings-panel">
-    <div class="settings-header">
-      <div class="settings-title">
+    <div class="panel-header">
+      <div class="panel-title">
         <span v-html="icons.settings" />
         <h4>会话设置</h4>
       </div>
@@ -215,37 +215,7 @@ onMounted(loadModels)
   flex-direction: column;
 }
 
-.settings-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 20px;
-}
-
-.settings-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--text-primary);
-}
-
-.settings-title svg {
-  color: var(--text-tertiary);
-}
-
-.settings-title h4 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-/* tab styles now in global.css */
+/* panel-header, panel-title, header-actions now in global.css */
 
 .settings-body {
   flex: 1;

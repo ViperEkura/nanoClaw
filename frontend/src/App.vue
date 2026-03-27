@@ -30,7 +30,7 @@
           :project-name="currentProject.name"
         />
       </div>
-      <div v-else class="explorer-body explorer-empty">
+      <div v-else class="explorer-body empty-state">
         <span v-html="icons.folderLg" style="color: var(--text-tertiary); opacity: 0.5;" />
         <p>当前对话未关联项目</p>
       </div>
@@ -653,17 +653,7 @@ onMounted(() => {
   display: flex;
 }
 
-.explorer-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  color: var(--text-tertiary);
-  font-size: 14px;
-}
-
-/* modal-overlay, modal-content, btn-icon, form-group, modal-footer, btn-secondary, btn-primary now in global.css */
+/* explorer-empty now uses global .empty-state */
 
 .create-modal {
   background: var(--bg-primary);
