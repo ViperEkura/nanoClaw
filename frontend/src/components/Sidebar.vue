@@ -287,10 +287,11 @@ function onScroll(e) {
 
 .conv-count {
   font-size: 11px;
+  line-height: 1;
   color: var(--text-tertiary);
   flex-shrink: 0;
   background: var(--bg-secondary);
-  padding: 1px 6px;
+  padding: 3px 6px;
   border-radius: 10px;
   margin-left: auto;
 }

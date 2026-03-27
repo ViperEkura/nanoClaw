@@ -30,6 +30,15 @@
         />
         <div class="input-actions">
           <button
+            class="btn-upload"
+            :class="{ active: uploadedFiles.length > 0 }"
+            :disabled="disabled"
+            @click="triggerFileUpload"
+            :title="uploadedFiles.length > 0 ? `已上传 ${uploadedFiles.length} 个文件` : '上传文件'"
+          >
+            <span v-html="icons.upload" />
+          </button>
+          <button
             class="btn-tool"
             :class="{ active: toolsEnabled }"
             :disabled="disabled"
@@ -37,14 +46,6 @@
             :title="toolsEnabled ? '工具调用: 已开启' : '工具调用: 已关闭'"
           >
             <span v-html="icons.wrench" />
-          </button>
-          <button
-            class="btn-upload"
-            :disabled="disabled"
-            @click="triggerFileUpload"
-            title="上传文件"
-          >
-            <span v-html="icons.upload" />
           </button>
           <button
             class="btn-send"
@@ -278,6 +279,77 @@ textarea::placeholder {
 }
 
 .btn-tool,
+.btn-upload {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: all 0.15s ease;
+}
+
+.btn-tool::before,
+.btn-upload::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  opacity: 0.20;
+  transition: opacity 0.15s ease;
+}
+
+.btn-upload::before {
+  background: var(--attachment-color);
+}
+
+.btn-tool::before {
+  background: var(--tool-color);
+}
+
+.btn-upload {
+  color: var(--attachment-color);
+}
+
+.btn-tool {
+  color: var(--tool-color);
+}
+
+.btn-tool:hover:not(:disabled)::before,
+.btn-upload:hover:not(:disabled)::before {
+  opacity: 0.7;
+}
+
+.btn-upload.active::before {
+  opacity: 0.5;
+}
+
+.btn-upload.active:hover:not(:disabled)::before {
+  opacity: 0.7;
+}
+
+.btn-tool.active::before {
+  opacity: 0.5;
+}
+
+.btn-tool.active:hover:not(:disabled)::before {
+  opacity: 0.7;
+}
+
+.btn-tool:disabled,
+.btn-upload:disabled {
+  cursor: not-allowed;
+}
+
+.btn-tool:disabled::before,
+.btn-upload:disabled::before {
+  opacity: 0.20;
+}
+
 .btn-send {
   width: 36px;
   height: 36px;
@@ -285,62 +357,11 @@ textarea::placeholder {
   border: none;
   background: var(--bg-code);
   color: var(--text-tertiary);
-  cursor: pointer;
+  cursor: not-allowed;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.15s ease;
-}
-
-.btn-upload {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  border: none;
-  background: var(--attachment-bg);
-  color: var(--attachment-color);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.15s ease;
-}
-
-.btn-tool:hover:not(:disabled) {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-  transform: translateY(-1px);
-}
-
-.btn-tool.active {
-  background: var(--tool-bg);
-  color: var(--tool-color);
-}
-
-.btn-tool.active:hover:not(:disabled) {
-  background: var(--tool-color);
-  color: white;
-}
-
-.btn-upload:hover:not(:disabled) {
-  background: var(--attachment-color);
-  color: white;
-  transform: translateY(-1px);
-}
-
-.btn-upload:active:not(:disabled) {
-  background: var(--attachment-color-hover);
-  transform: translateY(0);
-}
-
-.btn-tool:disabled,
-.btn-upload:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.btn-send {
-  cursor: not-allowed;
 }
 
 .btn-send.active {

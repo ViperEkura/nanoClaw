@@ -46,6 +46,7 @@
       :loading-more="loadingMessages"
       :tools-enabled="toolsEnabled"
       @send-message="sendMessage"
+      @stop-streaming="stopStreaming"
       @delete-message="deleteMessage"
       @regenerate-message="regenerateMessage"
       @toggle-settings="togglePanel('settings')"
@@ -139,20 +140,52 @@ const hasMoreMessages = ref(false)
 const loadingMessages = ref(false)
 const nextMsgCursor = ref(null)
 
-// -- Streaming state --
+// -- Streaming state (per-conversation) --
 // processSteps is the single source of truth for all streaming content.
 // thinking/text steps are sent incrementally via process_step events and
 // updated in-place by id. tool_call/tool_result steps are appended on arrival.
 // On stream completion (onDone), the finalized steps are stored in the message object.
-const streaming = ref(false)
+const streaming = ref(false)          // true when current conversation is actively streaming
 const streamProcessSteps = shallowRef([]) // Ordered steps: thinking/text/tool_call/tool_result
 
-// 保存每个对话的流式状态
+// Track which conversations are currently streaming (supports multi-concurrent streams)
+const streamingConvs = new Set()
+
+// Per-conversation abort controllers (for stopping active streams)
+const streamAborters = new Map()
+
+// 保存每个对话的流式状态（切换对话时暂存）
 const streamStates = new Map()
 
-function setStreamState(isActive) {
+// Stop the active stream for a conversation
+function stopStreaming(convId) {
+  const conv = convId || currentConvId.value
+  if (!conv) return
+  const abort = streamAborters.get(conv)
+  if (abort) {
+    abort()
+    streamAborters.delete(conv)
+  }
+  // AbortError is silently caught in createSSEStream, so clean up state here
+  streamStates.delete(conv)
+  streamingConvs.delete(conv)
+  if (currentConvId.value === conv) {
+    setStreamState(false, conv)
+  }
+}
+
+function setStreamState(isActive, convId) {
   streaming.value = isActive
-  streamProcessSteps.value = []
+  if (!isActive) {
+    streamProcessSteps.value = []
+  }
+  if (convId) {
+    if (isActive) {
+      streamingConvs.add(convId)
+    } else {
+      streamingConvs.delete(convId)
+    }
+  }
 }
 
 function updateStreamField(convId, field, ref, valueOrUpdater) {
@@ -248,13 +281,15 @@ async function selectConversation(id) {
     currentProject.value = null
   }
 
-  // Save current streaming state
-  if (currentConvId.value && streaming.value) {
-    streamStates.set(currentConvId.value, {
-      streaming: true,
-      streamProcessSteps: [...streamProcessSteps.value],
-      messages: [...messages.value],
-    })
+  // Save current streaming state before switching
+  if (currentConvId.value) {
+    if (streamingConvs.has(currentConvId.value)) {
+      streamStates.set(currentConvId.value, {
+        streaming: true,
+        streamProcessSteps: [...streamProcessSteps.value],
+        messages: [...messages.value],
+      })
+    }
   }
 
   currentConvId.value = id
@@ -263,13 +298,18 @@ async function selectConversation(id) {
 
   // Restore streaming state for new conversation
   const savedState = streamStates.get(id)
+  const isThisConvStreaming = streamingConvs.has(id)
   if (savedState && savedState.streaming) {
     streaming.value = true
     streamProcessSteps.value = savedState.streamProcessSteps
     messages.value = savedState.messages || []
-  } else {
-    setStreamState(false)
+  } else if (!isThisConvStreaming) {
+    setStreamState(false, currentConvId.value)
     messages.value = []
+  } else {
+    // This conv is streaming but we don't have saved state (e.g. started from background)
+    streaming.value = true
+    streamProcessSteps.value = []
   }
 
   if (!streaming.value) {
@@ -317,6 +357,8 @@ function createStreamCallbacks(convId, { updateConvList = true } = {}) {
     },
     async onDone(data) {
       streamStates.delete(convId)
+      streamingConvs.delete(convId)
+      streamAborters.delete(convId)
 
       if (currentConvId.value === convId) {
         streaming.value = false
@@ -353,7 +395,7 @@ function createStreamCallbacks(convId, { updateConvList = true } = {}) {
           token_count: data.token_count,
           created_at: new Date().toISOString(),
         }]
-        setStreamState(false)
+        setStreamState(false, convId)
 
         if (updateConvList) {
           const idx = conversations.value.findIndex(c => c.id === convId)
@@ -386,8 +428,10 @@ function createStreamCallbacks(convId, { updateConvList = true } = {}) {
     },
     onError(msg) {
       streamStates.delete(convId)
+      streamingConvs.delete(convId)
+      streamAborters.delete(convId)
       if (currentConvId.value === convId) {
-        setStreamState(false)
+        setStreamState(false, convId)
         console.error('Stream error:', msg)
       }
     },
@@ -396,7 +440,7 @@ function createStreamCallbacks(convId, { updateConvList = true } = {}) {
 
 // -- Send message (streaming) --
 async function sendMessage(data) {
-  if (!currentConvId.value || streaming.value) return
+  if (!currentConvId.value || streamingConvs.has(currentConvId.value)) return
 
   const convId = currentConvId.value
   const text = data.text || ''
@@ -413,12 +457,13 @@ async function sendMessage(data) {
   }
   messages.value = [...messages.value, userMsg]
 
-  setStreamState(true)
+  setStreamState(true, convId)
 
-  messageApi.send(convId, { text, attachments, projectId: currentProject.value?.id }, {
+  const stream = messageApi.send(convId, { text, attachments, projectId: currentProject.value?.id }, {
     toolsEnabled: toolsEnabled.value,
     ...createStreamCallbacks(convId, { updateConvList: true }),
   })
+  streamAborters.set(convId, () => stream.abort())
 }
 
 // -- Delete message --
@@ -434,7 +479,7 @@ async function deleteMessage(msgId) {
 
 // -- Regenerate message --
 async function regenerateMessage(msgId) {
-  if (!currentConvId.value || streaming.value) return
+  if (!currentConvId.value || streamingConvs.has(currentConvId.value)) return
 
   const convId = currentConvId.value
   const msgIndex = messages.value.findIndex(m => m.id === msgId)
@@ -442,13 +487,14 @@ async function regenerateMessage(msgId) {
 
   messages.value = messages.value.slice(0, msgIndex)
 
-  setStreamState(true)
+  setStreamState(true, convId)
 
-  messageApi.regenerate(convId, msgId, {
+  const stream = messageApi.regenerate(convId, msgId, {
     toolsEnabled: toolsEnabled.value,
     projectId: currentProject.value?.id,
     ...createStreamCallbacks(convId, { updateConvList: false }),
   })
+  streamAborters.set(convId, () => stream.abort())
 }
 
 // -- Delete conversation --

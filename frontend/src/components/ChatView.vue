@@ -11,7 +11,6 @@
         <div class="chat-title-area">
           <h2 class="chat-title">{{ conversation.title || '新对话' }}</h2>
           <span class="model-badge">{{ formatModelName(conversation.model) }}</span>
-          <span v-if="conversation.thinking_enabled" class="thinking-badge">思考</span>
         </div>
       </div>
 
@@ -60,6 +59,7 @@
           :disabled="streaming"
           :tools-enabled="toolsEnabled"
           @send="$emit('sendMessage', $event)"
+          @stop-streaming="$emit('stopStreaming')"
           @toggle-tools="$emit('toggleTools', $event)"
         />
     </template>
@@ -91,7 +91,7 @@ const props = defineProps({
   toolsEnabled: { type: Boolean, default: true },
 })
 
-const emit = defineEmits(['sendMessage', 'deleteMessage', 'regenerateMessage', 'loadMoreMessages', 'toggleTools'])
+const emit = defineEmits(['sendMessage', 'stopStreaming', 'deleteMessage', 'regenerateMessage', 'loadMoreMessages', 'toggleTools'])
 
 const scrollContainer = ref(null)
 const inputRef = ref(null)

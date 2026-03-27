@@ -1,7 +1,8 @@
 """Chat completion service"""
 import json
 import uuid
-from flask import current_app, g, Response
+from flask import current_app, g, Response, request as flask_request
+from werkzeug.exceptions import ClientDisconnected
 from backend import db
 from backend.models import Conversation, Message
 from backend.tools import registry, ToolExecutor
@@ -13,12 +14,23 @@ from backend.services.llm_client import LLMClient
 from backend.config import MAX_ITERATIONS
 
 
+def _client_disconnected():
+    """Check if the client has disconnected."""
+    try:
+        stream = flask_request.input_stream
+        # If input_stream is unavailable, assume still connected
+        if stream is None:
+            return False
+        return stream.closed
+    except Exception:
+        return False
+
+
 class ChatService:
     """Chat completion service with tool support"""
 
     def __init__(self, llm: LLMClient):
         self.llm = llm
-        self.executor = ToolExecutor(registry=registry)
 
 
     def stream_response(self, conv: Conversation, tools_enabled: bool = True, project_id: str = None):
@@ -38,8 +50,10 @@ class ChatService:
         tools = registry.list_all() if tools_enabled else None
         initial_messages = build_messages(conv, project_id)
         
-        # Clear tool call history for new request
-        self.executor.clear_history()
+        # Create per-request executor for thread-safe isolation.
+        # Each request gets its own _call_history and _cache, eliminating
+        # race conditions when multiple conversations stream concurrently.
+        executor = ToolExecutor(registry=registry)
         
         # Build context for tool execution
         context = None
@@ -89,6 +103,11 @@ class ChatService:
 
                     # Stream LLM response chunk by chunk
                     for line in resp.iter_lines():
+                        # Early exit if client has disconnected
+                        if _client_disconnected():
+                            resp.close()
+                            return
+
                         if not line:
                             continue
                         line = line.decode("utf-8")
@@ -177,7 +196,7 @@ class ChatService:
 
                         # Execute the tool
                         with app.app_context():
-                            single_result = self.executor.process_tool_calls([tc], context)
+                            single_result = executor.process_tool_calls([tc], context)
                         tool_results.extend(single_result)
 
                         # Emit tool_result step (after execution)
@@ -269,8 +288,15 @@ class ChatService:
             
             yield f"event: error\ndata: {json.dumps({'content': 'exceeded maximum tool call iterations'}, ensure_ascii=False)}\n\n"
         
+        def safe_generate():
+            """Wrapper that catches client disconnection during yield."""
+            try:
+                yield from generate()
+            except (ClientDisconnected, BrokenPipeError, ConnectionResetError):
+                pass  # Client aborted, silently stop
+
         return Response(
-            generate(),
+            safe_generate(),
             mimetype="text/event-stream",
             headers={
                 "Cache-Control": "no-cache, no-store, must-revalidate",

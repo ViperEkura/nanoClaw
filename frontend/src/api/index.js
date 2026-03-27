@@ -52,6 +52,7 @@ function createSSEStream(url, body, { onProcessStep, onDone, onError }) {
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
+      let completed = false
 
       while (true) {
         const { done, value } = await reader.read()
@@ -70,12 +71,18 @@ function createSSEStream(url, body, { onProcessStep, onDone, onError }) {
             if (currentEvent === 'process_step' && onProcessStep) {
               onProcessStep(data)
             } else if (currentEvent === 'done' && onDone) {
+              completed = true
               onDone(data)
             } else if (currentEvent === 'error' && onError) {
               onError(data.content)
             }
           }
         }
+      }
+
+      // Connection closed without receiving 'done' event — clean up
+      if (!completed && onError) {
+        onError('stream ended unexpectedly')
       }
     } catch (e) {
       if (e.name !== 'AbortError' && onError) {
