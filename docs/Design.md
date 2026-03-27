@@ -162,16 +162,22 @@ classDiagram
 `content` 字段统一使用 JSON 格式存储：
 
 **User 消息：**
+
 ```json
 {
   "text": "用户输入的文本内容",
   "attachments": [
-    {"name": "utils.py", "extension": "py", "content": "def hello()..."}
+    {
+    "name": "utils.py", 
+    "extension": "py", 
+    "content": "def hello()..."
+    }
   ]
 }
 ```
 
 **Assistant 消息：**
+
 ```json
 {
   "text": "AI 回复的文本内容",
@@ -360,23 +366,24 @@ def copy_folder_to_project(source_path: str, project_dir: Path, project_name: st
 ```python
 def validate_path_in_project(path: str, project_dir: Path) -> Path:
     p = Path(path)
-    
+
     # 相对路径转换为绝对路径
     if not p.is_absolute():
         p = project_dir / p
-    
+
     p = p.resolve()
-    
+
     # 安全检查：确保路径在项目目录内
     try:
         p.relative_to(project_dir.resolve())
     except ValueError:
         raise ValueError(f"Path '{path}' is outside project directory")
-    
+
     return p
 ```
 
 即使传入恶意路径，后端也会拒绝：
+
 ```python
 "../../../etc/passwd"  # 尝试跳出项目目录 -> ValueError
 "/etc/passwd"         # 绝对路径攻击 -> ValueError
@@ -393,11 +400,11 @@ def process_tool_calls(self, tool_calls, context=None):
     for call in tool_calls:
         name = call["function"]["name"]
         args = json.loads(call["function"]["arguments"])
-        
+
         # 自动注入 project_id
         if context and name.startswith("file_") and "project_id" in context:
             args["project_id"] = context["project_id"]
-        
+
         result = self.registry.execute(name, args)
 ```
 
@@ -407,70 +414,89 @@ def process_tool_calls(self, tool_calls, context=None):
 
 ### 认证
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| `GET` | `/api/auth/mode` | 获取当前认证模式（公开端点） |
-| `POST` | `/api/auth/login` | 用户登录，返回 JWT token |
-| `POST` | `/api/auth/register` | 用户注册（仅多用户模式可用） |
-| `GET` | `/api/auth/profile` | 获取当前用户信息 |
-| `PATCH` | `/api/auth/profile` | 更新当前用户信息 |
+| 方法      | 路径                   | 说明                |
+| ------- | -------------------- | ----------------- |
+| `GET`   | `/api/auth/mode`     | 获取当前认证模式（公开端点）    |
+| `POST`  | `/api/auth/login`    | 用户登录，返回 JWT token |
+| `POST`  | `/api/auth/register` | 用户注册（仅多用户模式可用）    |
+| `GET`   | `/api/auth/profile`  | 获取当前用户信息          |
+| `PATCH` | `/api/auth/profile`  | 更新当前用户信息          |
 
 ### 会话管理
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| `POST` | `/api/conversations` | 创建会话（可选 `project_id` 绑定项目） |
-| `GET` | `/api/conversations` | 获取会话列表（可选 `project_id` 筛选，游标分页） |
-| `GET` | `/api/conversations/:id` | 获取会话详情 |
-| `PATCH` | `/api/conversations/:id` | 更新会话（支持修改 `project_id`） |
-| `DELETE` | `/api/conversations/:id` | 删除会话 |
+| 方法       | 路径                       | 说明                              |
+| -------- | ------------------------ | ------------------------------- |
+| `POST`   | `/api/conversations`     | 创建会话（可选 `project_id` 绑定项目）      |
+| `GET`    | `/api/conversations`     | 获取会话列表（可选 `project_id` 筛选，游标分页） |
+| `GET`    | `/api/conversations/:id` | 获取会话详情                          |
+| `PATCH`  | `/api/conversations/:id` | 更新会话（支持修改 `project_id`）         |
+| `DELETE` | `/api/conversations/:id` | 删除会话                            |
 
 ### 消息管理
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| `GET` | `/api/conversations/:id/messages` | 获取消息列表（游标分页） |
-| `POST` | `/api/conversations/:id/messages` | 发送消息（SSE 流式） |
-| `DELETE` | `/api/conversations/:id/messages/:mid` | 删除消息 |
-| `POST` | `/api/conversations/:id/regenerate/:mid` | 重新生成消息 |
+| 方法       | 路径                                       | 说明           |
+| -------- | ---------------------------------------- | ------------ |
+| `GET`    | `/api/conversations/:id/messages`        | 获取消息列表（游标分页） |
+| `POST`   | `/api/conversations/:id/messages`        | 发送消息（SSE 流式） |
+| `DELETE` | `/api/conversations/:id/messages/:mid`   | 删除消息         |
+| `POST`   | `/api/conversations/:id/regenerate/:mid` | 重新生成消息       |
 
 ### 项目管理
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| `GET` | `/api/projects` | 获取项目列表 |
-| `POST` | `/api/projects` | 创建项目 |
-| `GET` | `/api/projects/:id` | 获取项目详情 |
-| `PUT` | `/api/projects/:id` | 更新项目 |
-| `DELETE` | `/api/projects/:id` | 删除项目 |
-| `POST` | `/api/projects/upload` | 上传文件夹作为项目 |
-| `GET` | `/api/projects/:id/files` | 列出项目文件（支持 `?path=subdir` 子目录） |
-| `GET` | `/api/projects/:id/files/:filepath` | 读取文件内容（文本文件，最大 5 MB） |
-| `PUT` | `/api/projects/:id/files/:filepath` | 创建或覆盖文件（Body: `{"content": "..."}`) |
-| `DELETE` | `/api/projects/:id/files/:filepath` | 删除文件或目录 |
-| `POST` | `/api/projects/:id/files/mkdir` | 创建目录（Body: `{"path": "src/utils"}`) |
-| `POST` | `/api/projects/:id/search` | 搜索文件内容（Body: `{"query": "...", "path": "", "max_results": 50, "case_sensitive": false}`) |
+| 方法       | 路径                                  | 说明                                                                                       |
+| -------- | ----------------------------------- | ---------------------------------------------------------------------------------------- |
+| `GET`    | `/api/projects`                     | 获取项目列表                                                                                   |
+| `POST`   | `/api/projects`                     | 创建项目                                                                                     |
+| `GET`    | `/api/projects/:id`                 | 获取项目详情                                                                                   |
+| `PUT`    | `/api/projects/:id`                 | 更新项目                                                                                     |
+| `DELETE` | `/api/projects/:id`                 | 删除项目                                                                                     |
+| `POST`   | `/api/projects/upload`              | 上传文件夹作为项目                                                                                |
+| `GET`    | `/api/projects/:id/files`           | 列出项目文件（支持 `?path=subdir` 子目录）                                                            |
+| `GET`    | `/api/projects/:id/files/:filepath` | 读取文件内容（文本文件，最大 5 MB）                                                                     |
+| `PUT`    | `/api/projects/:id/files/:filepath` | 创建或覆盖文件（Body: `{"content": "..."}`)                                                      |
+| `DELETE` | `/api/projects/:id/files/:filepath` | 删除文件或目录                                                                                  |
+| `POST`   | `/api/projects/:id/files/mkdir`     | 创建目录（Body: `{"path": "src/utils"}`)                                                      |
+| `POST`   | `/api/projects/:id/search`          | 搜索文件内容（Body: `{"query": "...", "path": "", "max_results": 50, "case_sensitive": false}`) |
 
 ### 其他
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| `GET` | `/api/models` | 获取模型列表 |
-| `GET` | `/api/tools` | 获取工具列表 |
+| 方法    | 路径                  | 说明         |
+| ----- | ------------------- | ---------- |
+| `GET` | `/api/models`       | 获取模型列表     |
+| `GET` | `/api/tools`        | 获取工具列表     |
 | `GET` | `/api/stats/tokens` | Token 使用统计 |
 
 ---
 
 ## SSE 事件
 
-| 事件 | 说明 |
-|------|------|
-| `message` | 回复内容的增量片段 |
-| `tool_calls` | 工具调用信息 |
-| `tool_result` | 工具执行结果 |
+| 事件             | 说明                                                                        |
+| -------------- | ------------------------------------------------------------------------- |
+| `thinking`     | 思考过程的增量片段（实时流式输出）                                                         |
+| `message`      | 回复内容的增量片段（实时流式输出）                                                         |
 | `process_step` | 有序处理步骤（thinking/text/tool_call/tool_result），支持穿插显示。携带 `id`、`index` 确保渲染顺序 |
-| `error` | 错误信息 |
-| `done` | 回复结束，携带 message_id 和 token_count |
+| `error`        | 错误信息                                                                      |
+| `done`         | 回复结束，携带 message_id、token_count 和 suggested_title                            |
+
+> **注意**：`thinking` 和 `message` 事件提供实时流式体验，每条 chunk 立即推送到前端。`process_step` 事件在每次迭代结束后发送完整内容，用于确定渲染顺序和 DB 存储。
+
+### thinking / message 事件格式
+
+实时流式事件，每条携带一个增量片段：
+
+```json
+// 思考增量片段
+{"content": "正在分析用户需求..."}
+
+// 文本增量片段
+{"content": "根据分析结果"}
+```
+
+字段说明：
+
+| 字段        | 说明                           |
+| --------- | ---------------------------- |
+| `content` | 增量文本片段（前端累积拼接为完整内容） |
 
 ### process_step 事件格式
 
@@ -479,6 +505,7 @@ def process_tool_calls(self, tool_calls, context=None):
 ```json
 // 思考过程
 {"id": "step-0", "index": 0, "type": "thinking", "content": "完整思考内容..."}
+
 
 // 回复文本（可穿插在任意步骤之间）
 {"id": "step-1", "index": 1, "type": "text", "content": "回复文本内容..."}
@@ -492,16 +519,16 @@ def process_tool_calls(self, tool_calls, context=None):
 
 字段说明：
 
-| 字段 | 说明 |
-|------|------|
-| `id` | 步骤唯一标识（格式 `step-{index}`），用于前端 key |
-| `index` | 步骤序号，确保按正确顺序显示 |
-| `type` | 步骤类型：`thinking` / `text` / `tool_call` / `tool_result` |
-| `id_ref` | 工具调用引用 ID（仅 tool_call/tool_result），用于匹配调用与结果 |
-| `name` | 工具名称（仅 tool_call/tool_result） |
-| `arguments` | 工具调用参数 JSON 字符串（仅 tool_call） |
-| `content` | 内容（thinking 的思考内容、text 的文本、tool_result 的返回结果） |
-| `skipped` | 工具是否被跳过（仅 tool_result） |
+| 字段          | 说明                                                     |
+| ----------- | ------------------------------------------------------ |
+| `id`        | 步骤唯一标识（格式 `step-{index}`），用于前端 key                     |
+| `index`     | 步骤序号，确保按正确顺序显示                                         |
+| `type`      | 步骤类型：`thinking` / `text` / `tool_call` / `tool_result` |
+| `id_ref`    | 工具调用引用 ID（仅 tool_call/tool_result），用于匹配调用与结果           |
+| `name`      | 工具名称（仅 tool_call/tool_result）                          |
+| `arguments` | 工具调用参数 JSON 字符串（仅 tool_call）                           |
+| `content`   | 内容（thinking 的思考内容、text 的文本、tool_result 的返回结果）          |
+| `skipped`   | 工具是否被跳过（仅 tool_result）                                 |
 
 ### 多轮迭代中的步骤顺序
 
@@ -516,79 +543,91 @@ def process_tool_calls(self, tool_calls, context=None):
 
 所有步骤通过全局递增的 `index` 保证顺序。后端在完成所有迭代后，将这些步骤存入 `content_json["steps"]` 数组写入数据库。前端页面刷新时从 API 加载消息，`message_to_dict` 提取 `steps` 字段映射为 `process_steps` 返回，ProcessBlock 组件按 `index` 顺序渲染。
 
+### done 事件格式
+
+```json
+{"message_id": "msg-uuid", "token_count": 1234, "suggested_title": "分析数据"}
+```
+
+| 字段               | 说明                                    |
+| ---------------- | ------------------------------------- |
+| `message_id`     | 消息 UUID（已入库）                          |
+| `token_count`    | 总输出 token 数（跨所有迭代累积）                  |
+| `suggested_title` | 建议会话标题（从首条用户消息提取，无标题时为 `"新对话"`，已有标题时为 `null`） |
+
 ---
 
 ## 数据模型
 
 ### User（用户）
 
-| 字段 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `id` | Integer | - | 自增主键 |
-| `username` | String(50) | - | 用户名（唯一） |
-| `password_hash` | String(255) | null | 密码哈希（可为空，支持 API-key-only 认证） |
-| `email` | String(120) | null | 邮箱（唯一） |
-| `avatar` | String(512) | null | 头像 URL |
-| `role` | String(20) | "user" | 角色：`user` / `admin` |
-| `is_active` | Boolean | true | 是否激活 |
-| `created_at` | DateTime | now | 创建时间 |
-| `last_login_at` | DateTime | null | 最后登录时间 |
+| 字段              | 类型          | 默认值    | 说明                           |
+| --------------- | ----------- | ------ | ---------------------------- |
+| `id`            | Integer     | -      | 自增主键                         |
+| `username`      | String(50)  | -      | 用户名（唯一）                      |
+| `password_hash` | String(255) | null   | 密码哈希（可为空，支持 API-key-only 认证） |
+| `email`         | String(120) | null   | 邮箱（唯一）                       |
+| `avatar`        | String(512) | null   | 头像 URL                       |
+| `role`          | String(20)  | "user" | 角色：`user` / `admin`          |
+| `is_active`     | Boolean     | true   | 是否激活                         |
+| `created_at`    | DateTime    | now    | 创建时间                         |
+| `last_login_at` | DateTime    | null   | 最后登录时间                       |
 
 `password` 通过 property setter 自动调用 `werkzeug` 的 `generate_password_hash` 存储，通过 `check_password()` 方法验证。
 
 ### Project（项目）
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `id` | String(64) | UUID 主键 |
-| `user_id` | Integer | 外键关联 User |
-| `name` | String(255) | 项目名称（用户内唯一） |
-| `path` | String(512) | 相对路径（如 user_1/my_project） |
-| `description` | Text | 项目描述 |
-| `created_at` | DateTime | 创建时间 |
-| `updated_at` | DateTime | 更新时间 |
+| 字段            | 类型          | 说明                        |
+| ------------- | ----------- | ------------------------- |
+| `id`          | String(64)  | UUID 主键                   |
+| `user_id`     | Integer     | 外键关联 User                 |
+| `name`        | String(255) | 项目名称（用户内唯一）               |
+| `path`        | String(512) | 相对路径（如 user_1/my_project） |
+| `description` | Text        | 项目描述                      |
+| `created_at`  | DateTime    | 创建时间                      |
+| `updated_at`  | DateTime    | 更新时间                      |
 
 ### Conversation（会话）
 
-| 字段 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `id` | String(64) | UUID | 主键 |
-| `user_id` | Integer | - | 外键关联 User |
-| `project_id` | String(64) | null | 外键关联 Project（可选） |
-| `title` | String(255) | "" | 会话标题 |
-| `model` | String(64) | "glm-5" | 模型名称 |
-| `system_prompt` | Text | "" | 系统提示词 |
-| `temperature` | Float | 1.0 | 采样温度 |
-| `max_tokens` | Integer | 65536 | 最大输出 token |
-| `thinking_enabled` | Boolean | False | 是否启用思维链 |
-| `created_at` | DateTime | now | 创建时间 |
-| `updated_at` | DateTime | now | 更新时间 |
+| 字段                 | 类型          | 默认值     | 说明               |
+| ------------------ | ----------- | ------- | ---------------- |
+| `id`               | String(64)  | UUID    | 主键               |
+| `user_id`          | Integer     | -       | 外键关联 User        |
+| `project_id`       | String(64)  | null    | 外键关联 Project（可选） |
+| `title`            | String(255) | ""      | 会话标题             |
+| `model`            | String(64)  | "glm-5" | 模型名称             |
+| `system_prompt`    | Text        | ""      | 系统提示词            |
+| `temperature`      | Float       | 1.0     | 采样温度             |
+| `max_tokens`       | Integer     | 65536   | 最大输出 token       |
+| `thinking_enabled` | Boolean     | False   | 是否启用思维链          |
+| `created_at`       | DateTime    | now     | 创建时间             |
+| `updated_at`       | DateTime    | now     | 更新时间             |
 
 ### Message（消息）
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `id` | String(64) | UUID 主键 |
-| `conversation_id` | String(64) | 外键关联 Conversation |
-| `role` | String(16) | user/assistant/system/tool |
-| `content` | LongText | JSON 格式内容（见上方结构说明），assistant 消息包含 `steps` 有序步骤数组 |
-| `token_count` | Integer | Token 数量 |
-| `created_at` | DateTime | 创建时间 |
+| 字段                | 类型         | 说明                                               |
+| ----------------- | ---------- | ------------------------------------------------ |
+| `id`              | String(64) | UUID 主键                                          |
+| `conversation_id` | String(64) | 外键关联 Conversation                                |
+| `role`            | String(16) | user/assistant/system/tool                       |
+| `content`         | LongText   | JSON 格式内容（见上方结构说明），assistant 消息包含 `steps` 有序步骤数组 |
+| `token_count`     | Integer    | Token 数量                                         |
+| `created_at`      | DateTime   | 创建时间                                             |
 
 `message_to_dict()` 辅助函数负责解析 `content` JSON，并提取 `steps` 字段映射为 `process_steps` 返回给前端，确保页面刷新后仍能按正确顺序渲染穿插的思考、文本和工具调用。
 
 ### TokenUsage（Token 使用统计）
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `id` | Integer | 自增主键 |
-| `user_id` | Integer | 外键关联 User |
-| `date` | Date | 统计日期 |
-| `model` | String(64) | 模型名称 |
-| `prompt_tokens` | Integer | 输入 token |
-| `completion_tokens` | Integer | 输出 token |
-| `total_tokens` | Integer | 总 token |
-| `created_at` | DateTime | 创建时间 |
+| 字段                  | 类型         | 说明        |
+| ------------------- | ---------- | --------- |
+| `id`                | Integer    | 自增主键      |
+| `user_id`           | Integer    | 外键关联 User |
+| `date`              | Date       | 统计日期      |
+| `model`             | String(64) | 模型名称      |
+| `prompt_tokens`     | Integer    | 输入 token  |
+| `completion_tokens` | Integer    | 输出 token  |
+| `total_tokens`      | Integer    | 总 token   |
+| `created_at`        | DateTime   | 创建时间      |
 
 ---
 
@@ -601,6 +640,7 @@ GET /api/conversations?limit=20&cursor=conv_abc123
 ```
 
 响应：
+
 ```json
 {
   "code": 0,
@@ -651,16 +691,17 @@ GET /api/conversations?limit=20&cursor=conv_abc123
 
 ### 公开端点（无需认证）
 
-| 端点 | 说明 |
-|------|------|
-| `POST /api/auth/login` | 登录 |
-| `POST /api/auth/register` | 注册 |
-| `GET /api/models` | 模型列表 |
-| `GET /api/tools` | 工具列表 |
+| 端点                        | 说明   |
+| ------------------------- | ---- |
+| `POST /api/auth/login`    | 登录   |
+| `POST /api/auth/register` | 注册   |
+| `GET /api/models`         | 模型列表 |
+| `GET /api/tools`          | 工具列表 |
 
 ### 前端适配
 
 前端 API 层（`frontend/src/api/index.js`）已预留 token 管理：
+
 - `getToken()` / `setToken(token)` / `clearToken()`
 - 所有请求自动附带 `Authorization: Bearer <token>`（token 为空时不发送）
 - 收到 401 时自动清除 token
@@ -669,17 +710,18 @@ GET /api/conversations?limit=20&cursor=conv_abc123
 
 ---
 
-| Code | 说明 |
-|------|------|
-| `0` | 成功 |
-| `400` | 请求参数错误 |
+| Code  | 说明                     |
+| ----- | ---------------------- |
+| `0`   | 成功                     |
+| `400` | 请求参数错误                 |
 | `401` | 未认证（多用户模式下缺少或无效 token） |
-| `403` | 禁止访问（账户禁用、单用户模式下注册等） |
-| `404` | 资源不存在 |
-| `409` | 资源冲突（用户名/邮箱已存在） |
-| `500` | 服务器错误 |
+| `403` | 禁止访问（账户禁用、单用户模式下注册等）   |
+| `404` | 资源不存在                  |
+| `409` | 资源冲突（用户名/邮箱已存在）        |
+| `500` | 服务器错误                  |
 
 错误响应：
+
 ```json
 {
   "code": 404,
@@ -694,6 +736,7 @@ GET /api/conversations?limit=20&cursor=conv_abc123
 ### 设计目标
 
 将项目（Project）和对话（Conversation）建立**持久绑定关系**，实现：
+
 1. 创建对话时自动绑定当前选中的项目
 2. 对话列表支持按项目筛选/分组
 3. 工具执行自动使用对话所属项目的上下文，无需 AI 每次询问 `project_id`
@@ -718,6 +761,7 @@ erDiagram
 ```
 
 `Conversation.project_id` 是 nullable 的外键：
+
 - `null` = 未绑定项目（通用对话，文件工具不可用）
 - 非 null = 绑定到特定项目（工具自动使用该项目的工作空间）
 
@@ -793,6 +837,7 @@ GET /api/conversations                    # 返回所有对话（当前行为）
 #### 发送消息 `POST /api/conversations/:id/messages`
 
 `project_id` 优先级：
+
 1. 请求体中的 `project_id`（前端显式传递）
 2. `conversation.project_id`（对话绑定的项目，自动回退）
 3. `null`（无项目上下文，文件工具报错提示）
@@ -849,6 +894,7 @@ if name.startswith("file_") and context and "project_id" in context:
 ```
 
 **交互规则：**
+
 1. 顶部项目选择器决定**当前工作空间**
 2. 选中项目后，对话列表**仅显示该项目的对话**
 3. 创建新对话时**自动绑定**当前项目

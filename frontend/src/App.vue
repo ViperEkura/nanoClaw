@@ -44,6 +44,7 @@
       :messages="messages"
       :streaming="streaming"
       :streaming-content="streamContent"
+      :streaming-thinking="streamThinkingContent"
       :streaming-process-steps="streamProcessSteps"
       :has-more-messages="hasMoreMessages"
       :loading-more="loadingMessages"
@@ -140,7 +141,7 @@ const nextMsgCursor = ref(null)
 // processSteps are stored in the message object and later persisted to DB.
 const streaming = ref(false)
 const streamContent = ref('')            // Accumulated text content during current iteration
-const streamToolCalls = shallowRef([])   // All tool calls across iterations (legacy compat)
+const streamThinkingContent = ref('')    // Accumulated thinking content during current iteration
 const streamProcessSteps = shallowRef([]) // Ordered steps: thinking/text/tool_call/tool_result
 
 // 保存每个对话的流式状态
@@ -149,7 +150,7 @@ const streamStates = new Map()
 function setStreamState(isActive) {
   streaming.value = isActive
   streamContent.value = ''
-  streamToolCalls.value = []
+  streamThinkingContent.value = ''
   streamProcessSteps.value = []
 }
 
@@ -251,7 +252,7 @@ async function selectConversation(id) {
     streamStates.set(currentConvId.value, {
       streaming: true,
       streamContent: streamContent.value,
-      streamToolCalls: [...streamToolCalls.value],
+      streamThinkingContent: streamThinkingContent.value,
       streamProcessSteps: [...streamProcessSteps.value],
       messages: [...messages.value],
     })
@@ -266,7 +267,7 @@ async function selectConversation(id) {
   if (savedState && savedState.streaming) {
     streaming.value = true
     streamContent.value = savedState.streamContent
-    streamToolCalls.value = savedState.streamToolCalls
+    streamThinkingContent.value = savedState.streamThinkingContent || ''
     streamProcessSteps.value = savedState.streamProcessSteps
     messages.value = savedState.messages || []
   } else {
@@ -309,19 +310,8 @@ function createStreamCallbacks(convId, { updateConvList = true } = {}) {
     onMessage(text) {
       updateStreamField(convId, 'streamContent', streamContent, prev => (prev || '') + text)
     },
-    onToolCalls(calls) {
-      updateStreamField(convId, 'streamToolCalls', streamToolCalls, prev => [
-        ...(prev || []),
-        ...calls.map(c => ({ ...c, result: null })),
-      ])
-    },
-    onToolResult(result) {
-      updateStreamField(convId, 'streamToolCalls', streamToolCalls, prev => {
-        const arr = prev ? [...prev] : []
-        const call = arr.find(c => c.id === result.id)
-        if (call) call.result = result.content
-        return arr
-      })
+    onThinking(text) {
+      updateStreamField(convId, 'streamThinkingContent', streamThinkingContent, prev => (prev || '') + text)
     },
     onProcessStep(step) {
       // Insert step at its index position to preserve ordering.
@@ -334,10 +324,12 @@ function createStreamCallbacks(convId, { updateConvList = true } = {}) {
         steps[step.index] = step
         return steps
       })
-      // When text is finalized as a process_step, reset streaming content
-      // to prevent duplication (the text is now rendered via processSteps).
+      // When a step is finalized, reset the corresponding streaming content
+      // to prevent duplication (the content is now rendered via processSteps).
       if (step.type === 'text') {
         updateStreamField(convId, 'streamContent', streamContent, () => '')
+      } else if (step.type === 'thinking') {
+        updateStreamField(convId, 'streamThinkingContent', streamThinkingContent, () => '')
       }
     },
     async onDone(data) {
@@ -349,13 +341,34 @@ function createStreamCallbacks(convId, { updateConvList = true } = {}) {
         // Build the final message object.
         // process_steps is the primary ordered data for rendering (thinking/text/tool_call/tool_result).
         // When page reloads, these steps are loaded from DB via the 'steps' field in content JSON.
+        // NOTE: streamContent is already '' at this point (reset by process_step text event),
+        // so extract text from the last text step in processSteps.
+        const steps = streamProcessSteps.value.filter(Boolean)
+        const textSteps = steps.filter(s => s.type === 'text')
+        const lastText = textSteps.length > 0 ? textSteps[textSteps.length - 1].content : streamContent.value
+
+        // Derive legacy tool_calls from processSteps (backward compat for DB and MessageBubble fallback)
+        const toolCallSteps = steps.filter(s => s && s.type === 'tool_call')
+        const toolResultMap = {}
+        for (const s of steps) {
+          if (s && s.type === 'tool_result') toolResultMap[s.id_ref] = s.content
+        }
+        const legacyToolCalls = toolCallSteps.length > 0
+          ? toolCallSteps.map(tc => ({
+              id: tc.id_ref || tc.id,
+              type: 'function',
+              function: { name: tc.name, arguments: tc.arguments },
+              result: toolResultMap[tc.id_ref || tc.id] || null,
+            }))
+          : null
+
         messages.value = [...messages.value, {
           id: data.message_id,
           conversation_id: convId,
           role: 'assistant',
-          text: streamContent.value,
-          tool_calls: streamToolCalls.value.length > 0 ? streamToolCalls.value : null,
-          process_steps: streamProcessSteps.value.filter(Boolean),
+          text: lastText,
+          tool_calls: legacyToolCalls,
+          process_steps: steps,
           token_count: data.token_count,
           created_at: new Date().toISOString(),
         }]

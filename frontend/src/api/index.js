@@ -29,10 +29,10 @@ async function request(url, options = {}) {
  * Shared SSE stream processor - parses SSE events and dispatches to callbacks
  * @param {string} url - API URL (without BASE prefix)
  * @param {object} body - Request body
- * @param {object} callbacks - Event handlers: { onMessage, onToolCalls, onToolResult, onProcessStep, onDone, onError }
+ * @param {object} callbacks - Event handlers: { onMessage, onThinking, onProcessStep, onDone, onError }
  * @returns {{ abort: () => void }}
  */
-function createSSEStream(url, body, { onMessage, onToolCalls, onToolResult, onProcessStep, onDone, onError }) {
+function createSSEStream(url, body, { onMessage, onThinking, onProcessStep, onDone, onError }) {
   const controller = new AbortController()
 
   const promise = (async () => {
@@ -67,12 +67,10 @@ function createSSEStream(url, body, { onMessage, onToolCalls, onToolResult, onPr
             currentEvent = line.slice(7).trim()
           } else if (line.startsWith('data: ')) {
             const data = JSON.parse(line.slice(6))
-            if (currentEvent === 'message' && onMessage) {
+            if (currentEvent === 'thinking' && onThinking) {
+              onThinking(data.content)
+            } else if (currentEvent === 'message' && onMessage) {
               onMessage(data.content)
-            } else if (currentEvent === 'tool_calls' && onToolCalls) {
-              onToolCalls(data.calls)
-            } else if (currentEvent === 'tool_result' && onToolResult) {
-              onToolResult(data)
             } else if (currentEvent === 'process_step' && onProcessStep) {
               onProcessStep(data)
             } else if (currentEvent === 'done' && onDone) {

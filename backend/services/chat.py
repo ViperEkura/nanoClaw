@@ -56,13 +56,14 @@ class ChatService:
             all_steps = []      # Collect all ordered steps for DB storage (thinking/text/tool_call/tool_result)
             step_index = 0  # Track global step index for ordering
             total_completion_tokens = 0  # Accumulated across all iterations
-            total_prompt_tokens = 0      # Accumulated across all iterations
+            prompt_tokens = 0             # Not accumulated — last iteration's value is sufficient
+                                # (each iteration re-sends the full context, so earlier
+                                #  prompts are strict subsets of the final one)
 
             for iteration in range(self.MAX_ITERATIONS):
                 full_content = ""
                 full_thinking = ""
                 token_count = 0
-                prompt_tokens = 0
                 msg_id = str(uuid.uuid4())
                 tool_calls_list = []
 
@@ -114,6 +115,7 @@ class ChatService:
                         reasoning = delta.get("reasoning_content", "")
                         if reasoning:
                             full_thinking += reasoning
+                            yield f"event: thinking\ndata: {json.dumps({'content': reasoning}, ensure_ascii=False)}\n\n"
 
                         # Accumulate text content for this iteration
                         text = delta.get("content", "")
@@ -128,36 +130,32 @@ class ChatService:
                     yield f"event: error\ndata: {json.dumps({'content': str(e)}, ensure_ascii=False)}\n\n"
                     return
 
-                # --- Tool calls exist: emit finalized steps, execute tools, continue loop ---
+                # --- Finalize thinking/text steps for this iteration (common to both paths) ---
+                if full_thinking:
+                    step_data = {
+                        'id': f'step-{step_index}',
+                        'index': step_index,
+                        'type': 'thinking',
+                        'content': full_thinking,
+                    }
+                    all_steps.append(step_data)
+                    yield f"event: process_step\ndata: {json.dumps(step_data, ensure_ascii=False)}\n\n"
+                    step_index += 1
+
+                if full_content:
+                    step_data = {
+                        'id': f'step-{step_index}',
+                        'index': step_index,
+                        'type': 'text',
+                        'content': full_content,
+                    }
+                    all_steps.append(step_data)
+                    yield f"event: process_step\ndata: {json.dumps(step_data, ensure_ascii=False)}\n\n"
+                    step_index += 1
+
+                # --- Branch: tool calls vs final ---
                 if tool_calls_list:
                     all_tool_calls.extend(tool_calls_list)
-
-                    # Record thinking as a finalized step (preserves order)
-                    if full_thinking:
-                        step_data = {
-                            'id': f'step-{step_index}',
-                            'index': step_index,
-                            'type': 'thinking',
-                            'content': full_thinking,
-                        }
-                        all_steps.append(step_data)
-                        yield f"event: process_step\ndata: {json.dumps(step_data, ensure_ascii=False)}\n\n"
-                        step_index += 1
-
-                    # Record text as a finalized step (text that preceded tool calls)
-                    if full_content:
-                        step_data = {
-                            'id': f'step-{step_index}',
-                            'index': step_index,
-                            'type': 'text',
-                            'content': full_content,
-                        }
-                        all_steps.append(step_data)
-                        yield f"event: process_step\ndata: {json.dumps(step_data, ensure_ascii=False)}\n\n"
-                        step_index += 1
-
-                    # Legacy tool_calls event for backward compatibility
-                    yield f"event: tool_calls\ndata: {json.dumps({'calls': tool_calls_list}, ensure_ascii=False)}\n\n"
 
                     # Execute each tool call, emit tool_call + tool_result as paired steps
                     tool_results = []
@@ -200,9 +198,6 @@ class ChatService:
                         yield f"event: process_step\ndata: {json.dumps(result_step, ensure_ascii=False)}\n\n"
                         step_index += 1
 
-                        # Legacy tool_result event for backward compatibility
-                        yield f"event: tool_result\ndata: {json.dumps({'id': tr['tool_call_id'], 'name': tr['name'], 'content': tr['content'], 'skipped': skipped}, ensure_ascii=False)}\n\n"
-
                     # Append assistant message + tool results for the next iteration
                     messages.append({
                         "role": "assistant",
@@ -211,35 +206,12 @@ class ChatService:
                     })
                     messages.extend(tool_results)
                     all_tool_results.extend(tool_results)
-                    total_prompt_tokens += prompt_tokens
                     total_completion_tokens += token_count
                     continue
 
-                # --- No tool calls: final iteration — emit remaining steps and save ---
-                if full_thinking:
-                    step_data = {
-                        'id': f'step-{step_index}',
-                        'index': step_index,
-                        'type': 'thinking',
-                        'content': full_thinking,
-                    }
-                    all_steps.append(step_data)
-                    yield f"event: process_step\ndata: {json.dumps(step_data, ensure_ascii=False)}\n\n"
-                    step_index += 1
-
-                if full_content:
-                    step_data = {
-                        'id': f'step-{step_index}',
-                        'index': step_index,
-                        'type': 'text',
-                        'content': full_content,
-                    }
-                    all_steps.append(step_data)
-                    yield f"event: process_step\ndata: {json.dumps(step_data, ensure_ascii=False)}\n\n"
-                    step_index += 1
-
+                # --- No tool calls: final iteration — save message to DB ---
                 suggested_title = None
-                total_prompt_tokens += prompt_tokens
+                # prompt_tokens already holds the last iteration's value (set during streaming)
                 total_completion_tokens += token_count
                 with app.app_context():
                     # Build content JSON with ordered steps array for DB storage.
@@ -268,7 +240,7 @@ class ChatService:
                     # Record token usage (get user_id from conv, not g —
                     # app.app_context() creates a new context where g.current_user is lost)
                     if conv:
-                        record_token_usage(conv.user_id, conv_model, total_prompt_tokens, total_completion_tokens)
+                        record_token_usage(conv.user_id, conv_model, prompt_tokens, total_completion_tokens)
 
                     if conv and (not conv.title or conv.title == "新对话"):
                         user_msg = Message.query.filter_by(

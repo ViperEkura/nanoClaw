@@ -49,6 +49,7 @@
                 <ProcessBlock
                   :process-steps="streamingProcessSteps"
                   :streaming-content="streamingContent"
+                  :streaming-thinking="streamingThinking"
                   :streaming="streaming"
                 />
               </div>
@@ -87,6 +88,7 @@ const props = defineProps({
   messages: { type: Array, required: true },
   streaming: { type: Boolean, default: false },
   streamingContent: { type: String, default: '' },
+  streamingThinking: { type: String, default: '' },
   streamingProcessSteps: { type: Array, default: () => [] },
   hasMoreMessages: { type: Boolean, default: false },
   loadingMore: { type: Boolean, default: false },
@@ -161,7 +163,7 @@ function scrollToMessage(msgId) {
 }
 
 // 流式时使用 instant 滚动，避免 smooth 动画与内容增长互相打架造成抖动
-watch([() => props.messages.length, () => props.streamingContent], () => {
+watch([() => props.messages.length, () => props.streamingContent, () => props.streamingThinking], () => {
   nextTick(() => {
     const el = scrollContainer.value
     if (!el) return

@@ -72,6 +72,7 @@ const props = defineProps({
   toolCalls: { type: Array, default: () => [] },
   processSteps: { type: Array, default: () => [] },
   streamingContent: { type: String, default: '' },
+  streamingThinking: { type: String, default: '' },
   streaming: { type: Boolean, default: false }
 })
 
@@ -107,6 +108,17 @@ function getResultSummary(result) {
 // during streaming they use 'id'. Both fields are normalized here.
 const processItems = computed(() => {
   const items = []
+
+  // Prepend live streaming thinking content as the first item (before finalized steps).
+  // This appears while thinking chunks are streaming and before the finalized thinking step arrives.
+  if (props.streaming && props.streamingThinking) {
+    items.push({
+      type: 'thinking',
+      content: props.streamingThinking,
+      summary: truncate(props.streamingThinking),
+      key: 'thinking-streaming',
+    })
+  }
 
   // Build items from processSteps — finalized steps sent by backend or loaded from DB.
   // Steps are ordered: each iteration produces thinking → text → tool_call → tool_result.

@@ -87,7 +87,15 @@ const renderedContent = computed(() => {
 useCodeEnhancement(messageRef, renderedContent)
 
 function copyContent() {
-  navigator.clipboard.writeText(props.text || '').catch(() => {})
+  // Extract text from processSteps (preferred) or fall back to text prop
+  let text = props.text || ''
+  if (props.processSteps && props.processSteps.length > 0) {
+    const parts = props.processSteps
+      .filter(s => s && s.type === 'text')
+      .map(s => s.content)
+    if (parts.length > 0) text = parts.join('\n\n')
+  }
+  navigator.clipboard.writeText(text).catch(() => {})
 }
 </script>
 
