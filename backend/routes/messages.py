@@ -14,10 +14,10 @@ bp = Blueprint("messages", __name__)
 _chat_service = None
 
 
-def init_chat_service(glm_client):
-    """Initialize chat service with GLM client"""
+def init_chat_service(client):
+    """Initialize chat service with LLM client"""
     global _chat_service
-    _chat_service = ChatService(glm_client)
+    _chat_service = ChatService(client)
 
 
 def _get_conv(conv_id):

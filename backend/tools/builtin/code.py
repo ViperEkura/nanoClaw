@@ -9,20 +9,27 @@ from pathlib import Path
 from backend.tools.factory import tool
 
 
-# Whitelist of allowed modules
-ALLOWED_MODULES = {
-    # Standard library - math and data processing
-    "math", "random", "statistics", "itertools", "functools", "operator",
-    "collections", "decimal", "fractions", "numbers",
-    # String processing
-    "string", "re", "textwrap", "unicodedata",
-    # Data formats
-    "json", "csv", "datetime", "time",
-    # Data structures
-    "heapq", "bisect", "array", "copy",
-    # Type related
-    "typing", "types", "dataclasses",
+# Blacklist of dangerous modules - all other modules are allowed
+BLOCKED_MODULES = {
+    # System-level access
+    "os", "sys", "subprocess", "shutil", "signal", "ctypes",
+    "multiprocessing", "threading", "_thread",
+    # Network access
+    "socket", "http", "urllib", "requests", "ftplib", "smtplib",
+    "telnetlib", "xmlrpc", "asyncio",
+    # File system / I/O
+    "pathlib", "io", "glob", "tempfile", "shutil", "fnmatch",
+    # Code execution / introspection
+    "importlib", "pkgutil", "code", "codeop", "compileall",
+    "runpy", "pdb", "profile", "cProfile",
+    # Dangerous stdlib
+    "webbrowser", "antigravity", "turtle",
+    # IPC / persistence
+    "pickle", "shelve", "marshal", "sqlite3", "dbm",
+    # Process / shell
+    "commands", "pipes", "pty", "posix", "posixpath",
 }
+
 
 # Blacklist of dangerous builtins
 BLOCKED_BUILTINS = {
@@ -35,13 +42,14 @@ BLOCKED_BUILTINS = {
 
 @tool(
     name="execute_python",
-    description="Execute Python code in a sandboxed environment. Supports math, data processing, and string operations. Max execution time: 10 seconds.",
+    description="Execute Python code in a sandboxed environment. Most standard library modules are allowed, with dangerous modules (os, subprocess, socket, etc.) blocked. Max execution time: 10 seconds.",
     parameters={
         "type": "object",
         "properties": {
             "code": {
                 "type": "string",
-                "description": "Python code to execute. Only standard library modules allowed."
+                "description": "Python code to execute. Dangerous modules (os, subprocess, socket, etc.) are blocked."
+
             }
         },
         "required": ["code"]
@@ -53,7 +61,7 @@ def execute_python(arguments: dict) -> dict:
     Execute Python code safely with sandboxing.
 
     Security measures:
-    1. Restricted imports (whitelist)
+    1. Blocked dangerous imports (blacklist)
     2. Blocked dangerous builtins
     3. Timeout limit (10s)
     4. No file system access
@@ -66,7 +74,7 @@ def execute_python(arguments: dict) -> dict:
     if dangerous_imports:
         return {
             "success": False,
-            "error": f"Blocked imports: {', '.join(dangerous_imports)}. Only standard library modules allowed: {', '.join(sorted(ALLOWED_MODULES))}"
+            "error": f"Blocked imports: {', '.join(dangerous_imports)}. These modules are not allowed for security reasons."
         }
 
     # Security check: detect dangerous function calls
@@ -124,7 +132,7 @@ def _build_safe_code(code: str) -> str:
 
 
 def _check_dangerous_imports(code: str) -> list:
-    """Check for disallowed imports"""
+    """Check for blocked (blacklisted) imports"""
     try:
         tree = ast.parse(code)
     except SyntaxError:
@@ -135,12 +143,12 @@ def _check_dangerous_imports(code: str) -> list:
         if isinstance(node, ast.Import):
             for alias in node.names:
                 module = alias.name.split(".")[0]
-                if module not in ALLOWED_MODULES:
+                if module in BLOCKED_MODULES:
                     dangerous.append(module)
         elif isinstance(node, ast.ImportFrom):
             if node.module:
                 module = node.module.split(".")[0]
-                if module not in ALLOWED_MODULES:
+                if module in BLOCKED_MODULES:
                     dangerous.append(module)
 
     return dangerous

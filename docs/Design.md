@@ -53,7 +53,7 @@ backend/
 ├── services/            # 业务逻辑
 │   ├── __init__.py
 │   ├── chat.py          # 聊天补全服务
-│   └── glm_client.py    # GLM API 客户端
+│   └── llm_client.py    # OpenAI 兼容 LLM API 客户端
 │
 ├── tools/               # 工具系统
 │   ├── __init__.py
@@ -72,9 +72,6 @@ backend/
 │   ├── __init__.py
 │   ├── helpers.py       # 通用函数
 │   └── workspace.py     # 工作目录工具
-│
-└── migrations/          # 数据库迁移
-    └── add_project_support.py
 ```
 
 ---
@@ -250,16 +247,18 @@ classDiagram
     direction TB
 
     class ChatService {
-        -GLMClient glm_client
+        -LLMClient llm
         -ToolExecutor executor
         +stream_response(conv, tools_enabled, project_id) Response
         -_build_tool_calls_json(calls, results) list
         -_process_tool_calls_delta(delta, list) list
     }
 
-    class GLMClient {
+    class LLMClient {
         -dict model_config
         +_get_credentials(model) (api_url, api_key)
+        +_detect_provider(api_url) str
+        +_build_body(model, messages, ...) dict
         +call(model, messages, kwargs) Response
     }
 
@@ -268,11 +267,10 @@ classDiagram
         -dict _cache
         -list _call_history
         +process_tool_calls(calls, context) list
-        +build_request(messages, model, tools) dict
         +clear_history() void
     }
 
-    ChatService --> GLMClient : 使用
+    ChatService --> LLMClient : 使用
     ChatService --> ToolExecutor : 使用
 ```
 
@@ -356,6 +354,9 @@ def delete_project_directory(project_path: str) -> bool:
 
 def copy_folder_to_project(source_path: str, project_dir: Path, project_name: str) -> dict:
     """复制文件夹到项目目录"""
+
+def save_uploaded_files(files, project_dir: Path) -> dict:
+    """保存上传文件到项目目录"""
 ```
 
 ### 安全机制
@@ -548,17 +549,17 @@ def process_tool_calls(self, tool_calls, context=None):
 1. **读取**：通过 `response.body.getReader()` 获取可读流，循环 `reader.read()` 读取二进制 chunk
 2. **解码拼接**：`TextDecoder` 将二进制解码为 UTF-8 字符串，追加到 `buffer`（处理跨 chunk 的不完整行）
 3. **切行**：按 `\n` 分割，最后一段保留在 `buffer` 中（可能是不完整的 SSE 行）
-4. **解析分发**：逐行匹配 `event: xxx` 设置事件类型，`data: {...}` 解析 JSON 后分发到对应回调（`onThinking` / `onMessage` / `onProcessStep` / `onDone` / `onError`）
+4. **解析分发**：逐行匹配 `event: xxx` 设置事件类型，`data: {...}` 解析 JSON 后分发到对应回调（`onProcessStep` / `onDone` / `onError`）
 
 ```
-后端 yield:  event: thinking\ndata: {"content":"..."}\n\n
+后端 yield:  event: process_step\ndata: {"id":"step-0","type":"thinking","content":"..."}\n\n
                         ↓ TCP（可能跨多个网络包）
 reader.read(): [二进制片段1] → [二进制片段2] → ...
                         ↓
-buffer 拼接:   "event: thinking\ndata: {\"content\":\"...\"}\n\n"
+buffer 拼接:   "event: process_step\ndata: {\"id\":\"step-0\",...}\n\n"
                         ↓ split('\n')
-逐行解析:      event: → "thinking"
-              data:   → JSON.parse → onThinking(data.content)
+逐行解析:      event: → "process_step"
+              data:   → JSON.parse → onProcessStep(data)
 ```
 
 ---
@@ -923,41 +924,50 @@ if name.startswith("file_") and context and "project_id" in context:
 backend_port: 3000
 frontend_port: 4000
 
-# LLM API（全局默认值，每个 model 可单独覆盖）
-default_api_key: your-api-key
-default_api_url: https://open.bigmodel.cn/api/paas/v4/chat/completions
+# 智能体循环最大迭代次数（工具调用轮次上限，默认 5）
+max_iterations: 15
 
-# 可用模型列表
+# 可用模型列表（每个模型必须指定 api_url 和 api_key）
+# 支持任何 OpenAI 兼容 API（DeepSeek、GLM、OpenAI、Moonshot、Qwen 等）
 models:
+  - id: deepseek-chat
+    name: DeepSeek V3
+    api_url: https://api.deepseek.com/chat/completions
+    api_key: sk-xxx
   - id: glm-5
     name: GLM-5
-    # api_key: ...      # 可选，不指定则用 default_api_key
-    # api_url: ...      # 可选，不指定则用 default_api_url
-  - id: glm-5-turbo
-    name: GLM-5 Turbo
-    api_key: another-key       # 该模型使用独立凭证
-    api_url: https://other.api.com/chat/completions
+    api_url: https://open.bigmodel.cn/api/paas/v4/chat/completions
+    api_key: xxx
 
-# 默认模型
-default_model: glm-5
-
-# 智能体循环最大迭代次数（工具调用轮次上限，默认 5）
-max_iterations: 5
+# 默认模型（必须存在于 models 列表中）
+default_model: deepseek-chat
 
 # 工作区根目录
 workspace_root: ./workspaces
 
-# 认证模式：single（单用户，无需登录） / multi（多用户，需要 JWT）
+# 认证模式（可选，默认 single）
+# single: 单用户模式，无需登录，自动创建默认用户
+# multi: 多用户模式，需要 JWT 认证
 auth_mode: single
 # JWT 密钥（仅多用户模式使用，生产环境请替换为随机值）
 jwt_secret: nano-claw-default-secret-change-in-production
 
-# 数据库
-db_type: mysql  # mysql, sqlite, postgresql
+# 数据库（支持 mysql, sqlite, postgresql）
+db_type: sqlite
+
+# MySQL/PostgreSQL 配置（sqlite 模式下忽略）
 db_host: localhost
 db_port: 3306
 db_user: root
-db_password: ""
+db_password: "123456"
 db_name: nano_claw
-db_sqlite_file: app.db  # SQLite 时使用
+
+# SQLite 配置（mysql/postgresql 模式下忽略）
+db_sqlite_file: nano_claw.db
 ```
+
+> **说明**：
+> - `api_key` 和 `api_url` 支持环境变量替换，例如 `api_key: ${DEEPSEEK_API_KEY}`
+> - 不配置 `auth_mode` 时默认为 `single` 模式
+> - `LLMClient` 会根据 `api_url` 自动检测提供商（DeepSeek / GLM / OpenAI），并适配不同的参数（max_tokens 上限、thinking 参数、stream_options 等）
+> - 遇到 429 限流时自动重试（最多 3 次，指数退避）

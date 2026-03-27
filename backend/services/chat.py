@@ -9,15 +9,15 @@ from backend.utils.helpers import (
     record_token_usage,
     build_messages,
 )
-from backend.services.glm_client import GLMClient
+from backend.services.llm_client import LLMClient
 from backend.config import MAX_ITERATIONS
 
 
 class ChatService:
     """Chat completion service with tool support"""
 
-    def __init__(self, glm_client: GLMClient):
-        self.glm_client = glm_client
+    def __init__(self, llm: LLMClient):
+        self.llm = llm
         self.executor = ToolExecutor(registry=registry)
 
 
@@ -76,7 +76,7 @@ class ChatService:
                 try:
                     with app.app_context():
                         active_conv = db.session.get(Conversation, conv_id)
-                        resp = self.glm_client.call(
+                        resp = self.llm.call(
                             model=active_conv.model,
                             messages=messages,
                             max_tokens=active_conv.max_tokens,

@@ -7,15 +7,15 @@ from backend.routes.tools import bp as tools_bp
 from backend.routes.stats import bp as stats_bp
 from backend.routes.projects import bp as projects_bp
 from backend.routes.auth import bp as auth_bp, init_auth
-from backend.services.glm_client import GLMClient
+from backend.services.llm_client import LLMClient
 from backend.config import MODEL_CONFIG
 
 
 def register_routes(app: Flask):
     """Register all route blueprints"""
-    # Initialize GLM client with per-model config
-    glm_client = GLMClient(MODEL_CONFIG)
-    init_chat_service(glm_client)
+    # Initialize LLM client with per-model config
+    client = LLMClient(MODEL_CONFIG)
+    init_chat_service(client)
 
     # Initialize authentication system (reads auth_mode from config.yml)
     init_auth(app)

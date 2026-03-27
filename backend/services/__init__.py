@@ -1,8 +1,8 @@
 """Backend services"""
-from backend.services.glm_client import GLMClient
+from backend.services.llm_client import LLMClient
 from backend.services.chat import ChatService
 
 __all__ = [
-    "GLMClient",
+    "LLMClient",
     "ChatService",
 ]

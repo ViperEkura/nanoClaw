@@ -1,26 +1,35 @@
 """Configuration management"""
+import sys
 from backend import load_config
 
 _cfg = load_config()
 
-# Global defaults
-DEFAULT_API_URL = _cfg.get("api_url", "") or _cfg.get("default_api_url", "")
-DEFAULT_API_KEY = _cfg.get("api_key", "") or _cfg.get("default_api_key", "")
-
 # Model list (for /api/models endpoint)
 MODELS = _cfg.get("models", [])
 
-# Per-model config lookup: {model_id: {api_url, api_key}}
-# Falls back to global defaults if not specified per model
-MODEL_CONFIG = {}
-for _m in MODELS:
-    _mid = _m["id"]
-    MODEL_CONFIG[_mid] = {
-        "api_url": _m.get("api_url", DEFAULT_API_URL),
-        "api_key": _m.get("api_key", DEFAULT_API_KEY),
-    }
+# Validate each model has required fields at startup
+_REQUIRED_MODEL_KEYS = {"id", "name", "api_url", "api_key"}
+_model_ids_seen = set()
+for _i, _m in enumerate(MODELS):
+    _missing = _REQUIRED_MODEL_KEYS - set(_m.keys())
+    if _missing:
+        print(f"[config] ERROR: models[{_i}] missing required fields: {_missing}", file=sys.stderr)
+        sys.exit(1)
+    if _m["id"] in _model_ids_seen:
+        print(f"[config] ERROR: duplicate model id '{_m['id']}'", file=sys.stderr)
+        sys.exit(1)
+    _model_ids_seen.add(_m["id"])
 
-DEFAULT_MODEL = _cfg.get("default_model", "glm-5")
+# Per-model config lookup: {model_id: {api_url, api_key}}
+MODEL_CONFIG = {m["id"]: {"api_url": m["api_url"], "api_key": m["api_key"]} for m in MODELS}
+
+# default_model must exist in models
+DEFAULT_MODEL = _cfg.get("default_model", "")
+if DEFAULT_MODEL and DEFAULT_MODEL not in MODEL_CONFIG:
+    print(f"[config] ERROR: default_model '{DEFAULT_MODEL}' not found in models", file=sys.stderr)
+    sys.exit(1)
+if MODELS and not DEFAULT_MODEL:
+    DEFAULT_MODEL = MODELS[0]["id"]
 
 # Max agentic loop iterations (tool call rounds)
 MAX_ITERATIONS = _cfg.get("max_iterations", 5)
