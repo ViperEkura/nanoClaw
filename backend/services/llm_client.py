@@ -35,28 +35,22 @@ def _detect_provider(api_url: str) -> str:
 class LLMClient:
     """OpenAI-compatible LLM API client.
 
-    Each model must have its own api_url and api_key configured in MODEL_CONFIG.
+    Each model must have its own api_url and api_key configured in config.models.
     """
 
-    def __init__(self, model_config: dict):
-        """Initialize with per-model config lookup.
+    def __init__(self, cfg):
+        """Initialize with AppConfig.
 
         Args:
-            model_config: {model_id: {"api_url": ..., "api_key": ...}}
+            cfg: AppConfig dataclass instance
         """
-        self.model_config = model_config
+        self.cfg = cfg
 
     def _get_credentials(self, model: str):
         """Get api_url and api_key for a model, with env-var expansion."""
-        cfg = self.model_config.get(model)
-        if not cfg:
-            raise ValueError(f"Unknown model: '{model}', not found in config")
-        api_url = _resolve_env_vars(cfg.get("api_url", ""))
-        api_key = _resolve_env_vars(cfg.get("api_key", ""))
-        if not api_url:
-            raise ValueError(f"Model '{model}' has no api_url configured")
-        if not api_key:
-            raise ValueError(f"Model '{model}' has no api_key configured")
+        api_url, api_key = self.cfg.get_model_credentials(model)
+        api_url = _resolve_env_vars(api_url)
+        api_key = _resolve_env_vars(api_key)
         return api_url, api_key
 
     def _build_body(self, model, messages, max_tokens, temperature, thinking_enabled,

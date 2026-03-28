@@ -5,7 +5,7 @@ from flask import Blueprint, request, g
 from backend import db
 from backend.models import Conversation, Project
 from backend.utils.helpers import ok, err, to_dict
-from backend.config import DEFAULT_MODEL
+from backend.config import config
 
 bp = Blueprint("conversations", __name__)
 
@@ -40,7 +40,7 @@ def conversation_list():
             user_id=user.id,
             project_id=project_id or None,
             title=d.get("title", ""),
-            model=d.get("model", DEFAULT_MODEL),
+            model=d.get("model", config.default_model),
             system_prompt=d.get("system_prompt", ""),
             temperature=d.get("temperature", 1.0),
             max_tokens=d.get("max_tokens", 65536),

@@ -8,13 +8,13 @@ from backend.routes.stats import bp as stats_bp
 from backend.routes.projects import bp as projects_bp
 from backend.routes.auth import bp as auth_bp, init_auth
 from backend.services.llm_client import LLMClient
-from backend.config import MODEL_CONFIG
+from backend.config import config
 
 
 def register_routes(app: Flask):
     """Register all route blueprints"""
-    # Initialize LLM client with per-model config
-    client = LLMClient(MODEL_CONFIG)
+    # Initialize LLM client with config
+    client = LLMClient(config)
     init_chat_service(client)
 
     # Register LLM client in service locator so tools (e.g. multi_agent) can access it

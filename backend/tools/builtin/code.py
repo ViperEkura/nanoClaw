@@ -7,8 +7,7 @@ import textwrap
 from typing import Dict, List, Set
 
 from backend.tools.factory import tool
-from backend.config import CODE_EXECUTION_DEFAULT_STRICTNESS as DEFAULT_STRICTNESS
-from backend.config import CODE_EXECUTION_EXTRA_MODULES as _CFG_EXTRA_MODULES
+from backend.config import config
 
 
 # Strictness profiles configuration
@@ -101,7 +100,7 @@ def register_extra_modules(strictness: str, modules: Set[str] | List[str]) -> No
 
 
 # Apply extra modules from config.yml on module load
-for _level, _mods in _CFG_EXTRA_MODULES.items():
+for _level, _mods in config.code_execution.extra_allowed_modules.items():
     if isinstance(_mods, list) and _mods:
         register_extra_modules(_level, _mods)
 
@@ -144,7 +143,7 @@ def execute_python(arguments: dict) -> dict:
     5. Subprocess isolation
     """
     code = arguments["code"]
-    strictness = arguments.get("strictness", DEFAULT_STRICTNESS)
+    strictness = arguments.get("strictness", config.code_execution.default_strictness)
     
     # Validate strictness level
     if strictness not in STRICTNESS_PROFILES:

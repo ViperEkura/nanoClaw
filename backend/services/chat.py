@@ -14,7 +14,7 @@ from backend.utils.helpers import (
     build_messages,
 )
 from backend.services.llm_client import LLMClient
-from backend.config import MAX_ITERATIONS, TOOL_MAX_WORKERS
+from backend.config import config as _cfg
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +89,8 @@ class ChatService:
             total_completion_tokens = 0
             total_prompt_tokens = 0
 
-            for iteration in range(MAX_ITERATIONS):
+
+            for iteration in range(_cfg.max_iterations):
                 # Helper to parse stream_result event
                 def parse_stream_result(event_str):
                     """Parse stream_result SSE event and extract data dict."""
@@ -385,7 +386,7 @@ class ChatService:
             if len(tool_calls_list) > 1:
                 with app.app_context():
                     return executor.process_tool_calls_parallel(
-                        tool_calls_list, context, max_workers=TOOL_MAX_WORKERS
+                        tool_calls_list, context, max_workers=_cfg.tool_max_workers
                     )
             else:
                 with app.app_context():

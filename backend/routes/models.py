@@ -1,7 +1,7 @@
 """Model list API routes"""
 from flask import Blueprint
 from backend.utils.helpers import ok
-from backend.config import MODELS
+from backend.config import config
 
 bp = Blueprint("models", __name__)
 
@@ -13,7 +13,10 @@ _SENSITIVE_KEYS = {"api_key", "api_url"}
 def list_models():
     """Get available model list (without sensitive fields like api_key)"""
     safe_models = [
-        {k: v for k, v in m.items() if k not in _SENSITIVE_KEYS}
-        for m in MODELS
+        {
+            "id": m.id,
+            "name": m.name,
+        }
+        for m in config.models
     ]
     return ok(safe_models)

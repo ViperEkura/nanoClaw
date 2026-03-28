@@ -1,22 +1,12 @@
-"""Multi-agent tool for spawning concurrent sub-agents.
-
-Provides:
-- multi_agent: Spawn sub-agents with independent LLM conversation loops
-"""
 import json
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import List, Dict, Any, Optional
+from typing import List, Any, Optional
 from backend.tools import get_service
 from backend.tools.factory import tool
 from backend.tools.core import registry
 from backend.tools.executor import ToolExecutor
-from backend.config import (
-    DEFAULT_MODEL,
-    SUB_AGENT_MAX_ITERATIONS,
-    SUB_AGENT_MAX_CONCURRENCY,
-    SUB_AGENT_TIMEOUT,
-)
+from backend.config import config
 
 logger = logging.getLogger(__name__)
 
@@ -118,7 +108,7 @@ def _run_sub_agent(
                     stream=False,
                     max_tokens=max_tokens,
                     temperature=temperature,
-                    timeout=SUB_AGENT_TIMEOUT,
+                    timeout=config.sub_agent.timeout,
                 )
 
             if resp.status_code != 200:
@@ -253,13 +243,13 @@ def multi_agent(arguments: dict) -> dict:
     app = current_app._get_current_object()
 
     # Use injected model/project_id from executor context, fall back to defaults
-    model = arguments.get("_model") or DEFAULT_MODEL
+    model = arguments.get("_model") or config.default_model
     project_id = arguments.get("_project_id")
     max_tokens = arguments.get("_max_tokens", 65536)
     temperature = arguments.get("_temperature", 0.7)
 
     # Execute agents concurrently
-    concurrency = min(len(tasks), SUB_AGENT_MAX_CONCURRENCY)
+    concurrency = min(len(tasks), config.sub_agent.max_concurrency)
     results = [None] * len(tasks)
 
     with ThreadPoolExecutor(max_workers=concurrency) as pool:
@@ -274,7 +264,7 @@ def multi_agent(arguments: dict) -> dict:
                 temperature,
                 project_id,
                 app,
-                SUB_AGENT_MAX_ITERATIONS,
+                config.sub_agent.max_iterations,
             ): i
             for i, task in enumerate(tasks)
         }
