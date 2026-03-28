@@ -132,8 +132,15 @@ const sortedDaily = computed(() => {
 const chartData = computed(() => {
   if (period.value === 'daily' && stats.value?.hourly) {
     const hourly = stats.value.hourly
+    // Backend returns UTC hours — convert to local timezone for display.
+    const offset = -new Date().getTimezoneOffset() / 60  // e.g. +8 for UTC+8
+    const localHourly = {}
+    for (const [utcH, val] of Object.entries(hourly)) {
+      const localH = ((parseInt(utcH) + offset) % 24 + 24) % 24
+      localHourly[localH] = val
+    }
     let minH = 24, maxH = -1
-    for (const h of Object.keys(hourly)) {
+    for (const h of Object.keys(localHourly)) {
       const hour = parseInt(h)
       if (hour < minH) minH = hour
       if (hour > maxH) maxH = hour
@@ -145,16 +152,19 @@ const chartData = computed(() => {
       const h = start + i
       return {
         label: `${h}:00`,
-        value: hourly[String(h)]?.total || 0,
+        value: localHourly[String(h)]?.total || 0,
       }
     })
   }
 
   const data = sortedDaily.value
   return Object.entries(data).map(([date, val]) => {
-    const d = new Date(date)
+    // date is "YYYY-MM-DD" from backend — parse directly to avoid
+    // new Date() timezone shift (parsed as UTC midnight then
+    // getMonth/getDate applies local offset, potentially off by one day).
+    const [year, month, day] = date.split('-')
     return {
-      label: `${d.getMonth() + 1}/${d.getDate()}`,
+      label: `${parseInt(month)}/${parseInt(day)}`,
       value: val.total,
       prompt: val.prompt || 0,
       completion: val.completion || 0,

@@ -249,14 +249,25 @@ file_read({"path": "src/main.py", "project_id": "xxx"})
 
 | 工具名称 | 描述 | 参数 |
 |---------|------|------|
-| `multi_agent` | 派生子 Agent 并发执行任务（最多 5 个） | `tasks`: 任务数组（name, instruction, tools）<br>`_model`: 模型名称（自动注入）<br>`_project_id`: 项目 ID（自动注入） |
+| `multi_agent` | 派生子 Agent 并发执行任务 | `tasks`: 任务数组（name, instruction, tools）<br>`_model`: 模型名称（自动注入）<br>`_project_id`: 项目 ID（自动注入） |
 
 **`multi_agent` 工作原理：**
 1. 接收任务数组，每个任务指定 name、instruction 和可选的 tools 列表
-2. 为每个子 Agent 创建独立线程，各自拥有 LLM 对话循环（最多 3 轮迭代，4096 tokens）
-3. 通过 Service Locator 获取 `llm_client` 实例
-4. 子 Agent 在 `app.app_context()` 中运行，可独立调用所有注册工具
-5. 返回 `{success, results: [{task_name, success, response/error}], total}`
+2. 子 Agent **禁止使用 `multi_agent` 工具**（`BLOCKED_TOOLS`），防止无限递归
+3. 子 Agent 工具权限与主 Agent 一致（除 multi_agent 外的所有已注册工具），支持并行工具执行
+4. 为每个子 Agent 创建独立线程，各自拥有 LLM 对话循环
+5. 子 Agent 在 `app.app_context()` 中运行 LLM 调用和工具执行，确保数据库等依赖正常工作
+6. 通过 Service Locator 获取 `llm_client` 实例
+7. 返回 `{success, results: [{task_name, success, response/error}], total}`
+
+**资源配置**（`config.yml` → `sub_agent`）：
+
+| 配置项 | 默认值 | 说明 |
+|--------|--------|------|
+| `max_iterations` | 3 | 每个子代理的最大工具调用轮数 |
+| `max_tokens` | 4096 | 每次调用的最大 token 数 |
+| `max_agents` | 5 | 每次请求最多派生的子代理数 |
+| `max_concurrency` | 3 | ThreadPoolExecutor 并发线程数 |
 
 ---
 

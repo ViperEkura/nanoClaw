@@ -66,6 +66,7 @@ backend/
 │       ├── data.py      # 计算器、文本、JSON
 │       ├── weather.py   # 天气查询
 │       ├── file_ops.py  # 文件操作（project_id 自动注入）
+│       ├── agent.py     # 多智能体（子 Agent 并发执行，工具权限隔离）
 │       └── code.py      # 代码执行
 │
 ├── utils/               # 辅助函数
@@ -1019,6 +1020,13 @@ frontend_port: 4000
 
 # 智能体循环最大迭代次数（工具调用轮次上限，默认 5）
 max_iterations: 15
+
+# 子代理资源配置（multi_agent 工具）
+sub_agent:
+  max_iterations: 3      # 每个子代理的最大工具调用轮数
+  max_tokens: 4096        # 每次调用的最大 token 数
+  max_agents: 5           # 每次请求最多派生的子代理数
+  max_concurrency: 3      # 并发线程数
 
 # 可用模型列表（每个模型必须指定 api_url 和 api_key）
 # 支持任何 OpenAI 兼容 API（DeepSeek、GLM、OpenAI、Moonshot、Qwen 等）

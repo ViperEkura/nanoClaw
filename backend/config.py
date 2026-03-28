@@ -39,3 +39,10 @@ TOOL_MAX_WORKERS = _cfg.get("tool_max_workers", 4)
 
 # Max character length for a single tool result content (truncated if exceeded)
 TOOL_RESULT_MAX_LENGTH = _cfg.get("tool_result_max_length", 4096)
+
+# Sub-agent settings (multi_agent tool)
+_sa = _cfg.get("sub_agent", {})
+SUB_AGENT_MAX_ITERATIONS = _sa.get("max_iterations", 3)
+SUB_AGENT_MAX_TOKENS = _sa.get("max_tokens", 4096)
+SUB_AGENT_MAX_AGENTS = _sa.get("max_agents", 5)
+SUB_AGENT_MAX_CONCURRENCY = _sa.get("max_concurrency", 3)

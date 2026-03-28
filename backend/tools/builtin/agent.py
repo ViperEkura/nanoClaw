@@ -4,12 +4,25 @@ Provides:
 - multi_agent: Spawn sub-agents with independent LLM conversation loops
 """
 import json
+import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict, Any, Optional
 
 from backend.tools.factory import tool
 from backend.tools.core import registry
 from backend.tools.executor import ToolExecutor
+from backend.config import (
+    DEFAULT_MODEL,
+    SUB_AGENT_MAX_ITERATIONS,
+    SUB_AGENT_MAX_TOKENS,
+    SUB_AGENT_MAX_AGENTS,
+    SUB_AGENT_MAX_CONCURRENCY,
+)
+
+logger = logging.getLogger(__name__)
+
+# Sub-agents are forbidden from using multi_agent to prevent infinite recursion
+BLOCKED_TOOLS = {"multi_agent"}
 
 
 def _to_executor_calls(tool_calls: list, id_prefix: str = "tc") -> list:
@@ -68,13 +81,16 @@ def _run_sub_agent(
             "error": "LLM client not available",
         }
 
-    # Build tool list – filter to requested tools or use all
+    # Build tool list – filter to requested tools, then remove blocked
     all_tools = registry.list_all()
     if tool_names:
         allowed = set(tool_names)
         tools = [t for t in all_tools if t["function"]["name"] in allowed]
     else:
-        tools = all_tools
+        tools = list(all_tools)
+
+    # Remove blocked tools to prevent recursion
+    tools = [t for t in tools if t["function"]["name"] not in BLOCKED_TOOLS]
 
     executor = ToolExecutor(registry=registry)
     context = {"model": model}
@@ -128,7 +144,17 @@ def _run_sub_agent(
                 })
                 tc_list = message["tool_calls"]
                 executor_calls = _to_executor_calls(tc_list)
-                tool_results = executor.process_tool_calls(executor_calls, context)
+                # Execute tools inside app_context – file ops and other DB-
+                # dependent tools require an active Flask context and session.
+                with app.app_context():
+                    if len(executor_calls) > 1:
+                        tool_results = executor.process_tool_calls_parallel(
+                            executor_calls, context
+                        )
+                    else:
+                        tool_results = executor.process_tool_calls(
+                            executor_calls, context
+                        )
                 messages.extend(tool_results)
             else:
                 # Final text response
@@ -159,7 +185,7 @@ def _run_sub_agent(
         "Spawn multiple sub-agents to work on tasks concurrently. "
         "Each agent runs its own independent conversation with the LLM and can use tools. "
         "Useful for parallel research, multi-file analysis, or dividing complex tasks into sub-tasks. "
-        "Each agent is limited to 3 iterations and 4096 tokens to control cost."
+        "Resource limits (iterations, tokens, concurrency) are configured in config.yml -> sub_agent."
     ),
     parameters={
         "type": "object",
@@ -221,19 +247,18 @@ def multi_agent(arguments: dict) -> dict:
 
     tasks = arguments["tasks"]
 
-    if len(tasks) > 5:
-        return {"success": False, "error": "Maximum 5 concurrent agents allowed"}
+    if len(tasks) > SUB_AGENT_MAX_AGENTS:
+        return {"success": False, "error": f"Maximum {SUB_AGENT_MAX_AGENTS} concurrent agents allowed"}
 
     # Get current conversation context for model/project info
     app = current_app._get_current_object()
 
     # Use injected model/project_id from executor context, fall back to defaults
-    from backend.config import DEFAULT_MODEL
     model = arguments.get("_model") or DEFAULT_MODEL
     project_id = arguments.get("_project_id")
 
-    # Execute agents concurrently (max 3 at a time)
-    concurrency = min(len(tasks), 3)
+    # Execute agents concurrently
+    concurrency = min(len(tasks), SUB_AGENT_MAX_CONCURRENCY)
     results = [None] * len(tasks)
 
     with ThreadPoolExecutor(max_workers=concurrency) as pool:
@@ -244,9 +269,10 @@ def multi_agent(arguments: dict) -> dict:
                 task["instruction"],
                 task.get("tools"),
                 model,
-                4096,
+                SUB_AGENT_MAX_TOKENS,
                 project_id,
                 app,
+                SUB_AGENT_MAX_ITERATIONS,
             ): i
             for i, task in enumerate(tasks)
         }

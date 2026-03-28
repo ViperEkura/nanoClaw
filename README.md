@@ -36,6 +36,13 @@ frontend_port: 4000
 # Max agentic loop iterations (tool call rounds)
 max_iterations: 15
 
+# Sub-agent settings (multi_agent tool)
+sub_agent:
+  max_iterations: 3      # Max tool-call rounds per sub-agent
+  max_tokens: 4096        # Max tokens per LLM call inside a sub-agent
+  max_agents: 5           # Max number of concurrent sub-agents per request
+  max_concurrency: 3      # ThreadPoolExecutor max workers
+
 # Available models
 # Each model must have its own id, name, api_url, api_key
 models:
@@ -117,6 +124,7 @@ backend/
 │       ├── data.py      # 计算器、文本、JSON 处理
 │       ├── weather.py   # 天气查询（模拟）
 │       ├── file_ops.py  # 文件操作（6 个工具，project_id 自动注入）
+│       ├── agent.py     # 多智能体（子 Agent 并发执行，工具权限隔离）
 │       └── code.py      # Python 代码执行（沙箱）
 └── utils/               # 辅助函数
     ├── helpers.py       # 通用函数（ok/err/build_messages 等）
@@ -207,6 +215,7 @@ frontend/
 | **代码执行** | execute_python | 沙箱环境执行 Python |
 | **文件操作** | file_read, file_write, file_delete, file_list, file_exists, file_mkdir | project_id 自动注入 |
 | **天气** | get_weather | 天气查询（模拟） |
+| **智能体** | multi_agent | 派生子 Agent 并发执行（禁止递归，工具权限与主 Agent 一致） |
 
 ## 文档
 

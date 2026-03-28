@@ -1,6 +1,6 @@
 """Common helper functions"""
 import json
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Any
 from flask import jsonify
 from backend import db
@@ -97,7 +97,7 @@ def message_to_dict(msg: Message) -> dict:
 
 def record_token_usage(user_id, model, prompt_tokens, completion_tokens):
     """Record token usage"""
-    today = date.today()
+    today = datetime.now(timezone.utc).date()
     usage = TokenUsage.query.filter_by(
         user_id=user_id, date=today, model=model
     ).first()
