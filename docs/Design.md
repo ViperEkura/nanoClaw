@@ -266,8 +266,8 @@ classDiagram
         -ToolRegistry registry
         -dict _cache
         -list _call_history
-        +process_tool_calls(calls, context) list
-        +clear_history() void
+        +process_tool_calls(list, dict) list
+        +process_tool_calls_parallel(list, dict, int) list
     }
 
     ChatService --> LLMClient : 使用
@@ -295,18 +295,17 @@ classDiagram
         +register(ToolDefinition) void
         +get(str name) ToolDefinition?
         +list_all() list~dict~
-        +list_by_category(str) list~dict~
         +execute(str name, dict args) dict
-        +remove(str name) bool
-        +has(str name) bool
     }
 
     class ToolExecutor {
         -ToolRegistry registry
+        -bool enable_cache
+        -int cache_ttl
         -dict _cache
         -list _call_history
         +process_tool_calls(list, dict) list
-        +clear_history() void
+        +process_tool_calls_parallel(list, dict, int) list
     }
 
     class ToolResult {
@@ -394,18 +393,19 @@ def validate_path_in_project(path: str, project_dir: Path) -> Path:
 工具执行器自动为文件工具注入 `project_id`：
 
 ```python
-# backend/tools/executor.py
+# backend/tools/executor.py — _inject_context()
 
-def process_tool_calls(self, tool_calls, context=None):
-    for call in tool_calls:
-        name = call["function"]["name"]
-        args = json.loads(call["function"]["arguments"])
-
-        # 自动注入 project_id
-        if context and name.startswith("file_") and "project_id" in context:
-            args["project_id"] = context["project_id"]
-
-        result = self.registry.execute(name, args)
+@staticmethod
+def _inject_context(name: str, args: dict, context: Optional[dict]) -> None:
+    # file_* 工具: 注入 project_id
+    if name.startswith("file_") and "project_id" in context:
+        args["project_id"] = context["project_id"]
+    # agent 工具: 注入 _model 和 _project_id
+    if name == "multi_agent":
+        if "model" in context:
+            args["_model"] = context["model"]
+        if "project_id" in context:
+            args["_project_id"] = context["project_id"]
 ```
 
 ---

@@ -56,21 +56,80 @@ class ToolExecutor:
         """Inject context fields into tool arguments in-place.
 
         - file_* tools: inject project_id
-        - agent_task: inject model and project_id (prefixed with _ to avoid collisions)
-        - parallel_execute: inject project_id (prefixed with _ to avoid collisions)
+        - agent tools (multi_agent): inject _model and _project_id
         """
         if not context:
             return
         if name.startswith("file_") and "project_id" in context:
             args["project_id"] = context["project_id"]
-        if name == "agent_task":
+        if name == "multi_agent":
             if "model" in context:
                 args["_model"] = context["model"]
             if "project_id" in context:
                 args["_project_id"] = context["project_id"]
-        if name == "parallel_execute":
-            if "project_id" in context:
-                args["_project_id"] = context["project_id"]
+
+    def _prepare_call(
+        self,
+        call: dict,
+        context: Optional[dict],
+        seen_calls: set,
+    ) -> tuple:
+        """Parse, inject context, check dedup/cache for a single tool call.
+
+        Returns a tagged tuple:
+          ("error",   call_id, name, error_msg)
+          ("cached",  call_id, name, result_dict)  -- dedup or cache hit
+          ("execute", call_id, name, args, cache_key)
+        """
+        name = call["function"]["name"]
+        args_str = call["function"]["arguments"]
+        call_id = call["id"]
+
+        # Parse JSON arguments
+        try:
+            args = json.loads(args_str) if isinstance(args_str, str) else args_str
+        except json.JSONDecodeError:
+            return ("error", call_id, name, "Invalid JSON arguments")
+
+        # Inject context
+        self._inject_context(name, args, context)
+
+        # Dedup within same batch
+        call_key = f"{name}:{json.dumps(args, sort_keys=True)}"
+        if call_key in seen_calls:
+            return ("cached", call_id, name,
+                    {"success": True, "data": None, "cached": True, "duplicate": True})
+        seen_calls.add(call_key)
+
+        # History dedup
+        history_result = self._check_duplicate_in_history(name, args)
+        if history_result is not None:
+            return ("cached", call_id, name, {**history_result, "cached": True})
+
+        # Cache check
+        cache_key = self._make_cache_key(name, args)
+        cached_result = self._get_cached(cache_key)
+        if cached_result is not None:
+            return ("cached", call_id, name, {**cached_result, "cached": True})
+
+        return ("execute", call_id, name, args, cache_key)
+
+    def _execute_and_record(
+        self,
+        name: str,
+        args: dict,
+        cache_key: str,
+    ) -> dict:
+        """Execute a tool, cache result, record history, and return raw result dict."""
+        result = self._execute_tool(name, args)
+        if result.get("success"):
+            self._set_cache(cache_key, result)
+        self._call_history.append({
+            "name": name,
+            "args_str": json.dumps(args, sort_keys=True, ensure_ascii=False),
+            "result": result,
+        })
+        return result
 
     def process_tool_calls_parallel(
         self,
@@ -80,10 +139,6 @@ class ToolExecutor:
     ) -> List[dict]:
         """
         Process tool calls concurrently and return message list (ordered by input).
-
-        Identical logic to process_tool_calls but uses ThreadPoolExecutor so that
-        independent tool calls (e.g. reading 3 files, running 2 searches) execute
-        in parallel instead of sequentially.
 
         Args:
             tool_calls: Tool call list returned by LLM
@@ -98,80 +153,31 @@ class ToolExecutor:
 
         max_workers = min(max(max_workers, 1), 6)
 
-        # Phase 1: prepare each call (parse args, inject context, check dedup/cache)
-        # This phase is fast and sequential – it must be done before parallelism
-        # to avoid race conditions on seen_calls / _call_history / _cache.
-        prepared: List[Optional[tuple]] = [None] * len(tool_calls)
-        seen_calls: set = set()
+        # Phase 1: prepare (sequential – avoids race conditions on shared state)
+        prepared = [self._prepare_call(call, context, set()) for call in tool_calls]
 
-        for i, call in enumerate(tool_calls):
-            name = call["function"]["name"]
-            args_str = call["function"]["arguments"]
-            call_id = call["id"]
-
-            # Parse JSON arguments
-            try:
-                args = json.loads(args_str) if isinstance(args_str, str) else args_str
-            except json.JSONDecodeError:
-                prepared[i] = self._create_error_result(call_id, name, "Invalid JSON arguments")
-                continue
-
-            # Inject context into tool arguments
-            self._inject_context(name, args, context)
-
-            # Dedup within same batch
-            call_key = f"{name}:{json.dumps(args, sort_keys=True)}"
-            if call_key in seen_calls:
-                prepared[i] = self._create_tool_result(
-                    call_id, name,
-                    {"success": True, "data": None, "cached": True, "duplicate": True}
-                )
-                continue
-            seen_calls.add(call_key)
-
-            # History dedup
-            history_result = self._check_duplicate_in_history(name, args)
-            if history_result is not None:
-                prepared[i] = self._create_tool_result(call_id, name, {**history_result, "cached": True})
-                continue
-
-            # Cache check
-            cache_key = self._make_cache_key(name, args)
-            cached_result = self._get_cached(cache_key)
-            if cached_result is not None:
-                prepared[i] = self._create_tool_result(call_id, name, {**cached_result, "cached": True})
-                continue
-
-            # Mark as needing actual execution
-            prepared[i] = ("execute", call_id, name, args, cache_key)
-
-        # Separate pre-resolved results from tasks needing execution
+        # Phase 2: separate pre-resolved from tasks needing execution
         results: List[dict] = [None] * len(tool_calls)
-        exec_tasks: Dict[int, tuple] = {}  # index -> (call_id, name, args, cache_key)
+        exec_tasks: Dict[int, tuple] = {}
 
         for i, item in enumerate(prepared):
-            if isinstance(item, dict):
-                results[i] = item
-            elif isinstance(item, tuple) and item[0] == "execute":
+            tag = item[0]
+            if tag == "error":
+                _, call_id, name, error_msg = item
+                results[i] = self._create_error_result(call_id, name, error_msg)
+            elif tag == "cached":
+                _, call_id, name, result_dict = item
+                results[i] = self._create_tool_result(call_id, name, result_dict)
+            else:  # "execute"
                 _, call_id, name, args, cache_key = item
                 exec_tasks[i] = (call_id, name, args, cache_key)
 
-        # Phase 2: execute remaining calls in parallel
+        # Phase 3: execute remaining calls in parallel
         if exec_tasks:
             def _run(idx: int, call_id: str, name: str, args: dict, cache_key: str) -> tuple:
                 t0 = time.time()
-                result = self._execute_tool(name, args)
+                result = self._execute_and_record(name, args, cache_key)
                 elapsed = time.time() - t0
-
-                if result.get("success"):
-                    self._set_cache(cache_key, result)
-
-                self._call_history.append({
-                    "name": name,
-                    "args_str": json.dumps(args, sort_keys=True, ensure_ascii=False),
-                    "result": result,
-                })
-
                 return idx, self._create_tool_result(call_id, name, result, execution_time=elapsed)
 
             with ThreadPoolExecutor(max_workers=max_workers) as pool:
@@ -201,65 +207,22 @@ class ToolExecutor:
             Tool response message list, can be appended to messages
         """
         results = []
-        seen_calls = set()  # Track calls within this batch
+        seen_calls: set = set()
 
         for call in tool_calls:
-            name = call["function"]["name"]
-            args_str = call["function"]["arguments"]
-            call_id = call["id"]
+            prepared = self._prepare_call(call, context, seen_calls)
+            tag = prepared[0]
 
-            try:
-                args = json.loads(args_str) if isinstance(args_str, str) else args_str
-            except json.JSONDecodeError:
-                results.append(self._create_error_result(
-                    call_id, name, "Invalid JSON arguments"
-                ))
-                continue
-
-            # Inject context into tool arguments
-            self._inject_context(name, args, context)
-
-            # Check for duplicate within same batch
-            call_key = f"{name}:{json.dumps(args, sort_keys=True)}"
-            if call_key in seen_calls:
-                # Skip duplicate, but still return a result
-                results.append(self._create_tool_result(
-                    call_id, name,
-                    {"success": True, "data": None, "cached": True, "duplicate": True}
-                ))
-                continue
-            seen_calls.add(call_key)
-
-            # Check history for previous call in this session
-            history_result = self._check_duplicate_in_history(name, args)
-            if history_result is not None:
-                result = {**history_result, "cached": True}
+            if tag == "error":
+                _, call_id, name, error_msg = prepared
+                results.append(self._create_error_result(call_id, name, error_msg))
+            elif tag == "cached":
+                _, call_id, name, result_dict = prepared
+                results.append(self._create_tool_result(call_id, name, result_dict))
+            else:  # "execute"
+                _, call_id, name, args, cache_key = prepared
+                result = self._execute_and_record(name, args, cache_key)
                 results.append(self._create_tool_result(call_id, name, result))
-                continue
-
-            # Check cache
-            cache_key = self._make_cache_key(name, args)
-            cached_result = self._get_cached(cache_key)
-            if cached_result is not None:
-                result = {**cached_result, "cached": True}
-                results.append(self._create_tool_result(call_id, name, result))
-                continue
-
-            # Execute tool with retry
-            result = self._execute_tool(name, args)
-            
-            # Cache the result (only cache successful results)
-            if result.get("success"):
-                self._set_cache(cache_key, result)
-            
-            # Add to history
-            self._call_history.append({
-                "name": name,
-                "args_str": json.dumps(args, sort_keys=True, ensure_ascii=False),
-                "result": result
-            })
-            
-            results.append(self._create_tool_result(call_id, name, result))
 
         return results
 

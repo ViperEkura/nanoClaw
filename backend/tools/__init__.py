@@ -21,7 +21,7 @@ from backend.tools.executor import ToolExecutor
 
 
 # ---------------------------------------------------------------------------
-# Service locator – allows tools (e.g. agent_task) to access LLM client
+# Service locator – allows tools (e.g. multi_agent) to access LLM client
 # ---------------------------------------------------------------------------
 _services: dict = {}
 

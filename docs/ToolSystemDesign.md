@@ -27,19 +27,20 @@ classDiagram
         +register(ToolDefinition tool) void
         +get(str name) ToolDefinition?
         +list_all() list~dict~
-        +list_by_category(str category) list~dict~
         +execute(str name, dict args) dict
-        +remove(str name) bool
-        +has(str name) bool
     }
 
     class ToolExecutor {
         -ToolRegistry registry
+        -bool enable_cache
+        -int cache_ttl
         -dict _cache
         -list _call_history
         +process_tool_calls(list tool_calls, dict context) list~dict~
-        +build_request(list messages, str model, list tools, dict kwargs) dict
-        +clear_history() void
+        +process_tool_calls_parallel(list tool_calls, dict context, int max_workers) list~dict~
+        -_prepare_call(dict call, dict context, set seen_calls) tuple
+        -_execute_and_record(str name, dict args, str cache_key) dict
+        -_inject_context(str name, dict args, dict context) void
     }
 
     class ToolResult {
@@ -88,32 +89,26 @@ classDiagram
 
 ### context 参数
 
-`process_tool_calls()` 接受 `context` 参数，用于自动注入工具参数：
+`process_tool_calls()` / `process_tool_calls_parallel()` 接受 `context` 参数，用于自动注入工具参数：
 
 ```python
-# backend/tools/executor.py
+# backend/tools/executor.py — _inject_context()
 
-def process_tool_calls(
-    self,
-    tool_calls: List[dict],
-    context: Optional[dict] = None
-) -> List[dict]:
+@staticmethod
+def _inject_context(name: str, args: dict, context: Optional[dict]) -> None:
     """
-    Args:
-        tool_calls: LLM 返回的工具调用列表
-        context: 上下文信息，支持：
-            - project_id: 自动注入到文件工具
+    - file_* 工具: 注入 project_id
+    - agent 工具 (multi_agent): 注入 _model 和 _project_id
     """
-    for call in tool_calls:
-        name = call["function"]["name"]
-        args = json.loads(call["function"]["arguments"])
-        
-        # 自动注入 project_id 到文件工具
-        if context:
-            if name.startswith("file_") and "project_id" in context:
-                args["project_id"] = context["project_id"]
-        
-        result = self.registry.execute(name, args)
+    if not context:
+        return
+    if name.startswith("file_") and "project_id" in context:
+        args["project_id"] = context["project_id"]
+    if name == "multi_agent":
+        if "model" in context:
+            args["_model"] = context["model"]
+        if "project_id" in context:
+            args["_project_id"] = context["project_id"]
 ```
 
 ### 使用示例
@@ -122,12 +117,12 @@ def process_tool_calls(
 # backend/services/chat.py
 
 def stream_response(self, conv, tools_enabled=True, project_id=None):
-    # 构建上下文（优先使用请求传递的 project_id，否则回退到对话绑定的）
-    context = None
+    # 构建上下文（包含 model 和 project_id）
+    context = {"model": conv.model}
     if project_id:
-        context = {"project_id": project_id}
+        context["project_id"] = project_id
     elif conv.project_id:
-        context = {"project_id": conv.project_id}
+        context["project_id"] = conv.project_id
 
     # 处理工具调用时自动注入
     tool_results = self.executor.process_tool_calls(tool_calls, context)
@@ -250,6 +245,19 @@ file_read({"path": "src/main.py", "project_id": "xxx"})
 |---------|------|------|
 | `get_weather` | 查询天气信息（模拟） | `city`: 城市名称 |
 
+### 5.6 多智能体工具 (agent)
+
+| 工具名称 | 描述 | 参数 |
+|---------|------|------|
+| `multi_agent` | 派生子 Agent 并发执行任务（最多 5 个） | `tasks`: 任务数组（name, instruction, tools）<br>`_model`: 模型名称（自动注入）<br>`_project_id`: 项目 ID（自动注入） |
+
+**`multi_agent` 工作原理：**
+1. 接收任务数组，每个任务指定 name、instruction 和可选的 tools 列表
+2. 为每个子 Agent 创建独立线程，各自拥有 LLM 对话循环（最多 3 轮迭代，4096 tokens）
+3. 通过 Service Locator 获取 `llm_client` 实例
+4. 子 Agent 在 `app.app_context()` 中运行，可独立调用所有注册工具
+5. 返回 `{success, results: [{task_name, success, response/error}], total}`
+
 ---
 
 ## 六、核心特性
@@ -285,7 +293,6 @@ def my_tool(arguments: dict) -> dict:
 
 - **批次内去重**：同一批次中相同工具+参数的调用会被跳过
 - **历史去重**：同一会话内已调用过的工具会直接返回缓存结果
-- **自动清理**：新会话开始时调用 `clear_history()` 清理历史
 
 ### 6.4 无自动重试
 
@@ -308,13 +315,45 @@ def my_tool(arguments: dict) -> dict:
 def init_tools() -> None:
     """初始化所有内置工具"""
     from backend.tools.builtin import (
-        code, crawler, data, weather, file_ops
+        code, crawler, data, weather, file_ops, agent
     )
 ```
 
 ---
 
-## 八、扩展新工具
+## 八、Service Locator
+
+工具系统提供 Service Locator 模式，允许工具访问共享服务（如 LLM 客户端）：
+
+```python
+# backend/tools/__init__.py
+
+_services: dict = {}
+
+def register_service(name: str, service) -> None:
+    """注册共享服务"""
+    _services[name] = service
+
+def get_service(name: str):
+    """获取已注册的服务，不存在则返回 None"""
+    return _services.get(name)
+```
+
+### 使用方式
+
+```python
+# 在应用初始化时注册（routes/__init__.py）
+from backend.tools import register_service
+register_service("llm_client", llm_client)
+
+# 在工具中使用（agent.py）
+from backend.tools import get_service
+llm_client = get_service("llm_client")
+```
+
+---
+
+## 九、扩展新工具
 
 ### 添加新工具
 

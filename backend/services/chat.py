@@ -61,6 +61,9 @@ class ChatService:
         """
         conv_id = conv.id
         conv_model = conv.model
+        conv_max_tokens = conv.max_tokens
+        conv_temperature = conv.temperature
+        conv_thinking_enabled = conv.thinking_enabled
         app = current_app._get_current_object()
         tools = registry.list_all() if tools_enabled else None
         initial_messages = build_messages(conv, project_id)
@@ -85,7 +88,9 @@ class ChatService:
             for iteration in range(MAX_ITERATIONS):
                 try:
                     stream_result = self._stream_llm_response(
-                        app, conv_id, messages, tools, tool_choice, step_index
+                        app, messages, tools, tool_choice, step_index,
+                        conv_model, conv_max_tokens, conv_temperature,
+                        conv_thinking_enabled,
                     )
                 except requests.exceptions.HTTPError as e:
                     resp = e.response
@@ -185,7 +190,7 @@ class ChatService:
                     # Append assistant message + tool results for the next iteration
                     messages.append({
                         "role": "assistant",
-                        "content": full_content or None,
+                        "content": full_content or "",
                         "tool_calls": tool_calls_list,
                     })
                     messages.extend(tool_results)
@@ -232,7 +237,8 @@ class ChatService:
     # ------------------------------------------------------------------
 
     def _stream_llm_response(
-        self, app, conv_id, messages, tools, tool_choice, step_index
+        self, app, messages, tools, tool_choice, step_index,
+        model, max_tokens, temperature, thinking_enabled,
     ):
         """Call LLM streaming API and parse the response.
 
@@ -253,13 +259,12 @@ class ChatService:
         sse_chunks = []  # Collect SSE events to yield later
 
         with app.app_context():
-            active_conv = db.session.get(Conversation, conv_id)
             resp = self.llm.call(
-                model=active_conv.model,
+                model=model,
                 messages=messages,
-                max_tokens=active_conv.max_tokens,
-                temperature=active_conv.temperature,
-                thinking_enabled=active_conv.thinking_enabled,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                thinking_enabled=thinking_enabled,
                 tools=tools,
                 tool_choice=tool_choice,
                 stream=True,
@@ -327,39 +332,8 @@ class ChatService:
             sse_chunks,
         )
 
-    def _execute_tools_safe(self, app, executor, tool_calls_list, context):
-        """Execute tool calls with top-level error wrapping.
-
-        If an unexpected exception occurs during tool execution, it is
-        converted into error tool results instead of crashing the stream.
-        """
-        try:
-            if len(tool_calls_list) > 1:
-                with app.app_context():
-                    tool_results = executor.process_tool_calls_parallel(
-                        tool_calls_list, context, max_workers=TOOL_MAX_WORKERS
-                    )
-            else:
-                with app.app_context():
-                    tool_results = executor.process_tool_calls(
-                        tool_calls_list, context
-                    )
-        except Exception as e:
-            logger.exception("Error during tool execution")
-            tool_results = [
-                {
-                    "role": "tool",
-                    "tool_call_id": tc["id"],
-                    "name": tc["function"]["name"],
-                    "content": json.dumps({
-                        "success": False,
-                        "error": f"Tool execution failed: {e}",
-                    }, ensure_ascii=False),
-                }
-                for tc in tool_calls_list
-            ]
-
-        # Truncate oversized tool result content
+    def _truncate_tool_results(self, tool_results):
+        """Truncate oversized tool result content in-place and return the list."""
         for tr in tool_results:
             if len(tr["content"]) > TOOL_RESULT_MAX_LENGTH:
                 try:
@@ -380,8 +354,44 @@ class ChatService:
                     ensure_ascii=False,
                     default=str,
                 )[:TOOL_RESULT_MAX_LENGTH]
-
         return tool_results
+
+    def _execute_tools_safe(self, app, executor, tool_calls_list, context):
+        """Execute tool calls with top-level error wrapping.
+
+        If an unexpected exception occurs during tool execution, it is
+        converted into error tool results instead of crashing the stream.
+        """
+        try:
+            if len(tool_calls_list) > 1:
+                with app.app_context():
+                    return self._truncate_tool_results(
+                        executor.process_tool_calls_parallel(
+                            tool_calls_list, context, max_workers=TOOL_MAX_WORKERS
+                        )
+                    )
+            else:
+                with app.app_context():
+                    return self._truncate_tool_results(
+                        executor.process_tool_calls(
+                            tool_calls_list, context
+                        )
+                    )
+        except Exception as e:
+            logger.exception("Error during tool execution")
+            tool_results = [
+                {
+                    "role": "tool",
+                    "tool_call_id": tc["id"],
+                    "name": tc["function"]["name"],
+                    "content": json.dumps({
+                        "success": False,
+                        "error": f"Tool execution failed: {e}",
+                    }, ensure_ascii=False),
+                }
+                for tc in tool_calls_list
+            ]
+            return self._truncate_tool_results(tool_results)
 
     def _save_message(
         self, app, conv_id, conv_model, msg_id,

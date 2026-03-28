@@ -133,6 +133,13 @@ def build_messages(conv, project_id=None):
     # Query messages directly to avoid detached instance warning
     messages = Message.query.filter_by(conversation_id=conv.id).order_by(Message.created_at.asc()).all()
     for m in messages:
+        # Skip tool messages — they are ephemeral intermediate results, not
+        # meant to be replayed as conversation history (would violate the API
+        # protocol that requires tool messages to follow an assistant message
+        # with matching tool_calls).
+        if m.role == "tool":
+            continue
+
         # Build full content from JSON structure
         full_content = m.content
         try:

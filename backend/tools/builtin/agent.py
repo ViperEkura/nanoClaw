@@ -1,8 +1,7 @@
-"""Multi-agent tools for concurrent and batch task execution.
+"""Multi-agent tool for spawning concurrent sub-agents.
 
 Provides:
-- parallel_execute: Run multiple tool calls concurrently
-- agent_task: Spawn sub-agents with their own LLM conversation loops
+- multi_agent: Spawn sub-agents with independent LLM conversation loops
 """
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -13,118 +12,36 @@ from backend.tools.core import registry
 from backend.tools.executor import ToolExecutor
 
 
-# ---------------------------------------------------------------------------
-# parallel_execute – run multiple tool calls concurrently
-# ---------------------------------------------------------------------------
+def _to_executor_calls(tool_calls: list, id_prefix: str = "tc") -> list:
+    """Normalize tool calls into executor-compatible format.
 
-@tool(
-    name="parallel_execute",
-    description=(
-        "Execute multiple tool calls concurrently for better performance. "
-        "Use when you have several independent operations that don't depend on each other "
-        "(e.g. reading multiple files, running multiple searches, fetching several pages). "
-        "Results are returned in the same order as the input."
-    ),
-    parameters={
-        "type": "object",
-        "properties": {
-            "tool_calls": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "name": {
-                            "type": "string",
-                            "description": "Tool name to execute",
-                        },
-                        "arguments": {
-                            "type": "object",
-                            "description": "Arguments for the tool",
-                        },
-                    },
-                    "required": ["name", "arguments"],
-                },
-                "description": "List of tool calls to execute in parallel (max 10)",
-            },
-            "concurrency": {
-                "type": "integer",
-                "description": "Max concurrent executions (1-5, default 3)",
-                "default": 3,
-            },
-        },
-        "required": ["tool_calls"],
-    },
-    category="agent",
-)
-def parallel_execute(arguments: dict) -> dict:
-    """Execute multiple tool calls concurrently.
-
-    Args:
-        arguments: {
-            "tool_calls": [
-                {"name": "file_read", "arguments": {"path": "a.py"}},
-                {"name": "web_search", "arguments": {"query": "python"}}
-            ],
-            "concurrency": 3,
-            "_project_id": "..."  // injected by executor
-        }
-
-    Returns:
-        {"results": [{index, tool_name, success, data/error}]}
+    Accepts two input shapes:
+      - LLM format: {"function": {"name": ..., "arguments": ...}}
+      - Simple format: {"name": ..., "arguments": ...}
     """
-    tool_calls = arguments["tool_calls"]
-    concurrency = min(max(arguments.get("concurrency", 3), 1), 5)
-
-    if len(tool_calls) > 10:
-        return {"success": False, "error": "Maximum 10 tool calls allowed per parallel execution"}
-
-    # Build executor context from injected fields
-    context = {}
-    project_id = arguments.get("_project_id")
-    if project_id:
-        context["project_id"] = project_id
-
-    # Format tool_calls into executor-compatible format
     executor_calls = []
     for i, tc in enumerate(tool_calls):
-        executor_calls.append({
-            "id": f"pe-{i}",
-            "type": "function",
-            "function": {
-                "name": tc["name"],
-                "arguments": json.dumps(tc["arguments"], ensure_ascii=False),
-            },
-        })
+        if "function" in tc:
+            func = tc["function"]
+            executor_calls.append({
+                "id": tc.get("id", f"{id_prefix}-{i}"),
+                "type": tc.get("type", "function"),
+                "function": {
+                    "name": func["name"],
+                    "arguments": func["arguments"],
+                },
+            })
+        else:
+            executor_calls.append({
+                "id": f"{id_prefix}-{i}",
+                "type": "function",
+                "function": {
+                    "name": tc["name"],
+                    "arguments": json.dumps(tc["arguments"], ensure_ascii=False),
+                },
+            })
+    return executor_calls
 
-    # Use ToolExecutor for proper context injection, caching and dedup
-    executor = ToolExecutor(registry=registry, enable_cache=False)
-    executor_results = executor.process_tool_calls_parallel(
-        executor_calls, context, max_workers=concurrency
-    )
-
-    # Format output
-    results = []
-    for er in executor_results:
-        try:
-            content = json.loads(er["content"]) if isinstance(er["content"], str) else er["content"]
-        except (json.JSONDecodeError, TypeError):
-            content = {"success": False, "error": "Failed to parse result"}
-        results.append({
-            "index": len(results),
-            "tool_name": er["name"],
-            **content,
-        })
-
-    return {
-        "success": True,
-        "results": results,
-        "total": len(results),
-    }
-
-
-# ---------------------------------------------------------------------------
-# agent_task – spawn sub-agents with independent LLM conversation loops
-# ---------------------------------------------------------------------------
 
 def _run_sub_agent(
     task_name: str,
@@ -160,7 +77,9 @@ def _run_sub_agent(
         tools = all_tools
 
     executor = ToolExecutor(registry=registry)
-    context = {"project_id": project_id} if project_id else None
+    context = {"model": model}
+    if project_id:
+        context["project_id"] = project_id
 
     # System prompt: instruction + reminder to give a final text answer
     system_msg = (
@@ -170,13 +89,17 @@ def _run_sub_agent(
     )
     messages = [{"role": "system", "content": system_msg}]
 
-    for _ in range(max_iterations):
+    for i in range(max_iterations):
+        is_final = (i == max_iterations - 1)
         try:
             with app.app_context():
                 resp = llm_client.call(
                     model=model,
                     messages=messages,
-                    tools=tools if tools else None,
+                    # On the last iteration, don't pass tools so the LLM is
+                    # forced to produce a final text response instead of calling
+                    # more tools.
+                    tools=None if is_final else (tools if tools else None),
                     stream=False,
                     max_tokens=min(max_tokens, 4096),
                     temperature=0.7,
@@ -196,19 +119,15 @@ def _run_sub_agent(
             message = choice["message"]
 
             if message.get("tool_calls"):
-                messages.append(message)
+                # Only extract needed fields — LLM response may contain extra
+                # fields (e.g. reasoning_content) that the API rejects on re-send
+                messages.append({
+                    "role": "assistant",
+                    "content": message.get("content") or "",
+                    "tool_calls": message["tool_calls"],
+                })
                 tc_list = message["tool_calls"]
-                # Convert OpenAI tool_calls to executor format
-                executor_calls = []
-                for tc in tc_list:
-                    executor_calls.append({
-                        "id": tc.get("id", ""),
-                        "type": tc.get("type", "function"),
-                        "function": {
-                            "name": tc["function"]["name"],
-                            "arguments": tc["function"]["arguments"],
-                        },
-                    })
+                executor_calls = _to_executor_calls(tc_list)
                 tool_results = executor.process_tool_calls(executor_calls, context)
                 messages.extend(tool_results)
             else:
@@ -226,7 +145,7 @@ def _run_sub_agent(
                 "error": str(e),
             }
 
-    # Exhausted iterations without final response — return last LLM output if any
+    # Exhausted iterations without final response
     return {
         "task_name": task_name,
         "success": True,
@@ -234,49 +153,49 @@ def _run_sub_agent(
     }
 
 
-# @tool(
-#     name="agent_task",
-#     description=(
-#         "Spawn one or more sub-agents to work on tasks concurrently. "
-#         "Each agent runs its own independent conversation with the LLM and can use tools. "
-#         "Useful for parallel research, multi-file analysis, or dividing complex tasks into sub-tasks. "
-#         "Each agent is limited to 3 iterations and 4096 tokens to control cost."
-#     ),
-#     parameters={
-#         "type": "object",
-#         "properties": {
-#             "tasks": {
-#                 "type": "array",
-#                 "items": {
-#                     "type": "object",
-#                     "properties": {
-#                         "name": {
-#                             "type": "string",
-#                             "description": "Short name/identifier for this task",
-#                         },
-#                         "instruction": {
-#                             "type": "string",
-#                             "description": "Detailed instruction for the sub-agent",
-#                         },
-#                         "tools": {
-#                             "type": "array",
-#                             "items": {"type": "string"},
-#                             "description": (
-#                                 "Tool names this agent can use (empty = all tools). "
-#                                 "e.g. ['file_read', 'file_list', 'web_search']"
-#                             ),
-#                         },
-#                     },
-#                     "required": ["name", "instruction"],
-#                 },
-#                 "description": "Tasks for parallel sub-agents (max 5)",
-#             },
-#         },
-#         "required": ["tasks"],
-#     },
-#     category="agent",
-# )
-def agent_task(arguments: dict) -> dict:
+@tool(
+    name="multi_agent",
+    description=(
+        "Spawn multiple sub-agents to work on tasks concurrently. "
+        "Each agent runs its own independent conversation with the LLM and can use tools. "
+        "Useful for parallel research, multi-file analysis, or dividing complex tasks into sub-tasks. "
+        "Each agent is limited to 3 iterations and 4096 tokens to control cost."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "tasks": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "Short name/identifier for this task",
+                        },
+                        "instruction": {
+                            "type": "string",
+                            "description": "Detailed instruction for the sub-agent",
+                        },
+                        "tools": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": (
+                                "Tool names this agent can use (empty = all tools). "
+                                "e.g. ['file_read', 'file_list', 'web_search']"
+                            ),
+                        },
+                    },
+                    "required": ["name", "instruction"],
+                },
+                "description": "Tasks for parallel sub-agents (max 5)",
+            },
+        },
+        "required": ["tasks"],
+    },
+    category="agent",
+)
+def multi_agent(arguments: dict) -> dict:
     """Spawn sub-agents to work on tasks concurrently.
 
     Args:
@@ -296,7 +215,7 @@ def agent_task(arguments: dict) -> dict:
         }
 
     Returns:
-        {"success": true, "results": [{task_name, success, response/error}]}
+        {"success": true, "results": [{task_name, success, response/error}], "total": int}
     """
     from flask import current_app
 
@@ -309,7 +228,8 @@ def agent_task(arguments: dict) -> dict:
     app = current_app._get_current_object()
 
     # Use injected model/project_id from executor context, fall back to defaults
-    model = arguments.get("_model", "glm-5")
+    from backend.config import DEFAULT_MODEL
+    model = arguments.get("_model") or DEFAULT_MODEL
     project_id = arguments.get("_project_id")
 
     # Execute agents concurrently (max 3 at a time)
