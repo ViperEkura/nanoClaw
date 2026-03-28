@@ -1022,10 +1022,9 @@ frontend_port: 4000
 max_iterations: 15
 
 # 子代理资源配置（multi_agent 工具）
+# max_tokens 和 temperature 与主 Agent 共用，无需单独配置
 sub_agent:
   max_iterations: 3      # 每个子代理的最大工具调用轮数
-  max_tokens: 4096        # 每次调用的最大 token 数
-  max_agents: 5           # 每次请求最多派生的子代理数
   max_concurrency: 3      # 并发线程数
 
 # 可用模型列表（每个模型必须指定 api_url 和 api_key）

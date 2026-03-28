@@ -39,8 +39,6 @@ max_iterations: 15
 # Sub-agent settings (multi_agent tool)
 sub_agent:
   max_iterations: 3      # Max tool-call rounds per sub-agent
-  max_tokens: 4096        # Max tokens per LLM call inside a sub-agent
-  max_agents: 5           # Max number of concurrent sub-agents per request
   max_concurrency: 3      # ThreadPoolExecutor max workers
 
 # Available models

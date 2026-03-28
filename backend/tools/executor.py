@@ -67,6 +67,10 @@ class ToolExecutor:
                 args["_model"] = context["model"]
             if "project_id" in context:
                 args["_project_id"] = context["project_id"]
+            if "max_tokens" in context:
+                args["_max_tokens"] = context["max_tokens"]
+            if "temperature" in context:
+                args["_temperature"] = context["temperature"]
 
     def _prepare_call(
         self,

@@ -14,7 +14,7 @@ from backend.utils.helpers import (
     build_messages,
 )
 from backend.services.llm_client import LLMClient
-from backend.config import MAX_ITERATIONS, TOOL_MAX_WORKERS, TOOL_RESULT_MAX_LENGTH
+from backend.config import MAX_ITERATIONS, TOOL_MAX_WORKERS
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +70,11 @@ class ChatService:
 
         executor = ToolExecutor(registry=registry)
 
-        context = {"model": conv_model}
+        context = {
+            "model": conv_model,
+            "max_tokens": conv_max_tokens,
+            "temperature": conv_temperature,
+        }
         if project_id:
             context["project_id"] = project_id
         elif conv.project_id:
@@ -332,30 +336,6 @@ class ChatService:
             sse_chunks,
         )
 
-    def _truncate_tool_results(self, tool_results):
-        """Truncate oversized tool result content in-place and return the list."""
-        for tr in tool_results:
-            if len(tr["content"]) > TOOL_RESULT_MAX_LENGTH:
-                try:
-                    result_data = json.loads(tr["content"])
-                    original = result_data
-                except (json.JSONDecodeError, TypeError):
-                    original = None
-
-                tr["content"] = json.dumps(
-                    {"success": False, "error": "Tool result too large, truncated"},
-                    ensure_ascii=False,
-                ) if not original else json.dumps(
-                    {
-                        **original,
-                        "truncated": True,
-                        "_note": f"Content truncated, original length {len(tr['content'])} chars",
-                    },
-                    ensure_ascii=False,
-                    default=str,
-                )[:TOOL_RESULT_MAX_LENGTH]
-        return tool_results
-
     def _execute_tools_safe(self, app, executor, tool_calls_list, context):
         """Execute tool calls with top-level error wrapping.
 
@@ -365,21 +345,17 @@ class ChatService:
         try:
             if len(tool_calls_list) > 1:
                 with app.app_context():
-                    return self._truncate_tool_results(
-                        executor.process_tool_calls_parallel(
-                            tool_calls_list, context, max_workers=TOOL_MAX_WORKERS
-                        )
+                    return executor.process_tool_calls_parallel(
+                        tool_calls_list, context, max_workers=TOOL_MAX_WORKERS
                     )
             else:
                 with app.app_context():
-                    return self._truncate_tool_results(
-                        executor.process_tool_calls(
-                            tool_calls_list, context
-                        )
+                    return executor.process_tool_calls(
+                        tool_calls_list, context
                     )
         except Exception as e:
             logger.exception("Error during tool execution")
-            tool_results = [
+            return [
                 {
                     "role": "tool",
                     "tool_call_id": tc["id"],
@@ -391,7 +367,6 @@ class ChatService:
                 }
                 for tc in tool_calls_list
             ]
-            return self._truncate_tool_results(tool_results)
 
     def _save_message(
         self, app, conv_id, conv_model, msg_id,

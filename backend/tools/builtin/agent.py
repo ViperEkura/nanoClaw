@@ -7,16 +7,15 @@ import json
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict, Any, Optional
-
+from backend.tools import get_service
 from backend.tools.factory import tool
 from backend.tools.core import registry
 from backend.tools.executor import ToolExecutor
 from backend.config import (
     DEFAULT_MODEL,
     SUB_AGENT_MAX_ITERATIONS,
-    SUB_AGENT_MAX_TOKENS,
-    SUB_AGENT_MAX_AGENTS,
     SUB_AGENT_MAX_CONCURRENCY,
+    SUB_AGENT_TIMEOUT,
 )
 
 logger = logging.getLogger(__name__)
@@ -62,6 +61,7 @@ def _run_sub_agent(
     tool_names: Optional[List[str]],
     model: str,
     max_tokens: int,
+    temperature: float,
     project_id: Optional[str],
     app: Any,
     max_iterations: int = 3,
@@ -71,7 +71,6 @@ def _run_sub_agent(
     Each sub-agent gets its own ToolExecutor instance and runs a simplified
     version of the main agent loop, limited to prevent runaway cost.
     """
-    from backend.tools import get_service
 
     llm_client = get_service("llm_client")
     if not llm_client:
@@ -117,9 +116,9 @@ def _run_sub_agent(
                     # more tools.
                     tools=None if is_final else (tools if tools else None),
                     stream=False,
-                    max_tokens=min(max_tokens, 4096),
-                    temperature=0.7,
-                    timeout=60,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    timeout=SUB_AGENT_TIMEOUT,
                 )
 
             if resp.status_code != 200:
@@ -247,8 +246,8 @@ def multi_agent(arguments: dict) -> dict:
 
     tasks = arguments["tasks"]
 
-    if len(tasks) > SUB_AGENT_MAX_AGENTS:
-        return {"success": False, "error": f"Maximum {SUB_AGENT_MAX_AGENTS} concurrent agents allowed"}
+    if len(tasks) > 5:
+        return {"success": False, "error": "Maximum 5 concurrent agents allowed"}
 
     # Get current conversation context for model/project info
     app = current_app._get_current_object()
@@ -256,6 +255,8 @@ def multi_agent(arguments: dict) -> dict:
     # Use injected model/project_id from executor context, fall back to defaults
     model = arguments.get("_model") or DEFAULT_MODEL
     project_id = arguments.get("_project_id")
+    max_tokens = arguments.get("_max_tokens", 65536)
+    temperature = arguments.get("_temperature", 0.7)
 
     # Execute agents concurrently
     concurrency = min(len(tasks), SUB_AGENT_MAX_CONCURRENCY)
@@ -269,7 +270,8 @@ def multi_agent(arguments: dict) -> dict:
                 task["instruction"],
                 task.get("tools"),
                 model,
-                SUB_AGENT_MAX_TOKENS,
+                max_tokens,
+                temperature,
                 project_id,
                 app,
                 SUB_AGENT_MAX_ITERATIONS,

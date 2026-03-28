@@ -319,9 +319,10 @@ execute_python({
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
 | `max_iterations` | 3 | 每个子代理的最大工具调用轮数 |
-| `max_tokens` | 4096 | 每次调用的最大 token 数 |
-| `max_agents` | 5 | 每次请求最多派生的子代理数 |
 | `max_concurrency` | 3 | ThreadPoolExecutor 并发线程数 |
+
+> - `max_tokens` 和 `temperature` 与主 Agent 共用，从对话配置中获取，无需单独配置。
+> - 子代理禁止调用 `multi_agent` 工具，防止无限递归。
 
 ---
 
