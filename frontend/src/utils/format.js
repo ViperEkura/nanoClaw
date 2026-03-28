@@ -1,3 +1,5 @@
+import { DEFAULT_TRUNCATE_LENGTH } from '../constants'
+
 /**
  * Format ISO date string to a short time string.
  * - Today: "14:30"
@@ -36,7 +38,7 @@ export function formatJson(value) {
 /**
  * Truncate text to max characters with ellipsis.
  */
-export function truncate(text, max = 60) {
+export function truncate(text, max = DEFAULT_TRUNCATE_LENGTH) {
   if (!text) return ''
   const str = text.replace(/\s+/g, ' ').trim()
   return str.length > max ? str.slice(0, max) + '\u2026' : str

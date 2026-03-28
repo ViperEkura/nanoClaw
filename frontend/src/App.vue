@@ -121,6 +121,11 @@ import ModalDialog from './components/ModalDialog.vue'
 import ToastContainer from './components/ToastContainer.vue'
 import { icons } from './utils/icons'
 import { useModal } from './composables/useModal'
+import {
+  DEFAULT_CONVERSATION_PAGE_SIZE,
+  DEFAULT_MESSAGE_PAGE_SIZE,
+  LS_KEY_TOOLS_ENABLED,
+} from './constants'
 
 const SettingsPanel = defineAsyncComponent(() => import('./components/SettingsPanel.vue'))
 const StatsPanel = defineAsyncComponent(() => import('./components/StatsPanel.vue'))
@@ -226,7 +231,7 @@ function updateStreamField(convId, field, ref, valueOrUpdater) {
 // -- UI state --
 const showSettings = ref(false)
 const showStats = ref(false)
-const toolsEnabled = ref(localStorage.getItem('tools_enabled') !== 'false')
+const toolsEnabled = ref(localStorage.getItem(LS_KEY_TOOLS_ENABLED) !== 'false')
 const currentProject = ref(null)
 const showFileExplorer = ref(false)
 const showCreateModal = ref(false)
@@ -250,7 +255,7 @@ async function loadConversations(reset = true) {
   if (loadingConvs.value) return
   loadingConvs.value = true
   try {
-    const res = await conversationApi.list(reset ? null : nextConvCursor.value, 20)
+    const res = await conversationApi.list(reset ? null : nextConvCursor.value, DEFAULT_CONVERSATION_PAGE_SIZE)
     if (reset) {
       conversations.value = res.data.items
     } else {
@@ -436,7 +441,7 @@ function createStreamCallbacks(convId, { updateConvList = true } = {}) {
         }
       } else {
         try {
-          const res = await messageApi.list(convId, null, 50)
+          const res = await messageApi.list(convId, null, DEFAULT_MESSAGE_PAGE_SIZE)
           const idx = conversations.value.findIndex(c => c.id === convId)
           if (idx >= 0) {
             const conv = conversations.value[idx]
@@ -557,7 +562,7 @@ async function saveSettings(data) {
 // -- Update tools enabled --
 function updateToolsEnabled(val) {
   toolsEnabled.value = val
-  localStorage.setItem('tools_enabled', String(val))
+  localStorage.setItem(LS_KEY_TOOLS_ENABLED, String(val))
 }
 
 // -- Browse project files --

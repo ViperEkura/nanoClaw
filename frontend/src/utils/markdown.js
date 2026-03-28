@@ -2,6 +2,7 @@ import { marked } from 'marked'
 import { markedHighlight } from 'marked-highlight'
 import katex from 'katex'
 import { highlightCode } from './highlight'
+import { COPY_BUTTON_RESET_MS } from '../constants'
 
 function renderMath(text, displayMode) {
   try {
@@ -108,7 +109,7 @@ export function enhanceCodeBlocks(container) {
 
     copyBtn.addEventListener('click', () => {
       const raw = code?.textContent || ''
-      const copy = () => { copyBtn.innerHTML = CHECK_SVG; setTimeout(() => { copyBtn.innerHTML = COPY_SVG }, 1500) }
+      const copy = () => { copyBtn.innerHTML = CHECK_SVG; setTimeout(() => { copyBtn.innerHTML = COPY_SVG }, COPY_BUTTON_RESET_MS) }
       if (navigator.clipboard) {
         navigator.clipboard.writeText(raw).then(copy)
       } else {

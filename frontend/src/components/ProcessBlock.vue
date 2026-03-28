@@ -41,7 +41,10 @@
             </div>
             <div v-if="item.result" class="tool-detail">
               <span class="detail-label">返回结果:</span>
-              <pre>{{ item.result }}</pre>
+              <pre>{{ expandedResultKeys[item.key] ? item.result : item.resultPreview }}</pre>
+              <button v-if="item.resultTruncated" class="btn-expand-result" @click.stop="toggleResultExpand(item.key)">
+                {{ expandedResultKeys[item.key] ? '收起' : `展开全部 (${item.resultLength} 字符)` }}
+              </button>
             </div>
           </div>
         </div>
@@ -67,6 +70,19 @@ import { ref, computed, watch } from 'vue'
 import { renderMarkdown } from '../utils/markdown'
 import { formatJson, truncate } from '../utils/format'
 import { useCodeEnhancement } from '../composables/useCodeEnhancement'
+import { RESULT_PREVIEW_LIMIT } from '../constants'
+
+function buildResultFields(rawContent) {
+  const formatted = formatJson(rawContent)
+  const len = formatted.length
+  const truncated = len > RESULT_PREVIEW_LIMIT
+  return {
+    result: formatted,
+    resultPreview: truncated ? formatted.slice(0, RESULT_PREVIEW_LIMIT) + '\n...' : formatted,
+    resultTruncated: truncated,
+    resultLength: len,
+  }
+}
 
 const props = defineProps({
   toolCalls: { type: Array, default: () => [] },
@@ -75,16 +91,22 @@ const props = defineProps({
 })
 
 const expandedKeys = ref({})
+const expandedResultKeys = ref({})
 
 // Auto-collapse all items when a new stream starts
 watch(() => props.streaming, (v) => {
   if (v) expandedKeys.value = {}
+  expandedResultKeys.value = {}
 })
 
 const processRef = ref(null)
 
 function toggleItem(key) {
   expandedKeys.value[key] = !expandedKeys.value[key]
+}
+
+function toggleResultExpand(key) {
+  expandedResultKeys.value[key] = !expandedResultKeys.value[key]
 }
 
 function getResultSummary(result) {
@@ -138,7 +160,7 @@ const processItems = computed(() => {
         const summary = getResultSummary(step.content)
         const match = items.findLast(it => it.type === 'tool_call' && it.id === toolId)
         if (match) {
-          match.result = formatJson(step.content)
+          Object.assign(match, buildResultFields(step.content))
           match.resultSummary = summary.text
           match.isSuccess = summary.success
           match.loading = false
@@ -165,7 +187,8 @@ const processItems = computed(() => {
     if (props.toolCalls && props.toolCalls.length > 0) {
       props.toolCalls.forEach((call, i) => {
         const toolName = call.function?.name || '未知工具'
-        const result = call.result ? getResultSummary(call.result) : null
+        const resultSummary = call.result ? getResultSummary(call.result) : null
+        const resultFields = call.result ? buildResultFields(call.result) : { result: null, resultPreview: null, resultTruncated: false, resultLength: 0 }
         items.push({
           type: 'tool_call',
           toolName,
@@ -174,9 +197,9 @@ const processItems = computed(() => {
           id: call.id,
           key: `tool_call-${call.id || i}`,
           loading: !call.result && props.streaming,
-          result: call.result ? formatJson(call.result) : null,
-          resultSummary: result ? result.text : null,
-          isSuccess: result ? result.success : undefined,
+          ...resultFields,
+          resultSummary: resultSummary ? resultSummary.text : null,
+          isSuccess: resultSummary ? resultSummary.success : undefined,
         })
       })
     }
@@ -343,6 +366,23 @@ watch(() => props.processSteps?.length, () => {
   overflow-x: auto;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.btn-expand-result {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 3px 10px;
+  font-size: 11px;
+  color: var(--tool-color);
+  background: var(--tool-bg);
+  border: 1px solid var(--tool-border);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-expand-result:hover {
+  background: var(--tool-bg-hover);
 }
 
 /* Text content — rendered as markdown */

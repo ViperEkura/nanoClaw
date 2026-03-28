@@ -24,7 +24,7 @@
         <input
           ref="fileInputRef"
           type="file"
-          accept=".txt,.md,.json,.xml,.html,.css,.js,.ts,.jsx,.tsx,.py,.java,.c,.cpp,.h,.hpp,.yaml,.yml,.toml,.ini,.csv,.sql,.sh,.bat,.log,.vue,.svelte,.go,.rs,.rb,.php,.swift,.kt,.scala,.lua,.r,.dart"
+          accept=ALLOWED_UPLOAD_EXTENSIONS
           @change="handleFileUpload"
           style="display: none"
         />
@@ -65,6 +65,7 @@
 <script setup>
 import { ref, computed, nextTick } from 'vue'
 import { icons } from '../utils/icons'
+import { TEXTAREA_MAX_HEIGHT_PX, ALLOWED_UPLOAD_EXTENSIONS } from '../constants'
 
 const props = defineProps({
   disabled: { type: Boolean, default: false },
@@ -83,7 +84,7 @@ function autoResize() {
   const el = textareaRef.value
   if (!el) return
   el.style.height = 'auto'
-  el.style.height = Math.min(el.scrollHeight, 200) + 'px'
+  el.style.height = Math.min(el.scrollHeight, TEXTAREA_MAX_HEIGHT_PX) + 'px'
 }
 
 function onKeydown(e) {

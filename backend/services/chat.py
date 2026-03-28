@@ -90,8 +90,21 @@ class ChatService:
             total_prompt_tokens = 0
 
             for iteration in range(MAX_ITERATIONS):
+                # Helper to parse stream_result event
+                def parse_stream_result(event_str):
+                    """Parse stream_result SSE event and extract data dict."""
+                    # Format: "event: stream_result\ndata: {...}\n\n"
+                    try:
+                        for line in event_str.split('\n'):
+                            if line.startswith('data: '):
+                                return json.loads(line[6:])
+                    except Exception:
+                        pass
+                    return None
+
+                # Collect SSE events and extract final stream_result
                 try:
-                    stream_result = self._stream_llm_response(
+                    stream_gen = self._stream_llm_response(
                         app, messages, tools, tool_choice, step_index,
                         conv_model, conv_max_tokens, conv_temperature,
                         conv_thinking_enabled,
@@ -116,21 +129,36 @@ class ChatService:
                     yield _sse_event("error", {"content": f"Internal error: {e}"})
                     return
 
-                if stream_result is None:
-                    return  # Client disconnected
+                result_data = None
+                try:
+                    for event_str in stream_gen:
+                        # Check if this is a stream_result event (final event)
+                        if event_str.startswith("event: stream_result"):
+                            result_data = parse_stream_result(event_str)
+                        else:
+                            # Forward process_step events to client in real-time
+                            yield event_str
+                except Exception as e:
+                    logger.exception("Error during streaming")
+                    yield _sse_event("error", {"content": f"Stream error: {e}"})
+                    return
 
-                full_content, full_thinking, tool_calls_list, \
-                    thinking_step_id, thinking_step_idx, \
-                    text_step_id, text_step_idx, \
-                    completion_tokens, prompt_tokens, \
-                    sse_chunks = stream_result
+                if result_data is None:
+                    return  # Client disconnected or error
+
+                # Extract data from stream_result
+                full_content = result_data["full_content"]
+                full_thinking = result_data["full_thinking"]
+                tool_calls_list = result_data["tool_calls_list"]
+                thinking_step_id = result_data["thinking_step_id"]
+                thinking_step_idx = result_data["thinking_step_idx"]
+                text_step_id = result_data["text_step_id"]
+                text_step_idx = result_data["text_step_idx"]
+                completion_tokens = result_data["completion_tokens"]
+                prompt_tokens = result_data["prompt_tokens"]
 
                 total_prompt_tokens += prompt_tokens
                 total_completion_tokens += completion_tokens
-
-                # Yield accumulated SSE chunks to frontend
-                for chunk in sse_chunks:
-                    yield chunk
 
                 # Save thinking/text steps to all_steps for DB storage
                 if thinking_step_id is not None:
@@ -244,10 +272,16 @@ class ChatService:
         self, app, messages, tools, tool_choice, step_index,
         model, max_tokens, temperature, thinking_enabled,
     ):
-        """Call LLM streaming API and parse the response.
+        """Call LLM streaming API and yield SSE events in real-time.
 
-        Returns a tuple of parsed results, or None if the client disconnected.
-        Raises HTTPError / ConnectionError / Timeout for the caller to handle.
+        This is a generator that yields SSE event strings as they are received.
+        The final yield is a 'stream_result' event containing the accumulated data.
+
+        Yields:
+            str: SSE event strings (process_step events, then stream_result)
+
+        Raises:
+            HTTPError / ConnectionError / Timeout for the caller to handle.
         """
         full_content = ""
         full_thinking = ""
@@ -259,8 +293,6 @@ class ChatService:
         thinking_step_idx = None
         text_step_id = None
         text_step_idx = None
-
-        sse_chunks = []  # Collect SSE events to yield later
 
         with app.app_context():
             resp = self.llm.call(
@@ -278,7 +310,7 @@ class ChatService:
         for line in resp.iter_lines():
             if _client_disconnected():
                 resp.close()
-                return None
+                return  # Client disconnected, stop generator
 
             if not line:
                 continue
@@ -304,37 +336,44 @@ class ChatService:
 
             delta = choices[0].get("delta", {})
 
+            # Yield thinking content in real-time
             reasoning = delta.get("reasoning_content", "")
             if reasoning:
                 full_thinking += reasoning
                 if thinking_step_id is None:
                     thinking_step_id = f"step-{step_index}"
                     thinking_step_idx = step_index
-                sse_chunks.append(_sse_event("process_step", {
+                yield _sse_event("process_step", {
                     "id": thinking_step_id, "index": thinking_step_idx,
                     "type": "thinking", "content": full_thinking,
-                }))
+                })
 
+            # Yield text content in real-time
             text = delta.get("content", "")
             if text:
                 full_content += text
                 if text_step_id is None:
                     text_step_idx = step_index + (1 if thinking_step_id is not None else 0)
                     text_step_id = f"step-{text_step_idx}"
-                sse_chunks.append(_sse_event("process_step", {
+                yield _sse_event("process_step", {
                     "id": text_step_id, "index": text_step_idx,
                     "type": "text", "content": full_content,
-                }))
+                })
 
             tool_calls_list = self._process_tool_calls_delta(delta, tool_calls_list)
 
-        return (
-            full_content, full_thinking, tool_calls_list,
-            thinking_step_id, thinking_step_idx,
-            text_step_id, text_step_idx,
-            token_count, prompt_tokens,
-            sse_chunks,
-        )
+        # Final yield: stream_result event with accumulated data
+        yield _sse_event("stream_result", {
+            "full_content": full_content,
+            "full_thinking": full_thinking,
+            "tool_calls_list": tool_calls_list,
+            "thinking_step_id": thinking_step_id,
+            "thinking_step_idx": thinking_step_idx,
+            "text_step_id": text_step_id,
+            "text_step_idx": text_step_idx,
+            "completion_tokens": token_count,
+            "prompt_tokens": prompt_tokens,
+        })
 
     def _execute_tools_safe(self, app, executor, tool_calls_list, context):
         """Execute tool calls with top-level error wrapping.

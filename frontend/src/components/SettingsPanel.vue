@@ -126,6 +126,7 @@ import { reactive, ref, watch, onMounted } from 'vue'
 import { conversationApi } from '../api'
 import { useTheme } from '../composables/useTheme'
 import { icons } from '../utils/icons'
+import { SETTINGS_AUTO_SAVE_DEBOUNCE_MS } from '../constants'
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
@@ -218,7 +219,7 @@ let saveTimer = null
 watch(form, () => {
   if (props.visible && props.conversation && syncedConvId === props.conversation.id && !isSyncing) {
     if (saveTimer) clearTimeout(saveTimer)
-    saveTimer = setTimeout(saveChanges, 500)
+    saveTimer = setTimeout(saveChanges, SETTINGS_AUTO_SAVE_DEBOUNCE_MS)
   }
 }, { deep: true })
 

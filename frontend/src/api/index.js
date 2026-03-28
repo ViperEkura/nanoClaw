@@ -1,4 +1,11 @@
-const BASE = '/api'
+import {
+  API_BASE_URL,
+  CONTENT_TYPE_JSON,
+  LS_KEY_MODELS_CACHE,
+  DEFAULT_CONVERSATION_PAGE_SIZE,
+  DEFAULT_MESSAGE_PAGE_SIZE,
+  DEFAULT_PROJECT_PAGE_SIZE,
+} from '../constants'
 
 // Cache for models list
 let modelsCache = null
@@ -13,8 +20,8 @@ function buildQueryParams(params) {
 }
 
 async function request(url, options = {}) {
-  const res = await fetch(`${BASE}${url}`, {
-    headers: { 'Content-Type': 'application/json' },
+  const res = await fetch(`${API_BASE_URL}${url}`, {
+    headers: { 'Content-Type': CONTENT_TYPE_JSON },
     ...options,
     body: options.body ? JSON.stringify(options.body) : undefined,
   })
@@ -37,9 +44,9 @@ function createSSEStream(url, body, { onProcessStep, onDone, onError }) {
 
   const promise = (async () => {
     try {
-      const res = await fetch(`${BASE}${url}`, {
+      const res = await fetch(`${API_BASE_URL}${url}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': CONTENT_TYPE_JSON },
         body: JSON.stringify(body),
         signal: controller.signal,
       })
@@ -107,7 +114,7 @@ export const modelApi = {
     }
 
     // Try localStorage cache first
-    const cached = localStorage.getItem('models_cache')
+    const cached = localStorage.getItem(LS_KEY_MODELS_CACHE)
     if (cached) {
       try {
         modelsCache = JSON.parse(cached)
@@ -118,7 +125,7 @@ export const modelApi = {
     // Fetch from server
     const res = await this.list()
     modelsCache = res.data
-    localStorage.setItem('models_cache', JSON.stringify(modelsCache))
+    localStorage.setItem(LS_KEY_MODELS_CACHE, JSON.stringify(modelsCache))
     return res
   },
 
@@ -131,7 +138,7 @@ export const statsApi = {
 }
 
 export const conversationApi = {
-  list(cursor, limit = 20, projectId = null) {
+  list(cursor, limit = DEFAULT_CONVERSATION_PAGE_SIZE, projectId = null) {
     return request(`/conversations${buildQueryParams({ cursor, limit, project_id: projectId })}`)
   },
 
@@ -159,7 +166,7 @@ export const conversationApi = {
 }
 
 export const messageApi = {
-  list(convId, cursor, limit = 50) {
+  list(convId, cursor, limit = DEFAULT_MESSAGE_PAGE_SIZE) {
     return request(`/conversations/${convId}/messages${buildQueryParams({ cursor, limit })}`)
   },
 
@@ -186,7 +193,7 @@ export const messageApi = {
 }
 
 export const projectApi = {
-  list(cursor, limit = 20) {
+  list(cursor, limit = DEFAULT_PROJECT_PAGE_SIZE) {
     return request(`/projects${buildQueryParams({ cursor, limit })}`)
   },
 
@@ -210,7 +217,7 @@ export const projectApi = {
   },
 
   readFileRaw(projectId, filepath) {
-    return fetch(`${BASE}/projects/${projectId}/files/${filepath}`).then(res => {
+    return fetch(`${API_BASE_URL}/projects/${projectId}/files/${filepath}`).then(res => {
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       return res
     })

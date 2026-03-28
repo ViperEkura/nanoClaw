@@ -1,4 +1,5 @@
 import { reactive } from 'vue'
+import { TOAST_DEFAULT_DURATION } from '../constants'
 
 const state = reactive({
   toasts: [],
@@ -6,7 +7,7 @@ const state = reactive({
 })
 
 export function useToast() {
-  function add(type, message, duration = 1500) {
+  function add(type, message, duration = TOAST_DEFAULT_DURATION) {
     const id = ++state._id
     state.toasts.push({ id, type, message })
     setTimeout(() => {

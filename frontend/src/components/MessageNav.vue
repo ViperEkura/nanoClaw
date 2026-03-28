@@ -17,6 +17,7 @@
 
 <script setup>
 import { computed } from 'vue'
+import { DEFAULT_TRUNCATE_LENGTH } from '../constants'
 
 const props = defineProps({
   messages: { type: Array, required: true },
@@ -30,7 +31,7 @@ const userMessages = computed(() => props.messages.filter(m => m.role === 'user'
 function preview(msg) {
   if (!msg.text) return '...'
   const clean = msg.text.replace(/[#*`~>\-\[\]()]/g, '').replace(/\s+/g, ' ').trim()
-  return clean.length > 60 ? clean.slice(0, 60) + '...' : clean
+  return clean.length > DEFAULT_TRUNCATE_LENGTH ? clean.slice(0, DEFAULT_TRUNCATE_LENGTH) + '...' : clean
 }
 </script>
 

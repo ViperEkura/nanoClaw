@@ -113,6 +113,7 @@
 import { computed, reactive } from 'vue'
 import { formatTime } from '../utils/format'
 import { icons } from '../utils/icons'
+import { INFINITE_SCROLL_THRESHOLD_PX } from '../constants'
 
 const props = defineProps({
   conversations: { type: Array, required: true },
@@ -171,7 +172,7 @@ function toggleGroup(id) {
 
 function onScroll(e) {
   const el = e.target
-  if (el.scrollTop + el.clientHeight >= el.scrollHeight - 50) {
+  if (el.scrollTop + el.clientHeight >= el.scrollHeight - INFINITE_SCROLL_THRESHOLD_PX) {
     emit('loadMore')
   }
 }

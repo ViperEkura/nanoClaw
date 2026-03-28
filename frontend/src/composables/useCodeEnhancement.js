@@ -1,5 +1,6 @@
 import { watch, onMounted, nextTick, onUnmounted } from 'vue'
 import { enhanceCodeBlocks } from '../utils/markdown'
+import { CODE_ENHANCE_DEBOUNCE_MS } from '../constants'
 
 /**
  * Composable for enhancing code blocks in a container element.
@@ -18,7 +19,7 @@ export function useCodeEnhancement(templateRef, dep, watchOpts) {
 
   function debouncedEnhance() {
     if (debounceTimer) clearTimeout(debounceTimer)
-    debounceTimer = setTimeout(() => nextTick(enhance), 150)
+    debounceTimer = setTimeout(() => nextTick(enhance), CODE_ENHANCE_DEBOUNCE_MS)
   }
 
   onMounted(enhance)
