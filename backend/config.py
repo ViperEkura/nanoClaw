@@ -46,3 +46,8 @@ SUB_AGENT_MAX_ITERATIONS = _sa.get("max_iterations", 3)
 SUB_AGENT_MAX_TOKENS = _sa.get("max_tokens", 4096)
 SUB_AGENT_MAX_AGENTS = _sa.get("max_agents", 5)
 SUB_AGENT_MAX_CONCURRENCY = _sa.get("max_concurrency", 3)
+
+# Code execution settings
+_ce = _cfg.get("code_execution", {})
+CODE_EXECUTION_DEFAULT_STRICTNESS = _ce.get("default_strictness", "standard")
+CODE_EXECUTION_EXTRA_MODULES = _ce.get("extra_allowed_modules", {})

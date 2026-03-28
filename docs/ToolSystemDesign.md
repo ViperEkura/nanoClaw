@@ -217,14 +217,68 @@ file_read({"path": "src/main.py", "project_id": "xxx"})
 
 | 工具名称 | 描述 | 参数 |
 |---------|------|------|
-| `execute_python` | 在沙箱环境中执行 Python 代码 | `code`: Python 代码 |
+| `execute_python` | 在沙箱环境中执行 Python 代码 | `code`: Python 代码<br>`strictness`: 可选，严格等级（lenient/standard/strict） |
 
-安全措施：
-- 白名单模块限制
-- 危险内置函数禁止
-- 10 秒超时限制
-- 无文件系统访问
-- 无网络访问
+**严格等级配置：**
+
+| 等级 | 超时 | 策略 | 适用场景 |
+|------|------|------|---------|
+| `lenient` | 30s | 无限制，所有模块和内置函数均可使用 | 数据处理、需要完整标准库 |
+| `standard` | 10s | 白名单机制，仅允许安全模块（默认） | 通用场景 |
+| `strict` | 5s | 精简白名单，仅允许纯计算模块 | 基础计算 |
+
+**standard 白名单模块：** json, csv, re, typing, collections, itertools, functools, operator, heapq, bisect, array, copy, pprint, enum, math, cmath, statistics, random, fractions, decimal, numbers, datetime, time, calendar, string, textwrap, unicodedata, difflib, base64, binascii, quopri, uu, html, xml.etree.ElementTree, dataclasses, hashlib, hmac, abc, contextlib, warnings, logging
+
+**strict 白名单模块：** collections, itertools, functools, operator, array, copy, enum, math, cmath, numbers, fractions, decimal, random, statistics, string, textwrap, unicodedata, typing, dataclasses, abc, contextlib
+
+**内置函数限制：**
+- standard 禁止：eval, exec, compile, \_\_import\_\_, open, input, globals, locals, vars, breakpoint, exit, quit, memoryview, bytearray
+- strict 额外禁止：dir, hasattr, getattr, setattr, delattr, type, isinstance, issubclass
+
+**白名单扩展方式：**
+
+1. **config.yml 配置（持久化）：**
+```yaml
+code_execution:
+  default_strictness: standard
+  extra_allowed_modules:
+    standard: [numpy, pandas]
+    strict: [numpy]
+```
+
+2. **代码 API（插件/运行时）：**
+```python
+from backend.tools.builtin.code import register_extra_modules
+
+register_extra_modules("standard", {"numpy", "pandas"})
+register_extra_modules("strict", {"numpy"})
+```
+
+**使用示例：**
+
+```python
+# 默认 standard 模式（白名单限制）
+execute_python({"code": "import json; print(json.dumps({'key': 'value'}))"})
+
+# lenient 模式 - 无限制
+execute_python({
+    "code": "import os; print(os.getcwd())",
+    "strictness": "lenient"
+})
+
+# strict 模式 - 仅纯计算
+execute_python({
+    "code": "result = sum([1, 2, 3, 4, 5]); print(result)",
+    "strictness": "strict"
+})
+```
+
+**安全措施：**
+- standard/strict: 白名单模块限制（默认拒绝，仅显式允许）
+- lenient: 无限制
+- 危险内置函数按等级禁止
+- 可配置超时限制（5s/10s/30s）
+- subprocess 隔离执行
 
 ### 5.4 文件操作工具 (file)
 
