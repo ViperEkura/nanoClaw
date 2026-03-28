@@ -51,10 +51,6 @@ class ToolExecutor:
                 return record["result"]
         return None
 
-    def clear_history(self) -> None:
-        """Clear call history (call this at start of new conversation turn)"""
-        self._call_history.clear()
-
     @staticmethod
     def _inject_context(name: str, args: dict, context: Optional[dict]) -> None:
         """Inject context fields into tool arguments in-place.

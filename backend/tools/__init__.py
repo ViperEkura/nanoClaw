@@ -15,8 +15,8 @@ Usage:
     result = registry.execute("web_search", {"query": "Python"})
 """
 
-from backend.tools.core import ToolDefinition, ToolResult, ToolRegistry, registry
-from backend.tools.factory import tool, register_tool
+from backend.tools.core import registry
+from backend.tools.factory import tool
 from backend.tools.executor import ToolExecutor
 
 
@@ -47,16 +47,12 @@ def init_tools() -> None:
 
 # Public API exports
 __all__ = [
-    # Core classes
-    "ToolDefinition",
-    "ToolResult",
-    "ToolRegistry",
-    "ToolExecutor",
     # Instances
     "registry",
     # Factory functions
     "tool",
-    "register_tool",
+    # Classes
+    "ToolExecutor",
     # Initialization
     "init_tools",
     # Service locator

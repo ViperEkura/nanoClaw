@@ -60,107 +60,10 @@
       </div>
 
       <!-- 趋势图 -->
-      <div v-if="period !== 'daily' && stats.daily && chartData.length > 0" class="stats-chart">
-        <div class="chart-title">每日趋势</div>
+      <div v-if="chartData.length > 0" class="stats-chart">
+        <div class="chart-title">{{ period === 'daily' ? '今日趋势' : '每日趋势' }}</div>
         <div class="chart-container">
-          <svg class="line-chart" :viewBox="`0 0 ${chartWidth} ${chartHeight}`">
-            <defs>
-              <linearGradient id="areaGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" :stop-color="accentColor" stop-opacity="0.25"/>
-                <stop offset="100%" :stop-color="accentColor" stop-opacity="0.02"/>
-              </linearGradient>
-            </defs>
-            <!-- 网格线 -->
-            <line
-              v-for="i in 4"
-              :key="'grid-' + i"
-              :x1="padding"
-              :y1="padding + (chartHeight - 2 * padding) * (i - 1) / 3"
-              :x2="chartWidth - padding"
-              :y2="padding + (chartHeight - 2 * padding) * (i - 1) / 3"
-              stroke="var(--border-light)"
-              stroke-dasharray="3,3"
-            />
-            <!-- Y轴标签 -->
-            <text
-              v-for="i in 4"
-              :key="'yl-' + i"
-              :x="padding - 4"
-              :y="padding + (chartHeight - 2 * padding) * (i - 1) / 3 + 3"
-              text-anchor="end"
-              class="y-label"
-            >{{ formatNumber(maxValue - (maxValue * (i - 1)) / 3) }}</text>
-            <!-- 填充区域 -->
-            <path :d="areaPath" fill="url(#areaGradient)"/>
-            <!-- 折线 -->
-            <path
-              :d="linePath"
-              fill="none"
-              :stroke="accentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-            <!-- 数据点 -->
-            <circle
-              v-for="(point, idx) in chartPoints"
-              :key="idx"
-              :cx="point.x"
-              :cy="point.y"
-              r="3"
-              :fill="accentColor"
-              stroke="var(--bg-primary)"
-              stroke-width="2"
-              class="data-point"
-              @mouseenter="hoveredPoint = idx"
-              @mouseleave="hoveredPoint = null"
-            />
-            <!-- 竖线指示 -->
-            <line
-              v-if="hoveredPoint !== null && chartPoints[hoveredPoint]"
-              :x1="chartPoints[hoveredPoint].x"
-              :y1="padding"
-              :x2="chartPoints[hoveredPoint].x"
-              :y2="chartHeight - padding"
-              stroke="var(--border-medium)"
-              stroke-dasharray="3,3"
-            />
-          </svg>
-
-          <!-- X轴标签 -->
-          <div class="x-labels">
-            <span
-              v-for="(point, idx) in chartPoints"
-              :key="idx"
-              class="x-label"
-              :class="{ active: hoveredPoint === idx }"
-            >
-              {{ formatDateLabel(point.date) }}
-            </span>
-          </div>
-
-          <!-- 悬浮提示 -->
-          <Transition name="fade">
-            <div
-              v-if="hoveredPoint !== null && chartPoints[hoveredPoint]"
-              class="tooltip"
-              :style="{
-                left: chartPoints[hoveredPoint].x + 'px',
-                top: (chartPoints[hoveredPoint].y - 52) + 'px'
-              }"
-            >
-              <div class="tooltip-date">{{ formatFullDate(chartPoints[hoveredPoint].date) }}</div>
-              <div class="tooltip-row">
-                <span class="tooltip-dot prompt"></span>
-                输入 {{ formatNumber(chartPoints[hoveredPoint].prompt) }}
-              </div>
-              <div class="tooltip-row">
-                <span class="tooltip-dot completion"></span>
-                输出 {{ formatNumber(chartPoints[hoveredPoint].completion) }}
-              </div>
-              <div class="tooltip-total">{{ formatNumber(chartPoints[hoveredPoint].value) }} tokens</div>
-            </div>
-          </Transition>
+          <canvas ref="chartCanvas"></canvas>
         </div>
       </div>
 
@@ -197,10 +100,13 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { Chart, registerables } from 'chart.js'
 import { statsApi } from '../api'
 import { formatNumber } from '../utils/format'
 import { icons } from '../utils/icons'
+
+Chart.register(...registerables)
 
 defineEmits(['close'])
 
@@ -213,15 +119,8 @@ const periods = [
 const period = ref('daily')
 const stats = ref(null)
 const loading = ref(false)
-const hoveredPoint = ref(null)
-
-const accentColor = computed(() => {
-  return getComputedStyle(document.documentElement).getPropertyValue('--accent-primary').trim() || '#2563eb'
-})
-
-const chartWidth = 320
-const chartHeight = 140
-const padding = 32
+const chartCanvas = ref(null)
+let chartInstance = null
 
 const sortedDaily = computed(() => {
   if (!stats.value?.daily) return {}
@@ -231,18 +130,36 @@ const sortedDaily = computed(() => {
 })
 
 const chartData = computed(() => {
-  const data = sortedDaily.value
-  return Object.entries(data).map(([date, val]) => ({
-    date,
-    value: val.total,
-    prompt: val.prompt || 0,
-    completion: val.completion || 0,
-  }))
-})
+  if (period.value === 'daily' && stats.value?.hourly) {
+    const hourly = stats.value.hourly
+    let minH = 24, maxH = -1
+    for (const h of Object.keys(hourly)) {
+      const hour = parseInt(h)
+      if (hour < minH) minH = hour
+      if (hour > maxH) maxH = hour
+    }
+    if (minH > maxH) return []
+    const start = Math.max(0, minH)
+    const end = Math.min(23, maxH)
+    return Array.from({ length: end - start + 1 }, (_, i) => {
+      const h = start + i
+      return {
+        label: `${h}:00`,
+        value: hourly[String(h)]?.total || 0,
+      }
+    })
+  }
 
-const maxValue = computed(() => {
-  if (chartData.value.length === 0) return 100
-  return Math.max(100, ...chartData.value.map(d => d.value))
+  const data = sortedDaily.value
+  return Object.entries(data).map(([date, val]) => {
+    const d = new Date(date)
+    return {
+      label: `${d.getMonth() + 1}/${d.getDate()}`,
+      value: val.total,
+      prompt: val.prompt || 0,
+      completion: val.completion || 0,
+    }
+  })
 })
 
 const maxModelTokens = computed(() => {
@@ -250,53 +167,135 @@ const maxModelTokens = computed(() => {
   return Math.max(1, ...Object.values(stats.value.by_model).map(d => d.total))
 })
 
-const chartPoints = computed(() => {
-  const data = chartData.value
-  if (data.length === 0) return []
-
-  const xRange = chartWidth - 2 * padding
-  const yRange = chartHeight - 2 * padding
-
-  return data.map((d, i) => ({
-    x: data.length === 1
-      ? chartWidth / 2
-      : padding + (i / Math.max(1, data.length - 1)) * xRange,
-    y: chartHeight - padding - (d.value / maxValue.value) * yRange,
-    date: d.date,
-    value: d.value,
-    prompt: d.prompt,
-    completion: d.completion,
-  }))
-})
-
-const linePath = computed(() => {
-  const points = chartPoints.value
-  if (points.length === 0) return ''
-  return points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')
-})
-
-const areaPath = computed(() => {
-  const points = chartPoints.value
-  if (points.length === 0) return ''
-
-  const baseY = chartHeight - padding
-
-  let path = `M ${points[0].x} ${baseY} `
-  path += points.map(p => `L ${p.x} ${p.y}`).join(' ')
-  path += ` L ${points[points.length - 1].x} ${baseY} Z`
-
-  return path
-})
-
-function formatDateLabel(dateStr) {
-  const d = new Date(dateStr)
-  return `${d.getMonth() + 1}/${d.getDate()}`
+function getAccentColor() {
+  return getComputedStyle(document.documentElement).getPropertyValue('--accent-primary').trim() || '#2563eb'
 }
 
-function formatFullDate(dateStr) {
-  const d = new Date(dateStr)
-  return `${d.getMonth() + 1}月${d.getDate()}日`
+function getTextColor(alpha = 1) {
+  const c = getComputedStyle(document.documentElement).getPropertyValue('--text-tertiary').trim() || '#888'
+  if (alpha === 1) return c
+  // Convert hex to rgba
+  if (c.startsWith('#')) {
+    const r = parseInt(c.slice(1, 3), 16)
+    const g = parseInt(c.slice(3, 5), 16)
+    const b = parseInt(c.slice(5, 7), 16)
+    return `rgba(${r},${g},${b},${alpha})`
+  }
+  return c
 }
+
+function destroyChart() {
+  if (chartInstance) {
+    chartInstance.destroy()
+    chartInstance = null
+  }
+}
+
+function buildChart() {
+  if (!chartCanvas.value || chartData.value.length === 0) return
+
+  destroyChart()
+
+  const accent = getAccentColor()
+  const ctx = chartCanvas.value.getContext('2d')
+
+  // Gradient fill
+  const gradient = ctx.createLinearGradient(0, 0, 0, 200)
+  gradient.addColorStop(0, accent + '40')
+  gradient.addColorStop(1, accent + '05')
+
+  const labels = chartData.value.map(d => d.label)
+  const values = chartData.value.map(d => d.value)
+
+  // Determine max ticks for x-axis
+  const maxTicks = chartData.value.length <= 8 ? chartData.value.length : 6
+
+  chartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        borderColor: accent,
+        backgroundColor: gradient,
+        borderWidth: 2,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        pointHoverBackgroundColor: accent,
+        pointHoverBorderColor: '#fff',
+        pointHoverBorderWidth: 2,
+        fill: true,
+        tension: 0,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 300 },
+      layout: {
+        padding: { top: 4, right: 4, bottom: 0, left: 0 },
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          border: { display: false },
+          ticks: {
+            color: getTextColor(),
+            font: { size: 10 },
+            maxTicksLimit: maxTicks,
+            maxRotation: 0,
+          },
+        },
+        y: {
+          beginAtZero: true,
+          grid: {
+            color: getTextColor(0.15),
+            drawBorder: false,
+          },
+          border: { display: false },
+          ticks: {
+            color: getTextColor(),
+            font: { size: 9 },
+            maxTicksLimit: 4,
+            callback: (v) => formatNumber(v),
+          },
+        },
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(0,0,0,0.8)',
+          titleColor: '#fff',
+          bodyColor: '#ccc',
+          titleFont: { size: 11, weight: '500' },
+          bodyFont: { size: 11 },
+          padding: 8,
+          cornerRadius: 6,
+          displayColors: false,
+          callbacks: {
+            title: (items) => {
+              const idx = items[0].dataIndex
+              const d = chartData.value[idx]
+              if (period.value === 'daily') {
+                return `${d.label} - ${parseInt(d.label) + 1}:00`
+              }
+              return d.label
+            },
+            label: (item) => `${formatNumber(item.raw)} tokens`,
+          },
+        },
+      },
+      interaction: {
+        mode: 'index',
+        intersect: false,
+      },
+    },
+  })
+}
+
+watch(chartData, () => {
+  nextTick(buildChart)
+})
 
 async function loadStats() {
   loading.value = true
@@ -312,19 +311,17 @@ async function loadStats() {
 
 function changePeriod(p) {
   period.value = p
-  hoveredPoint.value = null
   loadStats()
 }
 
 onMounted(loadStats)
+onBeforeUnmount(destroyChart)
 </script>
 
 <style scoped>
 .stats-panel {
   padding: 0;
 }
-
-/* panel-header, panel-title, header-actions now in global.css */
 
 .stats-loading {
   display: flex;
@@ -430,99 +427,9 @@ onMounted(loadStats)
   background: var(--bg-input);
   border: 1px solid var(--border-light);
   border-radius: 10px;
-  padding: 12px 8px 8px 8px;
+  padding: 10px;
   position: relative;
-  overflow: hidden;
-}
-
-.line-chart {
-  width: 100%;
-  height: 140px;
-}
-
-.y-label {
-  fill: var(--text-tertiary);
-  font-size: 9px;
-}
-
-.data-point {
-  cursor: pointer;
-  transition: r 0.15s;
-}
-
-.data-point:hover {
-  r: 5;
-}
-
-.x-labels {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 6px;
-  padding: 0 28px 0 32px;
-}
-
-.x-label {
-  font-size: 10px;
-  color: var(--text-tertiary);
-  transition: color 0.15s;
-}
-
-.x-label.active {
-  color: var(--text-primary);
-  font-weight: 500;
-}
-
-/* 提示框 */
-.tooltip {
-  position: absolute;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-medium);
-  padding: 8px 10px;
-  border-radius: 8px;
-  font-size: 11px;
-  pointer-events: none;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-  transform: translateX(-50%);
-  z-index: 10;
-  min-width: 120px;
-}
-
-.tooltip-date {
-  color: var(--text-tertiary);
-  font-size: 10px;
-  margin-bottom: 4px;
-}
-
-.tooltip-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  color: var(--text-secondary);
-}
-
-.tooltip-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.tooltip-dot.prompt {
-  background: #3b82f6;
-}
-
-.tooltip-dot.completion {
-  background: #a855f7;
-}
-
-.tooltip-total {
-  margin-top: 4px;
-  padding-top: 4px;
-  border-top: 1px solid var(--border-light);
-  font-weight: 600;
-  color: var(--text-primary);
-  font-size: 12px;
+  height: 180px;
 }
 
 /* 模型分布 */

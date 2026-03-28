@@ -79,13 +79,13 @@ import MessageBubble from './MessageBubble.vue'
 import MessageInput from './MessageInput.vue'
 import MessageNav from './MessageNav.vue'
 import ProcessBlock from './ProcessBlock.vue'
-import { modelApi } from '../api'
 
 const props = defineProps({
   conversation: { type: Object, default: null },
   messages: { type: Array, required: true },
   streaming: { type: Boolean, default: false },
   streamingProcessSteps: { type: Array, default: () => [] },
+  modelNameMap: { type: Object, default: () => ({}) },
   hasMoreMessages: { type: Boolean, default: false },
   loadingMore: { type: Boolean, default: false },
   toolsEnabled: { type: Boolean, default: true },
@@ -95,27 +95,15 @@ const emit = defineEmits(['sendMessage', 'stopStreaming', 'deleteMessage', 'rege
 
 const scrollContainer = ref(null)
 const inputRef = ref(null)
-const modelNameMap = ref({})
 const activeMessageId = ref(null)
 let scrollObserver = null
 const observedElements = new WeakSet()
 
 function formatModelName(modelId) {
-  return modelNameMap.value[modelId] || modelId
+  return props.modelNameMap[modelId] || modelId
 }
 
-onMounted(async () => {
-  try {
-    const res = await modelApi.getCached()
-    const map = {}
-    for (const m of res.data) {
-      if (m.id && m.name) map[m.id] = m.name
-    }
-    modelNameMap.value = map
-  } catch (e) {
-    console.warn('Failed to load model names:', e)
-  }
-
+onMounted(() => {
   if (scrollContainer.value) {
     scrollObserver = new IntersectionObserver(
       (entries) => {
@@ -257,16 +245,6 @@ watch(() => props.conversation?.id, () => {
   line-height: 1;
 }
 
-.thinking-badge {
-  background: rgba(245, 158, 11, 0.12);
-  color: #d97706;
-}
-
-[data-theme="dark"] .thinking-badge {
-  background: rgba(245, 158, 11, 0.18);
-  color: #fbbf24;
-}
-
 .messages-container {
   flex: 1 1 auto;
   overflow-y: auto;
@@ -308,6 +286,7 @@ watch(() => props.conversation?.id, () => {
   margin: 0 auto;
   padding: 0 16px;
 }
+
 
 
 

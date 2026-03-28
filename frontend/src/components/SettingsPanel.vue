@@ -123,19 +123,20 @@
 
 <script setup>
 import { reactive, ref, watch, onMounted } from 'vue'
-import { modelApi, conversationApi } from '../api'
+import { conversationApi } from '../api'
 import { useTheme } from '../composables/useTheme'
 import { icons } from '../utils/icons'
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
   conversation: { type: Object, default: null },
+  models: { type: Array, default: () => [] },
+  defaultModel: { type: String, default: '' },
 })
 
 const emit = defineEmits(['close', 'save'])
 
 const { isDark, toggleTheme } = useTheme()
-const models = ref([])
 
 const tabs = [
   { value: 'basic', label: '基本' },
@@ -154,15 +155,6 @@ const form = reactive({
   thinking_enabled: false,
 })
 
-async function loadModels() {
-  try {
-    const res = await modelApi.getCached()
-    models.value = res.data || []
-  } catch (e) {
-    console.error('Failed to load models:', e)
-  }
-}
-
 function syncFormFromConversation() {
   if (props.conversation) {
     form.title = props.conversation.title || ''
@@ -170,27 +162,61 @@ function syncFormFromConversation() {
     form.temperature = props.conversation.temperature ?? 1.0
     form.max_tokens = props.conversation.max_tokens ?? 65536
     form.thinking_enabled = props.conversation.thinking_enabled ?? false
-    // model: 优先使用 conversation 的值，其次 models 列表第一个
+    // model: 优先使用 conversation 的值，其次 defaultModel，最后 models 列表第一个
     if (props.conversation.model) {
       form.model = props.conversation.model
-    } else if (models.value.length > 0) {
-      form.model = models.value[0].id
+    } else if (props.defaultModel) {
+      form.model = props.defaultModel
+    } else if (props.models.length > 0) {
+      form.model = props.models[0].id
     }
   }
 }
 
-// Sync form when panel opens or conversation changes
-watch([() => props.visible, () => props.conversation, models], () => {
-  if (props.visible) {
-    activeTab.value = 'basic'
-    syncFormFromConversation()
-  }
-}, { deep: true })
+// Track which conversation the form is synced to, to avoid saving stale data
+let syncedConvId = null
+let isSyncing = false
 
-// Auto-save with debounce when form changes
+function doSync() {
+  if (!props.conversation) return
+  isSyncing = true
+  syncFormFromConversation()
+  syncedConvId = props.conversation.id
+  // Defer resetting flag to after all watchers flush
+  setTimeout(() => { isSyncing = false }, 0)
+}
+
+// Sync form when panel opens or conversation switches
+watch([() => props.visible, () => props.conversation?.id, () => props.models, () => props.defaultModel], () => {
+  if (props.visible && props.conversation) {
+    activeTab.value = 'basic'
+    if (saveTimer) clearTimeout(saveTimer)
+    saveTimer = null
+    doSync()
+  } else if (!props.visible) {
+    syncedConvId = null
+  }
+})
+
+// Sync when conversation data updates (e.g. auto-generated title after stream)
+watch(
+  () => props.conversation,
+  (conv) => {
+    if (!props.visible || !conv || syncedConvId !== conv.id) return
+    doSync()
+  },
+  { deep: true },
+)
+
+// Initial sync on mount (component may be recreated via :key)
+onMounted(() => {
+  if (props.visible && props.conversation) doSync()
+})
+
+// Auto-save with debounce when user edits form
 let saveTimer = null
 watch(form, () => {
-  if (props.visible && props.conversation) {
+  if (props.visible && props.conversation && syncedConvId === props.conversation.id && !isSyncing) {
     if (saveTimer) clearTimeout(saveTimer)
     saveTimer = setTimeout(saveChanges, 500)
   }
@@ -205,8 +231,6 @@ async function saveChanges() {
     console.error('Failed to save settings:', e)
   }
 }
-
-onMounted(loadModels)
 </script>
 
 <style scoped>

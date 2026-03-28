@@ -42,6 +42,7 @@
       :messages="messages"
       :streaming="streaming"
       :streaming-process-steps="streamProcessSteps"
+      :model-name-map="modelNameMap"
       :has-more-messages="hasMoreMessages"
       :loading-more="loadingMessages"
       :tools-enabled="toolsEnabled"
@@ -59,8 +60,11 @@
       <div v-if="showSettings" class="modal-overlay" @click.self="showSettings = false">
         <div class="modal-content">
           <SettingsPanel
+            :key="currentConvId || '__none__'"
             :visible="showSettings"
             :conversation="currentConv"
+            :models="models"
+            :default-model="defaultModel"
             @close="showSettings = false"
             @save="saveSettings"
           />
@@ -120,9 +124,28 @@ import { useModal } from './composables/useModal'
 
 const SettingsPanel = defineAsyncComponent(() => import('./components/SettingsPanel.vue'))
 const StatsPanel = defineAsyncComponent(() => import('./components/StatsPanel.vue'))
-import { conversationApi, messageApi, projectApi } from './api'
+import { conversationApi, messageApi, projectApi, modelApi } from './api'
 
 const modal = useModal()
+
+// -- Models state (preloaded) --
+const models = ref([])
+const modelNameMap = ref({})
+const defaultModel = computed(() => models.value.length > 0 ? models.value[0].id : '')
+
+async function loadModels() {
+  try {
+    const res = await modelApi.getCached()
+    models.value = res.data || []
+    const map = {}
+    for (const m of models.value) {
+      if (m.id && m.name) map[m.id] = m.name
+    }
+    modelNameMap.value = map
+  } catch (e) {
+    console.error('Failed to load models:', e)
+  }
+}
 
 // -- Conversations state --
 const conversations = shallowRef([])
@@ -258,6 +281,7 @@ async function createConversationInProject(project) {
     const res = await conversationApi.create({
       title: '新对话',
       project_id: project.id || null,
+      model: defaultModel.value || undefined,
     })
     conversations.value = [res.data, ...conversations.value]
     await selectConversation(res.data.id)
@@ -602,7 +626,8 @@ async function deleteProject(project) {
 }
 
 // -- Init --
-onMounted(() => {
+onMounted(async () => {
+  await loadModels()
   loadProjects()
   loadConversations()
 })

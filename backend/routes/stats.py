@@ -1,11 +1,17 @@
 """Token statistics API routes"""
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime, timezone
 from flask import Blueprint, request, g
-from sqlalchemy import func
-from backend.models import TokenUsage
+from sqlalchemy import func, extract
+from backend.models import TokenUsage, Message, Conversation
 from backend.utils.helpers import ok, err
+from backend import db
 
 bp = Blueprint("stats", __name__)
+
+
+def _utc_today():
+    """Get today's date in UTC to match stored timestamps."""
+    return datetime.now(timezone.utc).date()
 
 
 @bp.route("/api/stats/tokens", methods=["GET"])
@@ -13,17 +19,20 @@ def token_stats():
     """Get token usage statistics"""
     user = g.current_user
     period = request.args.get("period", "daily")
-    
-    today = date.today()
-    
+
+    today = _utc_today()
+
     if period == "daily":
         stats = TokenUsage.query.filter_by(user_id=user.id, date=today).all()
+        # Hourly breakdown from Message table
+        hourly = _build_hourly_stats(user.id, today)
         result = {
             "period": "daily",
             "date": today.isoformat(),
             "prompt_tokens": sum(s.prompt_tokens for s in stats),
             "completion_tokens": sum(s.completion_tokens for s in stats),
             "total_tokens": sum(s.total_tokens for s in stats),
+            "hourly": hourly,
             "by_model": {
                 s.model: {
                     "prompt": s.prompt_tokens,
@@ -92,3 +101,37 @@ def _build_period_result(stats, period, start_date, end_date, days):
         "daily": daily_data,
         "by_model": by_model,
     }
+
+
+def _build_hourly_stats(user_id, day):
+    """Build hourly token breakdown for a given day (UTC) from Message table."""
+    day_start = datetime.combine(day, datetime.min.time()).replace(tzinfo=timezone.utc)
+    day_end = datetime.combine(day, datetime.max.time()).replace(tzinfo=timezone.utc)
+
+    conv_ids = (
+        db.session.query(Conversation.id)
+        .filter(Conversation.user_id == user_id)
+        .subquery()
+    )
+
+    rows = (
+        db.session.query(
+            extract("hour", Message.created_at).label("hour"),
+            func.sum(Message.token_count).label("total"),
+        )
+        .filter(
+            Message.conversation_id.in_(conv_ids),
+            Message.role == "assistant",
+            Message.created_at >= day_start,
+            Message.created_at <= day_end,
+        )
+        .group_by(extract("hour", Message.created_at))
+        .all()
+    )
+
+    hourly = {}
+    for r in rows:
+        h = int(r.hour)
+        hourly[str(h)] = {"total": r.total or 0}
+
+    return hourly

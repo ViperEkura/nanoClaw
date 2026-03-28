@@ -34,30 +34,3 @@ def tool(
         return func
     return decorator
 
-
-def register_tool(
-    name: str,
-    handler: Callable,
-    description: str,
-    parameters: dict,
-    category: str = "general"
-) -> None:
-    """
-    Register a tool directly (without decorator)
-
-    Usage:
-        register_tool(
-            name="my_tool",
-            handler=my_function,
-            description="Description",
-            parameters={...}
-        )
-    """
-    tool_def = ToolDefinition(
-        name=name,
-        description=description,
-        parameters=parameters,
-        handler=handler,
-        category=category
-    )
-    registry.register(tool_def)
